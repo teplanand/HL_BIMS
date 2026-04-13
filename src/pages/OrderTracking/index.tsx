@@ -56,6 +56,19 @@ const STAGE_ACCENT_COLORS = {
 
 const withAlpha = (hexColor: string, alpha: string) => `${hexColor}${alpha}`;
 
+const ORDER_TRACKING_TOOLTIP_PROPS = {
+  arrow: true,
+  slotProps: {
+    tooltip: {
+      className:
+        "!rounded-md !border !border-gray-200 !bg-white !px-2.5 !py-1.5 !text-xs !font-medium !text-gray-800 shadow-sm dark:!border-gray-700 dark:!bg-gray-900 dark:!text-white/90",
+    },
+    arrow: {
+      className: "!text-white dark:!text-gray-900",
+    },
+  },
+} as const;
+
 const summaryCardClassMap: Record<
   string,
   { card: string; active: string; value: string; numberColor: string }
@@ -627,7 +640,7 @@ const renderProcessCell = useCallback(
         : params.field;
 
     return (
-      <Tooltip title={status.replace(/_/g, " ")}>
+      <Tooltip title={status.replace(/_/g, " ")} {...ORDER_TRACKING_TOOLTIP_PROPS}>
         <ButtonBase
           onClick={(event) => {
             event.stopPropagation();
@@ -848,7 +861,7 @@ const renderProcessCell = useCallback(
                   style={{ gridTemplateColumns: `repeat(${summaryStatuses.length}, minmax(0, 1fr))` }}
                 >
                   {summaryStatuses.map((status) => (
-                    <Tooltip key={status.key} title={status.tooltip}>
+                    <Tooltip key={status.key} title={status.tooltip} {...ORDER_TRACKING_TOOLTIP_PROPS}>
                       <Box
                         className="overflow-hidden rounded-md min-h-11"
                         style={{

@@ -399,7 +399,7 @@ export const OrderTrackingTimelineContent = ({
                       <Chip
                         label={step.status}
                         size="small"
-                        className="font-semibold text-white"
+                        className="font-semibold !text-white [&_.MuiChip-label]:!text-white"
                         style={{ backgroundColor: step.color }}
                       />
                     </Box>
