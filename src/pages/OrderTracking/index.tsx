@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
-import { Box, Button, ButtonBase, Card, CardContent, Chip, Grid, Tooltip, Typography } from "@mui/material";
+import { Box, Button, ButtonBase, Card, CardContent, Grid, Tooltip, Typography } from "@mui/material";
 import {
   GridColDef,
   GridFilterModel,
@@ -21,6 +21,41 @@ import { formatDateOnly } from "../../utils/FormatDate";
 
 ////// filter by number
 
+const ORDER_TRACKING_COLORS = {
+  slate: "#64748b",
+  warning: "#f59e0b",
+  success: "#10b981",
+  danger: "#ef4444",
+  statusSuccess: "#22C55E",
+  statusDanger: "#EF4444",
+  statusInfo: "#2563EB",
+  statusMuted: "#9CA3AF",
+} as const;
+
+const STATUS_COLORS = {
+  "Not Started": ORDER_TRACKING_COLORS.statusMuted,
+  "In Progress": ORDER_TRACKING_COLORS.statusInfo,
+  "Completed": ORDER_TRACKING_COLORS.statusSuccess,
+} as const;
+
+const SUMMARY_STATUS_COLORS = {
+  "Completed On Time": ORDER_TRACKING_COLORS.statusSuccess,
+  "Completed Delayed": ORDER_TRACKING_COLORS.statusDanger,
+  "In Progress": ORDER_TRACKING_COLORS.statusInfo,
+  "Not Started": ORDER_TRACKING_COLORS.statusMuted,
+} as const;
+
+const STAGE_ACCENT_COLORS = {
+  Design: ORDER_TRACKING_COLORS.slate,
+  Manufacturing: ORDER_TRACKING_COLORS.warning,
+  Assembly: ORDER_TRACKING_COLORS.success,
+  Testing: ORDER_TRACKING_COLORS.danger,
+  Painting: ORDER_TRACKING_COLORS.warning,
+  Dispatch: ORDER_TRACKING_COLORS.success,
+} as const;
+
+const withAlpha = (hexColor: string, alpha: string) => `${hexColor}${alpha}`;
+
 const summaryCardClassMap: Record<
   string,
   { card: string; active: string; value: string; numberColor: string }
@@ -29,37 +64,37 @@ const summaryCardClassMap: Record<
     card: "dashboard-stat-card dashboard-stat-card--requested",
     active: "dashboard-stat-card--requested-active",
     value: "dashboard-stat-value--requested",
-    numberColor: "#64748b",
+    numberColor: STAGE_ACCENT_COLORS.Design,
   },
   Manufacturing: {
     card: "dashboard-stat-card dashboard-stat-card--pending",
     active: "dashboard-stat-card--pending-active",
     value: "dashboard-stat-value--pending",
-    numberColor: "#f59e0b",
+    numberColor: STAGE_ACCENT_COLORS.Manufacturing,
   },
   Assembly: {
     card: "dashboard-stat-card dashboard-stat-card--approved",
     active: "dashboard-stat-card--approved-active",
     value: "dashboard-stat-value--approved",
-    numberColor: "#10b981",
+    numberColor: STAGE_ACCENT_COLORS.Assembly,
   },
   Testing: {
     card: "dashboard-stat-card dashboard-stat-card--rejected",
     active: "dashboard-stat-card--rejected-active",
     value: "dashboard-stat-value--rejected",
-    numberColor: "#ef4444",
+    numberColor: STAGE_ACCENT_COLORS.Testing,
   },
   Painting: {
     card: "dashboard-stat-card dashboard-stat-card--pending",
     active: "dashboard-stat-card--pending-active",
     value: "dashboard-stat-value--pending",
-    numberColor: "#f59e0b",
+    numberColor: STAGE_ACCENT_COLORS.Painting,
   },
   Dispatch: {
     card: "dashboard-stat-card dashboard-stat-card--approved",
     active: "dashboard-stat-card--approved-active",
     value: "dashboard-stat-value--approved",
-    numberColor: "#10b981",
+    numberColor: STAGE_ACCENT_COLORS.Dispatch,
   },
 };
 
@@ -104,10 +139,10 @@ const summaryCardKeys: Record<(typeof processStageColumns)[number]["field"], str
 };
 
 const summaryStatuses = [
-  { key: "Completed On Time", color: "#22C55E", tooltip: "Completed" },
-  { key: "Completed Delayed", color: "#EF4444", tooltip: "Completed" },
-  { key: "In Progress", color: "#2563EB", tooltip: "In Progress" },
-  { key: "Not Started", color: "#9CA3AF", tooltip: "Not Started" },
+  { key: "Completed On Time", color: SUMMARY_STATUS_COLORS["Completed On Time"], tooltip: "Completed" },
+  { key: "Completed Delayed", color: SUMMARY_STATUS_COLORS["Completed Delayed"], tooltip: "Completed" },
+  { key: "In Progress", color: SUMMARY_STATUS_COLORS["In Progress"], tooltip: "In Progress" },
+  { key: "Not Started", color: SUMMARY_STATUS_COLORS["Not Started"], tooltip: "Not Started" },
 ] as const;
 
 type SummaryStatusKey = (typeof summaryStatuses)[number]["key"];
@@ -164,46 +199,54 @@ const getFinalApprovalTimePercent = (row: Record<string, unknown>) => {
 };
 
 const getCompletedColor = (plan: any, actual: any) => {
-  if (isNull(plan) && isNull(actual)) return "#9CA3AF";
-  if (!isNull(plan) && isNull(actual)) return "#2563EB";
-  if (isNull(plan) && !isNull(actual)) return "#22C55E";
+  if (isNull(plan) && isNull(actual)) return STATUS_COLORS["Not Started"];
+  if (!isNull(plan) && isNull(actual)) return STATUS_COLORS["In Progress"];
+  if (isNull(plan) && !isNull(actual)) return STATUS_COLORS.Completed;
 
   const planDate = new Date(String(plan));
   const actualDate = new Date(String(actual));
 
   if (!Number.isNaN(planDate.getTime()) && !Number.isNaN(actualDate.getTime())) {
-    return planDate.getTime() >= actualDate.getTime() ? "#22C55E" : "#EF4444";
+    return planDate.getTime() >= actualDate.getTime()
+      ? STATUS_COLORS.Completed
+      : SUMMARY_STATUS_COLORS["Completed Delayed"];
   }
 
   const planNumber = Number(plan);
   const actualNumber = Number(actual);
 
   if (!Number.isNaN(planNumber) && !Number.isNaN(actualNumber)) {
-    return planNumber >= actualNumber ? "#22C55E" : "#EF4444";
+    return planNumber >= actualNumber
+      ? STATUS_COLORS.Completed
+      : SUMMARY_STATUS_COLORS["Completed Delayed"];
   }
 
-  return "#22C55E";
+  return STATUS_COLORS.Completed;
 };
 
 const getPlanActualDisplayColor = (plan: any, actual: any) => {
-  if (isNull(plan) && isNull(actual)) return "#9CA3AF";
-  if (isNull(plan) !== isNull(actual)) return "#9CA3AF";
+  if (isNull(plan) && isNull(actual)) return STATUS_COLORS["Not Started"];
+  if (isNull(plan) !== isNull(actual)) return STATUS_COLORS["Not Started"];
 
   const planDate = new Date(String(plan));
   const actualDate = new Date(String(actual));
 
   if (!Number.isNaN(planDate.getTime()) && !Number.isNaN(actualDate.getTime())) {
-    return planDate.getTime() >= actualDate.getTime() ? "#22C55E" : "#EF4444";
+    return planDate.getTime() >= actualDate.getTime()
+      ? STATUS_COLORS.Completed
+      : SUMMARY_STATUS_COLORS["Completed Delayed"];
   }
 
   const planNumber = Number(plan);
   const actualNumber = Number(actual);
 
   if (!Number.isNaN(planNumber) && !Number.isNaN(actualNumber)) {
-    return planNumber >= actualNumber ? "#22C55E" : "#EF4444";
+    return planNumber >= actualNumber
+      ? STATUS_COLORS.Completed
+      : SUMMARY_STATUS_COLORS["Completed Delayed"];
   }
 
-  return "#2563EB";
+  return STATUS_COLORS["In Progress"];
 };
 
 const getSummaryStatusKey = (field: string, row: Record<string, any>) => {
@@ -213,16 +256,11 @@ const getSummaryStatusKey = (field: string, row: Record<string, any>) => {
     return status;
   }
 
-  return getProcessStatusColor(field, row) === "#EF4444"
+  return getProcessStatusColor(field, row) === SUMMARY_STATUS_COLORS["Completed Delayed"]
     ? "Completed Delayed"
     : "Completed On Time";
 };
-
-const statusColorMap: Record<string, string> = {
-  "Not Started": "#9CA3AF",
-  "In Progress": "#2563EB",
-  "Completed": "#22C55E",
-};
+const statusColorMap: Record<string, string> = STATUS_COLORS;
 
 const getAggregateCompletedColor = (
   checks: Array<[any, any]>,
@@ -233,12 +271,12 @@ const getAggregateCompletedColor = (
     .map(([plan, actual]) => getCompletedColor(plan, actual));
 
   if (completedColors.length === 0) {
-    return statusColorMap[fallbackStatus] || "#9CA3AF";
+    return statusColorMap[fallbackStatus] || STATUS_COLORS["Not Started"];
   }
 
-  return completedColors.some((color) => color === "#EF4444")
-    ? "#EF4444"
-    : "#22C55E";
+  return completedColors.some((color) => color === SUMMARY_STATUS_COLORS["Completed Delayed"])
+    ? SUMMARY_STATUS_COLORS["Completed Delayed"]
+    : STATUS_COLORS.Completed;
 };
 
 const getProcessStatusColor = (field: string, row: Record<string, any>) => {
@@ -273,7 +311,7 @@ const getProcessStatusColor = (field: string, row: Record<string, any>) => {
     case "dispatch":
       return getCompletedColor(row.dispatch_date_plan, row.dispatch_date_actual);
     default:
-      return statusColorMap[String(row[field] ?? "Not Started")] || "#9CA3AF";
+      return statusColorMap[String(row[field] ?? "Not Started")] || STATUS_COLORS["Not Started"];
   }
 };
 
@@ -392,9 +430,9 @@ const OrderTrackingDashboard = () => {
 
   const rows = useMemo(() => {
 
-    // const apiRows = Array.isArray(data?.data) ? data.data : [];
-    //const sourceRows = apiRows.length > 0 ? apiRows : ordertrackingdata;
-  const sourceRows = ordertrackingdata;
+     const apiRows = Array.isArray(data?.data) ? data.data : [];
+    const sourceRows = apiRows.length > 0 ? apiRows : ordertrackingdata;
+  //const sourceRows = ordertrackingdata;
 
   return sourceRows.map((item: any, index: number) => {
     const status = getFullStatus(item);
@@ -549,45 +587,21 @@ const OrderTrackingDashboard = () => {
             event.stopPropagation();
             handlePlanCellClick(params.field, title, params.row as Record<string, unknown>);
           }}
-          sx={{
-            width: "100%",
-            height: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            px: 0.75,
-            py: 0.5,
-            cursor: "pointer",
-            borderRadius: 0,
-          }}
+          className="flex h-full w-full cursor-pointer items-center justify-center rounded-none px-3 py-2"
         >
           <Box
-            sx={{
-              width: "100%",
-              display: "grid",
-              gap: 0.15,
-              textAlign: "center",
-              lineHeight: 1.15,
-            }}
+            className="grid w-full gap-px text-center leading-[1.15]"
           >
             <Typography
               component="span"
-              sx={{
-                fontSize: "0.66rem",
-                color: "text.secondary",
-                whiteSpace: "nowrap",
-              }}
+              className="whitespace-nowrap text-[0.66rem] text-slate-500"
             >
               {displayPlanValue}
             </Typography>
             <Typography
               component="span"
-              sx={{
-                fontSize: "0.7rem",
-                fontWeight: 600,
-                color: displayColor,
-                whiteSpace: "nowrap",
-              }}
+              className="whitespace-nowrap text-[0.7rem] font-semibold"
+              style={{ color: displayColor }}
             >
               {displayActualValue}
             </Typography>
@@ -605,7 +619,7 @@ const renderProcessCell = useCallback(
     const bgcolor =
       status === "Completed"
         ? getProcessStatusColor(params.field, params.row as Record<string, any>)
-        : statusColorMap[status] || "#9CA3AF";
+        : statusColorMap[status] || STATUS_COLORS["Not Started"];
 
     const title =
       typeof params.colDef.headerName === "string" && params.colDef.headerName.trim()
@@ -619,25 +633,11 @@ const renderProcessCell = useCallback(
             event.stopPropagation();
             handleTimelineOpen(title, params.row as Record<string, unknown>);
           }}
-          sx={{
-            width: "100%",
-            height: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
-            borderRadius: 0,
-          }}
+          className="flex h-full w-full cursor-pointer items-center justify-center rounded-none"
         >
-          <Chip
-            size="small"
-            sx={{
-              backgroundColor: bgcolor,
-              borderRadius: "50%",
-              height: "16px",
-              width: "16px",
-              minWidth: "16px",
-            }}
+          <Box
+            className="h-4 min-w-4 w-4 rounded-full"
+            style={{ backgroundColor: bgcolor }}
           />
         </ButtonBase>
       </Tooltip>
@@ -675,17 +675,7 @@ const renderProcessCell = useCallback(
               event.stopPropagation();
               handleLineIdClick(params.row as Record<string, unknown>);
             }}
-            sx={{
-              width: "100%",
-              height: "100%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "flex-start",
-              color: "primary.main",
-              cursor: "pointer",
-              fontWeight: 600,
-              whiteSpace: "nowrap",
-            }}
+            className="flex h-full w-full cursor-pointer items-center justify-start whitespace-nowrap font-semibold text-blue-600"
           >
             {params.value}
           </Box>
@@ -817,12 +807,7 @@ const renderProcessCell = useCallback(
 
     return (
       <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          gap: 1,
-          flexWrap: "wrap",
-        }}
+        className="flex flex-wrap items-center gap-2"
       >
         <Typography variant="body2" color="text.secondary">
           Showing {summaryCardKeys[activeStageFilter.field]} rows with status {activeStageFilter.status}.
@@ -849,7 +834,7 @@ const renderProcessCell = useCallback(
                 activeTab === summaryKey && summaryCardClassMap[summaryKey].active
               )}
             >
-              <CardContent sx={{ display: "grid", gap: 1.25 }}>
+              <CardContent className="grid gap-5">
                 <Typography
                   variant="subtitle2"
                   color="textSecondary"
@@ -859,21 +844,16 @@ const renderProcessCell = useCallback(
                   {stage.headerName}
                 </Typography>
                 <Box
-                  sx={{
-                    display: "grid",
-                    gridTemplateColumns: `repeat(${summaryStatuses.length}, minmax(0, 1fr))`,
-                    gap: 1,
-                  }}
+                  className="grid gap-2"
+                  style={{ gridTemplateColumns: `repeat(${summaryStatuses.length}, minmax(0, 1fr))` }}
                 >
                   {summaryStatuses.map((status) => (
                     <Tooltip key={status.key} title={status.tooltip}>
                       <Box
-                        sx={{
-                          minHeight: 44,
-                          borderRadius: 1.5,
-                          backgroundColor: `${status.color}12`,
-                          border: `1px solid ${status.color}33`,
-                          overflow: "hidden",
+                        className="overflow-hidden rounded-md min-h-11"
+                        style={{
+                          backgroundColor: withAlpha(status.color, "12"),
+                          border: `1px solid ${withAlpha(status.color, "33")}`,
                         }}
                       >
                         <ButtonBase
@@ -885,31 +865,22 @@ const renderProcessCell = useCallback(
                               status.key
                             );
                           }}
-                          sx={{
-                            width: "100%",
-                            height: "100%",
-                            minHeight: 44,
-                            display: "grid",
-                            placeItems: "center",
+                          className="grid h-full min-h-11 w-full place-items-center"
+                          style={{
                             backgroundColor:
                               activeStageFilter?.field === stage.field &&
                               activeStageFilter.status === status.key
-                                ? `${status.color}24`
+                                ? withAlpha(status.color, "24")
                                 : "transparent",
                           }}
                         >
                           <Typography
                             variant="h6"
                             className={clsx(
-                              "dashboard-stat-value",
+                              "dashboard-stat-value text-[1.15rem] leading-none font-bold",
                               summaryCardClassMap[summaryKey].value
                             )}
-                            sx={{
-                              color: status.color,
-                              fontSize: "1.15rem",
-                              lineHeight: 1,
-                              fontWeight: 700,
-                            }}
+                            style={{ color: status.color }}
                           >
                             {stageSummaryCounts[stage.field]?.[status.key] ?? 0}
                           </Typography>
@@ -925,41 +896,22 @@ const renderProcessCell = useCallback(
       </Grid>
 
       <Box
-        sx={{
-          mb: 2,
-          px: 2,
-          py: 1.25,
-          display: "flex",
-          flexWrap: "wrap",
-          alignItems: "center",
-          gap: 2,
-          borderRadius: 2,
-          border: "1px solid",
-          borderColor: "divider",
-          backgroundColor: "background.paper",
-        }}
+        className="mb-2 flex flex-wrap items-center gap-2 rounded-lg    px-2 py-1.5  "
       >
-        <Typography variant="subtitle2" sx={{ fontWeight: 700, mr: 1 }}>
+        <Typography
+          variant="subtitle2"
+          className="mr-3 font-bold text-gray-800 dark:text-white/90"
+        >
           Color Legend
         </Typography>
         {summaryStatuses.map((status) => (
           <Box
             key={status.key}
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 0.75,
-            }}
+            className="flex items-center gap-1.5 mr-3"
           >
-            <Chip
-              size="small"
-              sx={{
-                backgroundColor: status.color,
-                borderRadius: "50%",
-                height: "14px",
-                width: "14px",
-                minWidth: "14px",
-              }}
+            <Box
+              className="h-3.5 min-w-3.5 w-3.5 rounded-full"
+              style={{ backgroundColor: status.color }}
             />
             <Typography variant="body2" color="text.secondary">
               {status.key}

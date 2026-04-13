@@ -267,14 +267,7 @@ ref: Ref<AddItemPlanRef>) {
           accentColor="#1D4ED8"
         >
           {isFetchingConfiguration ? (
-            <Box
-              sx={{
-                minHeight: 240,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
+            <Box className="flex min-h-[240px] items-center justify-center">
               <CircularProgress size={28} />
             </Box>
           ) : (

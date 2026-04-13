@@ -331,7 +331,7 @@ export const OrderTrackingTimelineContent = ({
   }, [embedded, setDisplayTitle, setHideFooter, setWidth, timelineStage.title]);
 
   return (
-    <Box sx={{ display: "grid", gap: 2 }}>
+    <Box className="grid gap-2">
       {!embedded ? (
         <Box>
           <Typography variant="h4" fontWeight={700}>
@@ -343,9 +343,9 @@ export const OrderTrackingTimelineContent = ({
         </Box>
       ) : null}
 
-      <Card sx={{ borderRadius: 2, boxShadow: "0px 6px 24px rgba(0, 0, 0, 0.06)" }}>
-        <CardContent sx={{ display: "grid", gap: 2 }}>
-          <Box sx={{ display: "grid", gap: 0.5 }}>
+      <Card className="rounded-lg shadow-[0px_6px_24px_rgba(0,0,0,0.06)]">
+        <CardContent className="grid gap-2">
+          <Box className="grid gap-0.5">
             <Typography variant="subtitle2" color="text.secondary">
               Order Summary
             </Typography>
@@ -383,17 +383,11 @@ export const OrderTrackingTimelineContent = ({
                   variant="outlined"
                    
                 >
-                  <CardContent sx={{ display: "grid", gap: 1.25 }}>
+                  <CardContent className="grid gap-5">
                     <Box
-                      sx={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: 1,
-                        flexWrap: "wrap",
-                      }}
+                      className="flex flex-wrap items-center justify-between gap-2"
                     >
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <Box className="flex items-center gap-2">
                         <TimelineIcon
                           fontSize="small"
                           color={step.highlight ? "primary" : "disabled"}
@@ -405,20 +399,13 @@ export const OrderTrackingTimelineContent = ({
                       <Chip
                         label={step.status}
                         size="small"
-                        sx={{
-                          backgroundColor: step.color,
-                          color: "#fff",
-                          fontWeight: 600,
-                        }}
+                        className="font-semibold text-white"
+                        style={{ backgroundColor: step.color }}
                       />
                     </Box>
 
                     <Box
-                      sx={{
-                        display: "grid",
-                        gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" },
-                        gap: 1.5,
-                      }}
+                      className="grid gap-1.5 sm:grid-cols-2"
                     >
                       <Box>
                         <Typography variant="caption" color="text.secondary">
@@ -470,15 +457,9 @@ const OrderTrackingTimelinePage = () => {
   };
 
   return (
-    <Box sx={{ display: "grid", gap: 2 }}>
+    <Box className="grid gap-2">
       <Box
-        sx={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 2,
-          flexWrap: "wrap",
-        }}
+        className="flex flex-wrap items-center justify-between gap-2"
       >
         <Box>
           <Typography variant="h4" fontWeight={700}>
