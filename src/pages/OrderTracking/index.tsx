@@ -551,8 +551,7 @@ const OrderTrackingDashboard = () => {
   const rows = useMemo(() => {
 
   const apiRows = Array.isArray(data?.data) ? data.data : [];
- // const sourceRows = apiRows.length > 0 ? apiRows : ordertrackingdata;
-  const sourceRows = apiRows;
+  const sourceRows = apiRows.length > 0 ? apiRows : ordertrackingdata;
  
   return sourceRows.map((item: any, index: number) => {
     const status = getFullStatus(item);
@@ -781,8 +780,7 @@ const renderProcessCell = useCallback(
     return `${computedValue.toFixed(2)}%`;
   }, []);
 
-  const columns: GridColDef[] = useMemo(
-    () => [
+  const columns: GridColDef[] = useMemo<GridColDef[]>(() => [
       {
         field: "line_id",
         headerName: "Line ID",
@@ -852,7 +850,7 @@ const renderProcessCell = useCallback(
       {
         field: "cust_po_date",
         headerName: "Customer PO Date",
-        type: "date",
+        type: "date" as const,
         sortable: false,
         filterable: true,
         filterOperators: orderTrackingDateFilterOperators,
@@ -865,7 +863,7 @@ const renderProcessCell = useCallback(
       {
         field: "delivery_date_po",
         headerName: "Delivery PO Date",
-        type: "date",
+        type: "date" as const,
         sortable: false,
         filterable: true,
         filterOperators: orderTrackingDateFilterOperators,
@@ -878,7 +876,7 @@ const renderProcessCell = useCallback(
       {
         field: "commited_ex_works_delivery_date",
         headerName: "Commercial Ex Works Delivery Date",
-        type: "date",
+        type: "date" as const,
         sortable: false,
         filterable: true,
         filterOperators: orderTrackingDateFilterOperators,
@@ -897,7 +895,7 @@ const renderProcessCell = useCallback(
         minWidth: 130,
         renderCell: renderMetricCell,
       },
-      ...processStageColumns.map((column) => ({
+      ...processStageColumns.map<GridColDef>((column) => ({
         ...column,
         sortable: false,
         filterable: false,
@@ -905,9 +903,9 @@ const renderProcessCell = useCallback(
         minWidth:70,
         renderCell: renderProcessCell,
       })),
-      ...planDateColumns.map((column) => ({
+      ...planDateColumns.map<GridColDef>((column) => ({
         ...column,
-        type: "date",
+        type: "date" as const,
         sortable: false,
         filterable: true,
         filterOperators: orderTrackingDateFilterOperators,
