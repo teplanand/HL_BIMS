@@ -25,10 +25,18 @@ type TimelineStep = {
   color: string;
   detailLines?: string[];
   highlight?: boolean;
+  hidePlanActual?: boolean;
 };
 
 type TimelineStageContent = {
-  stageKey: "design" | "planning" | "manufacturing" | "qc" | "dispatch" | "painting";
+  stageKey:
+    | "design"
+    | "planning"
+    | "manufacturing"
+    | "assembly"
+    | "qc"
+    | "dispatch"
+    | "painting";
   title: string;
   description: string;
   steps: TimelineStep[];
@@ -62,8 +70,9 @@ const normalizeStageKey = (stage?: string) => {
       return "planning" as const;
     case "mfg":
     case "manufacturing":
-    case "assembly":
       return "manufacturing" as const;
+    case "assembly":
+      return "assembly" as const;
     case "testing":
     case "qc":
       return "qc" as const;
@@ -139,18 +148,37 @@ const getCompletionColor = (plan: unknown, actual: unknown) => {
 };
 
 const getDesignCycleStatus = (value1: unknown, value2: unknown): StepStatus => {
-  if (!hasMeaningfulValue(value1) || !hasMeaningfulValue(value2)) {
+  const first = Number(value1);
+  const second = Number(value2);
+  const hasFirstProgress = !Number.isNaN(first) && first > 0;
+  const hasSecondProgress = !Number.isNaN(second) && second > 0;
+
+  if (!hasFirstProgress && !hasSecondProgress) {
     return "Not Started";
+  }
+
+  if (hasFirstProgress && !hasSecondProgress) {
+    return "In Progress";
+  }
+
+  return "Completed";
+};
+
+const getDesignCycleColor = (value1: unknown, value2: unknown) => {
+  const status = getDesignCycleStatus(value1, value2);
+
+  if (status !== "Completed") {
+    return statusColorMap[status];
   }
 
   const first = Number(value1);
   const second = Number(value2);
 
-  if (Number.isNaN(first) || Number.isNaN(second)) {
-    return "Not Started";
+  if (!Number.isNaN(first) && !Number.isNaN(second) && second > first) {
+    return "#EF4444";
   }
 
-  return "Completed";
+  return statusColorMap.Completed;
 };
 
 const buildTimelineStage = (
@@ -205,7 +233,7 @@ const buildTimelineStage = (
               rowData?.po_received_date_to_ga_drw_submission_days,
               rowData?.ga_drawing_submission_to_final_approval_received_days
             ),
-            color: getCompletionColor(
+            color: getDesignCycleColor(
               rowData?.po_received_date_to_ga_drw_submission_days,
               rowData?.ga_drawing_submission_to_final_approval_received_days
             ),
@@ -217,6 +245,7 @@ const buildTimelineStage = (
                 rowData?.ga_drawing_submission_to_final_approval_received_days
               )}`,
             ],
+            hidePlanActual: true,
           },
         ],
       };
@@ -250,6 +279,21 @@ const buildTimelineStage = (
             ["internal"]
           ),
           buildPlanActualStep("bo", "BO", "bo_plan", "bo_actual", ["bo"]),
+          buildPlanActualStep(
+            "assembly",
+            "Assembly",
+            "assembly_plan",
+            "assembly_actual",
+            ["assembly"]
+          ),
+        ],
+      };
+    case "assembly":
+      return {
+        stageKey,
+        title: "Assembly Timeline",
+        description: "Track the assembly checkpoint through plan vs actual completion.",
+        steps: [
           buildPlanActualStep(
             "assembly",
             "Assembly",
@@ -343,7 +387,7 @@ export const OrderTrackingTimelineContent = ({
         </Box>
       ) : null}
 
-      <Card className="rounded-lg shadow-[0px_6px_24px_rgba(0,0,0,0.06)]">
+      <Box className="rounded-lg">
         <CardContent className="grid gap-2">
           <Box className="grid gap-0.5">
             <Typography variant="subtitle2" color="text.secondary">
@@ -404,26 +448,26 @@ export const OrderTrackingTimelineContent = ({
                       />
                     </Box>
 
-                    <Box
-                      className="grid gap-1.5 sm:grid-cols-2"
-                    >
-                      <Box>
-                        <Typography variant="caption" color="text.secondary">
-                          Plan Date
-                        </Typography>
-                        <Typography variant="body2" fontWeight={600}>
-                          {formatDate(step.planDate)}
-                        </Typography>
+                    {!step.hidePlanActual ? (
+                      <Box className="grid gap-1.5 sm:grid-cols-2">
+                        <Box>
+                          <Typography variant="caption" color="text.secondary">
+                            Plan Date
+                          </Typography>
+                          <Typography variant="body2" fontWeight={600}>
+                            {formatDate(step.planDate)}
+                          </Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" color="text.secondary">
+                            Actual Date
+                          </Typography>
+                          <Typography variant="body2" fontWeight={600}>
+                            {formatDate(step.actualDate)}
+                          </Typography>
+                        </Box>
                       </Box>
-                      <Box>
-                        <Typography variant="caption" color="text.secondary">
-                          Actual Date
-                        </Typography>
-                        <Typography variant="body2" fontWeight={600}>
-                          {formatDate(step.actualDate)}
-                        </Typography>
-                      </Box>
-                    </Box>
+                    ) : null}
 
                     {step.detailLines?.length ? (
                       <Stack spacing={0.25}>
@@ -442,7 +486,7 @@ export const OrderTrackingTimelineContent = ({
             ))}
           </Stack>
         </CardContent>
-      </Card>
+      </Box>
     </Box>
   );
 };

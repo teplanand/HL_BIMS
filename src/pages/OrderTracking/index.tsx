@@ -3,21 +3,26 @@ import clsx from "clsx";
 import { Box, Button, ButtonBase, Card, CardContent, Grid, Tooltip, Typography } from "@mui/material";
 import {
   GridColDef,
+  GridFilterInputValueProps,
   GridFilterModel,
+  getGridDateOperators,
+  GridFilterOperator,
   GridPaginationModel,
   GridRenderCellParams,
   GridSortModel,
 } from "@mui/x-data-grid";
+import { DatePicker } from "@mui/x-date-pickers/DatePicker";
+import dayjs, { Dayjs } from "dayjs";
 
 import ApiActionButton from "../../components/common/ApiActionButton";
 import ReusableDataGrid from "../../components/common/ReusableDataGrid";
 import { useModal } from "../../hooks/useModal";
 import { useGetOrdersMutation } from "../../redux/api/ordertracking";
-import { ordertrackingdata } from "./Dashboard/data";
 import OpenEditPlanModal from "./Dashboard/components/AddEditPlan";
 import { ViewDetails, ViewDetailsRef } from "./Dashboard/components/viewdetails";
 import { OrderTrackingTimelineContent } from "./timeline";
 import { formatDateOnly } from "../../utils/FormatDate";
+import { ordertrackingdata } from "./Dashboard/data";
 
 ////// filter by number
 
@@ -50,7 +55,6 @@ const STAGE_ACCENT_COLORS = {
   Manufacturing: ORDER_TRACKING_COLORS.warning,
   Assembly: ORDER_TRACKING_COLORS.success,
   Testing: ORDER_TRACKING_COLORS.danger,
-  Painting: ORDER_TRACKING_COLORS.warning,
   Dispatch: ORDER_TRACKING_COLORS.success,
 } as const;
 
@@ -97,12 +101,6 @@ const summaryCardClassMap: Record<
     value: "dashboard-stat-value--rejected",
     numberColor: STAGE_ACCENT_COLORS.Testing,
   },
-  Painting: {
-    card: "dashboard-stat-card dashboard-stat-card--pending",
-    active: "dashboard-stat-card--pending-active",
-    value: "dashboard-stat-value--pending",
-    numberColor: STAGE_ACCENT_COLORS.Painting,
-  },
   Dispatch: {
     card: "dashboard-stat-card dashboard-stat-card--approved",
     active: "dashboard-stat-card--approved-active",
@@ -116,7 +114,6 @@ const processStageColumns = [
   { field: "manufacturing", headerName: "Mfg", width: 86, minWidth: 86 },
   { field: "assembly", headerName: "Assembly", width: 96, minWidth: 96 },
   { field: "testing", headerName: "Testing", width: 88, minWidth: 88 },
-  { field: "painting", headerName: "Painting", width: 92, minWidth: 92 },
   { field: "dispatch", headerName: "Dispatch", width: 92, minWidth: 92 },
 ] as const;
 
@@ -147,7 +144,6 @@ const summaryCardKeys: Record<(typeof processStageColumns)[number]["field"], str
   manufacturing: "Manufacturing",
   assembly: "Assembly",
   testing: "Testing",
-  painting: "Painting",
   dispatch: "Dispatch",
 };
 
@@ -160,7 +156,56 @@ const summaryStatuses = [
 
 type SummaryStatusKey = (typeof summaryStatuses)[number]["key"];
 type ProcessStageField = (typeof processStageColumns)[number]["field"];
+type DateFilterInputProps = GridFilterInputValueProps;
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
+
+const OrderTrackingDateFilterInput = React.memo((props: DateFilterInputProps) => {
+  const { item, applyValue, focusElementRef, disabled, slotProps } = props;
+  const parsedValue = typeof item.value === "string" && item.value
+    ? dayjs(item.value)
+    : null;
+
+  return (
+    <DatePicker
+      value={parsedValue && parsedValue.isValid() ? parsedValue : null}
+      format="DD/MM/YYYY"
+      disabled={disabled}
+      onChange={(newValue: Dayjs | null) => {
+        applyValue({
+          ...item,
+          value: newValue && newValue.isValid() ? newValue.format("YYYY-MM-DD") : "",
+        });
+      }}
+      slotProps={{
+        textField: {
+          size: "small",
+          inputRef: focusElementRef,
+          placeholder: "dd/mm/yyyy",
+          sx: {
+            width: 160,
+            ...(slotProps?.root ?? {}),
+          },
+        },
+      }}
+    />
+  );
+});
+
+const orderTrackingDateFilterOperators: GridFilterOperator[] = getGridDateOperators(false).map((operator) => ({
+  ...operator,
+  InputComponent: OrderTrackingDateFilterInput,
+}));
+
+const getGridDateValue = (row: Record<string, unknown>, field: string) => {
+  const rawValue = row?.[field];
+
+  if (!rawValue) {
+    return null;
+  }
+
+  const parsedDate = new Date(String(rawValue));
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+};
 
 
 const isNull = (val: any) => val === null || val === undefined;
@@ -209,6 +254,40 @@ const getFinalApprovalTimePercent = (row: Record<string, unknown>) => {
   return deliveryDaysFromPoDate && daysInDrawingApproval !== null
     ? (daysInDrawingApproval / deliveryDaysFromPoDate) * 100
     : null;
+};
+
+const getDesignCycleStatus = (value1: unknown, value2: unknown) => {
+  const first = Number(value1);
+  const second = Number(value2);
+  const hasFirstProgress = !Number.isNaN(first) && first > 0;
+  const hasSecondProgress = !Number.isNaN(second) && second > 0;
+
+  if (!hasFirstProgress && !hasSecondProgress) {
+    return "Not Started";
+  }
+
+  if (hasFirstProgress && !hasSecondProgress) {
+    return "In Progress";
+  }
+
+  return "Completed";
+};
+
+const getDesignCycleColor = (value1: unknown, value2: unknown) => {
+  const status = getDesignCycleStatus(value1, value2);
+
+  if (status !== "Completed") {
+    return statusColorMap[status] || STATUS_COLORS["Not Started"];
+  }
+
+  const first = Number(value1);
+  const second = Number(value2);
+
+  if (!Number.isNaN(first) && !Number.isNaN(second) && second > first) {
+    return SUMMARY_STATUS_COLORS["Completed Delayed"];
+  }
+
+  return STATUS_COLORS.Completed;
 };
 
 const getCompletedColor = (plan: any, actual: any) => {
@@ -292,24 +371,43 @@ const getAggregateCompletedColor = (
     : STATUS_COLORS.Completed;
 };
 
+const getDesignProcessColor = (row: Record<string, any>) => {
+  const gaDrawingColor = getCompletedColor(
+    row.ga_dim_drw_submission_design_plan,
+    row.ga_dim_drw_submission_design_actual
+  );
+  const finalApprovalColor = getCompletedColor(
+    row.final_drg_approval_received_date_plan,
+    row.final_drg_approval_received_date_actual
+  );
+  const bomColor = getCompletedColor(row.bom_plan, row.bom_actual);
+  const designCycleColor = getDesignCycleColor(
+    row.po_received_date_to_ga_drw_submission_days,
+    row.ga_drawing_submission_to_final_approval_received_days
+  );
+  const colors = [gaDrawingColor, finalApprovalColor, bomColor, designCycleColor];
+
+  if (colors.includes(SUMMARY_STATUS_COLORS["Completed Delayed"])) {
+    return SUMMARY_STATUS_COLORS["Completed Delayed"];
+  }
+
+  if (colors.includes(STATUS_COLORS["In Progress"])) {
+    return STATUS_COLORS["In Progress"];
+  }
+
+  if (colors.every((color) => color === STATUS_COLORS["Not Started"])) {
+    return STATUS_COLORS["Not Started"];
+  }
+
+  return STATUS_COLORS.Completed;
+};
+
 const getProcessStatusColor = (field: string, row: Record<string, any>) => {
   switch (field) {
     case "design":
-      return getAggregateCompletedColor(
-        [
-          [row.ga_dim_drw_submission_design_plan, row.ga_dim_drw_submission_design_actual],
-          [row.final_drg_approval_received_date_plan, row.final_drg_approval_received_date_actual],
-          [row.bom_plan, row.bom_actual],
-          [
-            row.po_received_date_to_ga_drw_submission_days,
-            row.ga_drawing_submission_to_final_approval_received_days,
-          ],
-        ],
-        String(row[field] ?? "Not Started")
-      );
+      return getDesignProcessColor(row);
     case "manufacturing":
     case "assembly":
-    case "painting":
       return getAggregateCompletedColor(
         [
           [row.gear_case_plan, row.gearcase_actual],
@@ -329,23 +427,29 @@ const getProcessStatusColor = (field: string, row: Record<string, any>) => {
 };
 
 const getDesignStatus = (row: any) => {
-  const fields = [
-    row.ga_dim_drw_submission_design_plan,
-    row.ga_dim_drw_submission_design_actual,
-    row.final_drg_approval_received_date_plan,
-    row.final_drg_approval_received_date_actual,
-    row.bom_plan,
-    row.bom_actual,
+  const designStepStatuses = [
+    getStageStatus(
+      row.ga_dim_drw_submission_design_plan,
+      row.ga_dim_drw_submission_design_actual
+    ),
+    getStageStatus(
+      row.final_drg_approval_received_date_plan,
+      row.final_drg_approval_received_date_actual
+    ),
+    getStageStatus(row.bom_plan, row.bom_actual),
+    getDesignCycleStatus(
+      row.po_received_date_to_ga_drw_submission_days,
+      row.ga_drawing_submission_to_final_approval_received_days
+    ),
   ];
 
-  if (fields.every(isNull)) return "Not Started";
-  if (fields.some(isNull)) return "In Progress";
+  if (designStepStatuses.every((status) => status === "Not Started")) {
+    return "Not Started";
+  }
 
-  // optional strict logic
-  const submissionDays = row.po_received_date_to_ga_drw_submission_days;
-  const approvalDays = row.ga_drawing_submission_to_final_approval_received_days;
-
-  if (!isNull(submissionDays) && !isNull(approvalDays)) return "Completed";
+  if (designStepStatuses.every((status) => status === "Completed")) {
+    return "Completed";
+  }
 
   return "In Progress";
 };
@@ -398,12 +502,15 @@ const getManufacturingStatus = (row: any) => {
   return "In Progress";
 };
 
+ 
+
 const getFullStatus = (row: any) => {
   return {
     design: getDesignStatus(row),
     sales: getSalesStatus(row),
     planning: getPlanningStatus(row),
     manufacturing: getManufacturingStatus(row),
+   
     qc: getQCStatus(row),
     dispatch: getDispatchStatus(row),
   };
@@ -416,7 +523,7 @@ const OrderTrackingDashboard = () => {
   const { openModal } = useModal();
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
     page: 0,
-    pageSize: 15,
+    pageSize: 5,
   });
   const [sortModel, setSortModel] = useState<GridSortModel>([
     { field: "date", sort: "desc" },
@@ -435,7 +542,7 @@ const OrderTrackingDashboard = () => {
   const [selectedField, setSelectedField] = useState("");
   const [selectedRowData, setSelectedRowData] = useState<Record<string, unknown> | null>(null);
 
-  const [getOrders, { data, isLoading }] = useGetOrdersMutation();
+  const [getOrders, { isLoading,data }] = useGetOrdersMutation();
 
   useEffect(() => {
     getOrders();
@@ -443,10 +550,10 @@ const OrderTrackingDashboard = () => {
 
   const rows = useMemo(() => {
 
-     const apiRows = Array.isArray(data?.data) ? data.data : [];
-    const sourceRows = apiRows.length > 0 ? apiRows : ordertrackingdata;
-  //const sourceRows = ordertrackingdata;
-
+  const apiRows = Array.isArray(data?.data) ? data.data : [];
+ // const sourceRows = apiRows.length > 0 ? apiRows : ordertrackingdata;
+  const sourceRows = apiRows;
+ 
   return sourceRows.map((item: any, index: number) => {
     const status = getFullStatus(item);
 
@@ -459,7 +566,6 @@ const OrderTrackingDashboard = () => {
       manufacturing: status.manufacturing,
       assembly: status.manufacturing, // or separate later
       testing: status.qc,
-      painting: status.manufacturing, // optional
       dispatch: status.dispatch,
     };
   });
@@ -583,7 +689,7 @@ const OrderTrackingDashboard = () => {
 
   const renderActualDateCell = useCallback(
     (params: GridRenderCellParams) => {
-      const value = params.value;
+      const value = params.row?.[params.field];
       const planField = actualToPlanFieldMap[params.field];
       const planValue = planField ? params.row?.[planField] : undefined;
       const displayPlanValue = planValue ? formatDateOnly(String(planValue)) || "-" : "-";
@@ -698,8 +804,8 @@ const renderProcessCell = useCallback(
         field: "cust_po_no",
         headerName: "Cust PO",
         filterable: true,
-        width: 100,
-        minWidth: 100,
+        width: 110,
+        minWidth: 110,
       },
       {
         field: "end_cust_name",
@@ -746,8 +852,12 @@ const renderProcessCell = useCallback(
       {
         field: "cust_po_date",
         headerName: "Customer PO Date",
+        type: "date",
         sortable: false,
         filterable: true,
+        filterOperators: orderTrackingDateFilterOperators,
+        valueGetter: (_value: unknown, row: Record<string, unknown>) =>
+          getGridDateValue(row, "cust_po_date"),
         width: 130,
         minWidth: 130,
         renderCell: renderDateCell,
@@ -755,8 +865,12 @@ const renderProcessCell = useCallback(
       {
         field: "delivery_date_po",
         headerName: "Delivery PO Date",
+        type: "date",
         sortable: false,
         filterable: true,
+        filterOperators: orderTrackingDateFilterOperators,
+        valueGetter: (_value: unknown, row: Record<string, unknown>) =>
+          getGridDateValue(row, "delivery_date_po"),
         width: 130,
         minWidth: 130,
         renderCell: renderDateCell,
@@ -764,8 +878,12 @@ const renderProcessCell = useCallback(
       {
         field: "commited_ex_works_delivery_date",
         headerName: "Commercial Ex Works Delivery Date",
+        type: "date",
         sortable: false,
         filterable: true,
+        filterOperators: orderTrackingDateFilterOperators,
+        valueGetter: (_value: unknown, row: Record<string, unknown>) =>
+          getGridDateValue(row, "commited_ex_works_delivery_date"),
         width: 200,
         minWidth: 200,
         renderCell: renderDateCell,
@@ -782,13 +900,19 @@ const renderProcessCell = useCallback(
       ...processStageColumns.map((column) => ({
         ...column,
         sortable: false,
+        filterable: false,
         width:70, 
         minWidth:70,
         renderCell: renderProcessCell,
       })),
       ...planDateColumns.map((column) => ({
         ...column,
+        type: "date",
         sortable: false,
+        filterable: true,
+        filterOperators: orderTrackingDateFilterOperators,
+        valueGetter: (_value: unknown, row: Record<string, unknown>) =>
+          getGridDateValue(row, column.field),
         width:90, 
         minWidth:90,
         renderCell: renderActualDateCell,
@@ -839,31 +963,31 @@ const renderProcessCell = useCallback(
           const summaryKey = summaryCardKeys[stage.field];
 
           return (
-          <Grid size={{ xs: 12, sm: 6, md: 2 }} key={stage.field}>
+          <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2 }} key={stage.field}>
             <Card
               onClick={() => setActiveTab(summaryKey)}
               className={clsx(
                 summaryCardClassMap[summaryKey].card,
+                "overflow-hidden",
                 activeTab === summaryKey && summaryCardClassMap[summaryKey].active
               )}
             >
-              <CardContent className="grid gap-5">
+              <CardContent className="grid gap-3 p-3 sm:gap-4 sm:p-4">
                 <Typography
                   variant="subtitle2"
                   color="textSecondary"
                   gutterBottom
-                  className="dashboard-stat-title"
+                  className="dashboard-stat-title text-[0.78rem] sm:text-[0.82rem]"
                 >
                   {stage.headerName}
                 </Typography>
                 <Box
-                  className="grid gap-2"
-                  style={{ gridTemplateColumns: `repeat(${summaryStatuses.length}, minmax(0, 1fr))` }}
+                  className="grid grid-cols-2 gap-2 sm:grid-cols-4"
                 >
                   {summaryStatuses.map((status) => (
                     <Tooltip key={status.key} title={status.tooltip} {...ORDER_TRACKING_TOOLTIP_PROPS}>
                       <Box
-                        className="overflow-hidden rounded-md min-h-11"
+                        className="min-h-10 overflow-hidden rounded-md sm:min-h-11"
                         style={{
                           backgroundColor: withAlpha(status.color, "12"),
                           border: `1px solid ${withAlpha(status.color, "33")}`,
@@ -878,7 +1002,7 @@ const renderProcessCell = useCallback(
                               status.key
                             );
                           }}
-                          className="grid h-full min-h-11 w-full place-items-center"
+                          className="grid h-full min-h-10 w-full place-items-center px-2 py-2 sm:min-h-11"
                           style={{
                             backgroundColor:
                               activeStageFilter?.field === stage.field &&
@@ -890,7 +1014,7 @@ const renderProcessCell = useCallback(
                           <Typography
                             variant="h6"
                             className={clsx(
-                              "dashboard-stat-value text-[1.15rem] leading-none font-bold",
+                              "dashboard-stat-value text-[1rem] leading-none font-bold sm:text-[1.15rem]",
                               summaryCardClassMap[summaryKey].value
                             )}
                             style={{ color: status.color }}
@@ -909,18 +1033,18 @@ const renderProcessCell = useCallback(
       </Grid>
 
       <Box
-        className="mb-2 flex flex-wrap items-center gap-2 rounded-lg    px-2 py-1.5  "
+        className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg px-2 py-1.5"
       >
         <Typography
           variant="subtitle2"
-          className="mr-3 font-bold text-gray-800 dark:text-white/90"
+          className="mr-1 font-bold text-gray-800 dark:text-white/90 sm:mr-3"
         >
           Color Legend
         </Typography>
         {summaryStatuses.map((status) => (
           <Box
             key={status.key}
-            className="flex items-center gap-1.5 mr-3"
+            className="mr-2 flex items-center gap-1.5 sm:mr-3"
           >
             <Box
               className="h-3.5 min-w-3.5 w-3.5 rounded-full"
@@ -948,9 +1072,13 @@ const renderProcessCell = useCallback(
         title="Order Tracking"
         headerControls={gridHeaderControls}
         refetch={() => undefined}
+        height="calc(100vh - 308px)"
+     
+        pageSizeOptions={[5, 10, 15, 20, 50]}
         enableViewToggle={false}
         permissions={{ create: true, edit: false, delete: false, download: true, view: true }}
         uniqueIdField="id"
+        searchableFields={["end_cust_name", "line_id", "cust_po_no", "branch_name", "uom"]}
       />
 
       <OpenEditPlanModal
