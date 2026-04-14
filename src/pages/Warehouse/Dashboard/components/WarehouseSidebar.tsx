@@ -1,11 +1,17 @@
 import { memo } from "react";
-import { Box, List, ListItemButton, ListItemText, TextField, InputAdornment, Stack } from "@mui/material";
+import {
+  Box,
+  InputAdornment,
+  List,
+  ListItemButton,
+  ListItemText,
+  Stack,
+  TextField,
+} from "@mui/material";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import SearchIcon from "@mui/icons-material/Search";
-import { useModal } from "../../../../hooks/useModal";
+
 import IconActionButton from "../../../../components/common/IconActionButton";
-import { AddEditWarehouse, AddEditWarehouseRef } from "../../Warehouselist/addeditwarehouse";
-import { openEntityFormModal } from "../../shared/openEntityFormModal";
 import type { Warehouse } from "../types";
 
 type WarehouseSidebarProps = {
@@ -14,6 +20,7 @@ type WarehouseSidebarProps = {
   onSelect: (index: number) => void;
   searchValue: string;
   onSearchChange: (value: string) => void;
+  onAddWarehouse: () => void;
 };
 
 function WarehouseSidebarInner({
@@ -22,18 +29,8 @@ function WarehouseSidebarInner({
   onSelect,
   searchValue,
   onSearchChange,
+  onAddWarehouse,
 }: WarehouseSidebarProps) {
-  const { openModal } = useModal();
-
-  const handleAddWarehouse = () => {
-    openEntityFormModal<AddEditWarehouseRef>({
-      openModal,
-      entityLabel: "Warehouse",
-      width: 720,
-      FormComponent: AddEditWarehouse,
-    });
-  };
-
   return (
     <Box
       sx={{
@@ -43,12 +40,10 @@ function WarehouseSidebarInner({
         borderColor: "divider",
         height: "100%",
         overflow: "auto",
-
         display: "flex",
         flexDirection: "column",
       }}
     >
-      {/* Search Header */}
       <Box sx={{ px: 2, pt: 2.5, pb: 1.25 }}>
         <Stack direction="row" spacing={0.75} alignItems="center">
           <TextField
@@ -56,7 +51,7 @@ function WarehouseSidebarInner({
             size="small"
             placeholder="Search Warehouse..."
             value={searchValue}
-            onChange={(e) => onSearchChange(e.target.value)}
+            onChange={(event) => onSearchChange(event.target.value)}
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
@@ -82,7 +77,7 @@ function WarehouseSidebarInner({
           <IconActionButton
             ariaLabel="Add warehouse"
             tooltip="Add Warehouse"
-            onClick={() => handleAddWarehouse()}
+            onClick={onAddWarehouse}
             sx={{
               color: "#FF8A3D",
               border: "1px solid rgba(255,138,61,0.22)",
@@ -99,14 +94,18 @@ function WarehouseSidebarInner({
       </Box>
 
       <List disablePadding sx={{ px: 1, flex: 1 }}>
-        {warehouses.map((wh, i) => {
-          const rackCount = wh.sections.reduce((sum, sec) => sum + sec.racks.length, 0);
-          const isSelected = selectedIndex === i;
+        {warehouses.map((warehouse, index) => {
+          const rackCount = warehouse.sections.reduce(
+            (sum, section) => sum + section.racks.length,
+            0
+          );
+          const isSelected = selectedIndex === index;
+
           return (
             <ListItemButton
-              key={wh.id}
+              key={warehouse.id}
               selected={isSelected}
-              onClick={() => onSelect(i)}
+              onClick={() => onSelect(index)}
               disableRipple
               sx={{
                 borderRadius: 2,
@@ -116,7 +115,6 @@ function WarehouseSidebarInner({
                 borderLeft: "3px solid transparent",
                 transition: "background-color 0.15s ease, border-color 0.15s ease",
                 "&.Mui-selected": {
-
                   borderLeftColor: "#FF8A3D",
                   "&:hover": { bgcolor: "#FFF4ED", py: 1 },
                 },
@@ -127,12 +125,11 @@ function WarehouseSidebarInner({
               }}
             >
               <ListItemText
-                primary={wh.name}
-                secondary={`${wh.location} | ${wh.sections.length} zones · ${rackCount} racks`}
+                primary={warehouse.name}
+                secondary={`${warehouse.location} | ${warehouse.sections.length} zones · ${rackCount} racks`}
                 primaryTypographyProps={{
                   fontWeight: 700,
                   fontSize: "0.88rem",
-
                 }}
                 secondaryTypographyProps={{
                   fontWeight: 500,

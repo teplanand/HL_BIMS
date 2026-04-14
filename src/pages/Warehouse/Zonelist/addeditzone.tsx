@@ -1,4 +1,4 @@
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, type Ref } from "react";
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, type Ref } from "react";
 import { useForm } from "react-hook-form";
 import { Box, Stack } from "@mui/material";
 
@@ -8,32 +8,40 @@ import { FormStackGrid } from "../../../components/ui/form/stack";
 import FormSection from "../../../components/ui/form/FormSection";
 import { useModal } from "../../../hooks/useModal";
 import { useToast } from "../../../hooks/useToast";
+import { useListWarehousesQuery } from "../../../redux/api/warehouse";
+import { extractApiRows } from "../shared/gridApiHelpers";
 import ViewInArOutlinedIcon from "@mui/icons-material/ViewInArOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 
-type SectionFormValues = {
-  warehouseName: string;
-  name: string;
-  color: string;
-  rackCount: number | string;
-  prefix: string;
+type ZoneFormValues = {
+  warehouse_id: string;
+  zone_code: string;
+  zone_title: string;
+  zone_description: string;
+  status: "ACTIVE" | "INACTIVE";
 };
 
-type ZoneFormValues = {
-  warehouseName: string;
-  name: string;
-  color: string;
-  rackCount: number | string;
-  prefix: string;
+export type ZoneSubmitPayload = {
+  id?: string | number;
+  warehouse_id: number;
+  zone_code: string;
+  zone_title: string;
+  zone_description?: string | null;
+  status: "ACTIVE" | "INACTIVE";
 };
 
 type AddEditZoneProps = {
-  defaultValues?: Partial<ZoneFormValues> & { id?: string };
-  onSubmitSection?: (
-    payload: Omit<ZoneFormValues, "products"> & {
-      rackCount: number;
-    }
-  ) => void | Promise<void>;
+  defaultValues?: Partial<ZoneFormValues> & {
+    id?: string | number;
+    name?: string;
+    warehouseName?: string;
+    warehouse_id?: number | string;
+    zone_code?: string;
+    zone_title?: string;
+    zone_description?: string | null;
+  };
+  onSubmitZone?: (payload: ZoneSubmitPayload) => void | Promise<void>;
+  onDeleteZone?: (id: string | number) => Promise<void>;
   setDisplayTitle?: (title: string) => void;
   setDataChanged?: (changed: boolean) => void;
   setHideFooter?: (hidden: boolean) => void;
@@ -44,17 +52,10 @@ export type AddEditZoneRef = {
   submit: () => Promise<void>;
 };
 
-const WAREHOUSE_OPTIONS = [
-  { value: "Warehouse 1", label: "Warehouse 1" },
-  { value: "Warehouse 2", label: "Warehouse 2" },
-  { value: "Warehouse 3", label: "Warehouse 3" },
-  { value: "Warehouse 4", label: "Warehouse 4" },
-  { value: "Warehouse 5", label: "Warehouse 5" },
-];
-
 function Index({
   defaultValues,
-  onSubmitSection,
+  onSubmitZone,
+  onDeleteZone,
   setDisplayTitle,
   setDataChanged,
   setHideFooter,
@@ -62,7 +63,21 @@ function Index({
 }: AddEditZoneProps, ref: Ref<AddEditZoneRef>) {
   const { closeModal } = useModal();
   const { showToast } = useToast();
-  const isEditMode = Boolean(defaultValues && Object.keys(defaultValues).length > 0);
+  const isEditMode = Boolean(defaultValues?.id);
+  const { data: warehousesData } = useListWarehousesQuery();
+
+  const warehouseOptions = useMemo(
+    () =>
+      extractApiRows(warehousesData).map((warehouse: any) => ({
+        value: String(warehouse.id),
+        label:
+          warehouse.warehouse_name ||
+          warehouse.warehouseName ||
+          warehouse.name ||
+          `Warehouse ${warehouse.id}`,
+      })),
+    [warehousesData]
+  );
 
   const {
     register,
@@ -70,11 +85,11 @@ function Index({
     formState: { errors, isDirty },
   } = useForm<ZoneFormValues>({
     defaultValues: {
-      warehouseName: defaultValues?.warehouseName || "",
-      name: defaultValues?.name || "",
-      color: defaultValues?.color || "#A5D6A7",
-      rackCount: defaultValues?.rackCount || "",
-      prefix: defaultValues?.prefix || "",
+      warehouse_id: String(defaultValues?.warehouse_id || ""),
+      zone_code: defaultValues?.zone_code || "",
+      zone_title: defaultValues?.zone_title || defaultValues?.name || "",
+      zone_description: defaultValues?.zone_description || "",
+      status: defaultValues?.status || "ACTIVE",
     },
     mode: "onBlur",
   });
@@ -90,25 +105,26 @@ function Index({
   }, [isDirty, setDataChanged]);
 
   const onSubmit = useCallback(async (data: ZoneFormValues) => {
-    const payload = {
+    const payload: ZoneSubmitPayload = {
       ...(defaultValues?.id ? { id: defaultValues.id } : {}),
-      warehouseName: data.warehouseName.trim(),
-      name: data.name.trim(),
-      color: data.color,
-      rackCount: Number(data.rackCount),
-      prefix: data.prefix.trim().toUpperCase(),
+      warehouse_id: Number(data.warehouse_id),
+      zone_code: data.zone_code.trim().toUpperCase(),
+      zone_title: data.zone_title.trim(),
+      zone_description: data.zone_description.trim() || null,
+      status: data.status,
     };
 
-    if (onSubmitSection) {
-      await onSubmitSection(payload);
-    } else {
-      console.log("zone-payload", payload);
+    if (onSubmitZone) {
+      await onSubmitZone(payload);
     }
 
-    showToast("Zone details ready for posting", "success");
+    showToast(
+      isEditMode ? "Zone updated successfully" : "Zone created successfully",
+      "success"
+    );
     setDataChanged?.(false);
     closeModal();
-  }, [closeModal, onSubmitSection, setDataChanged, showToast]);
+  }, [closeModal, defaultValues?.id, isEditMode, onSubmitZone, setDataChanged, showToast]);
 
   useImperativeHandle(
     ref,
@@ -123,77 +139,77 @@ function Index({
   return (
     <form onSubmit={handleSubmit(onSubmit)}>
       <Stack spacing={1}>
-        {/* ══════════ Section Identity ══════════ */}
         <FormSection
           title="Zone Identity"
-          description="Unique identifier, name"
+          description="Warehouse mapping and zone identification"
           icon={<ViewInArOutlinedIcon fontSize="small" />}
         >
-          <FormStackGrid columns={1}>
+          <FormStackGrid columns={2}>
             <MuiSelect
-              id="warehouseName"
+              id="warehouse_id"
               label="Warehouse"
               placeholder="Select warehouse"
               displayEmpty
-              defaultValue={defaultValues?.warehouseName || ""}
-              options={WAREHOUSE_OPTIONS}
-              {...register("warehouseName", {
+              defaultValue={String(defaultValues?.warehouse_id || "")}
+              options={warehouseOptions}
+              {...register("warehouse_id", {
                 required: "Warehouse is required",
               })}
-              error={!!errors.warehouseName}
-              helperText={errors.warehouseName?.message}
+              error={!!errors.warehouse_id}
+              helperText={errors.warehouse_id?.message}
             />
             <MuiTextField
-              id="name"
-              label="Zone Name"
-              placeholder="A - Electronics"
-              {...register("name", {
-                required: "Zone name is required",
+              id="zone_code"
+              label="Zone Code"
+              placeholder="ZONE-A"
+              {...register("zone_code", {
+                required: "Zone code is required",
               })}
-              error={!!errors.name}
-              helperText={errors.name?.message}
+              error={!!errors.zone_code}
+              helperText={errors.zone_code?.message}
+            />
+            <MuiTextField
+              id="zone_title"
+              label="Zone Title"
+              placeholder="Zone A"
+              {...register("zone_title", {
+                required: "Zone title is required",
+              })}
+              error={!!errors.zone_title}
+              helperText={errors.zone_title?.message}
+            />
+            <MuiSelect
+              id="status"
+              label="Status"
+              defaultValue={defaultValues?.status || "ACTIVE"}
+              options={[
+                { value: "ACTIVE", label: "Active" },
+                { value: "INACTIVE", label: "Inactive" },
+              ]}
+              {...register("status", {
+                required: "Status is required",
+              })}
+              error={!!errors.status}
+              helperText={errors.status?.message}
             />
           </FormStackGrid>
         </FormSection>
 
-        {/* ══════════ Storage Configuration ══════════ */}
         <FormSection
-          title="Storage Configuration"
-          description="Rack and pallet setup for this zone"
+          title="Description"
+          description="Additional zone notes"
           icon={<SettingsOutlinedIcon fontSize="small" />}
           accentColor="#1D4ED8"
         >
-          <FormStackGrid columns={2}>
+          <FormStackGrid columns={1}>
             <MuiTextField
-              id="prefix"
-              label="Pallet Prefix"
-              placeholder="EA"
-              {...register("prefix", {
-                required: "Prefix is required",
-                minLength: {
-                  value: 2,
-                  message: "Prefix must be at least 2 characters",
-                },
-              })}
-              error={!!errors.prefix}
-              helperText={errors.prefix?.message}
-            />
-            <MuiTextField
-              id="rackCount"
-              type="number"
-              label="Rack Count"
-              placeholder="5"
-              {...register("rackCount", {
-                required: "Rack count is required",
-                valueAsNumber: true,
-                min: {
-                  value: 1,
-                  message: "Rack count must be at least 1",
-                },
-              })}
-              error={!!errors.rackCount}
-              helperText={errors.rackCount?.message}
-              inputProps={{ min: 1 }}
+              id="zone_description"
+              label="Zone Description"
+              multiline
+              minRows={4}
+              placeholder="Fast moving items zone"
+              {...register("zone_description")}
+              fullWidth
             />
           </FormStackGrid>
         </FormSection>
@@ -211,8 +227,12 @@ function Index({
           <ConfirmDeleteButton
             entityLabel="Zone"
             successMessage="Zone deleted successfully"
-            onDelete={() => {
-              console.log("Delete zone", defaultValues);
+            onDelete={async () => {
+              if (!defaultValues?.id || !onDeleteZone) {
+                return;
+              }
+
+              await onDeleteZone(defaultValues.id);
               closeModal();
             }}
           >

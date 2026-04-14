@@ -6,7 +6,6 @@ import {
   CardContent,
   IconButton,
   Grid,
-  Badge,
   useTheme,
   Container,
   alpha,
@@ -25,7 +24,10 @@ import PeopleIcon from "@mui/icons-material/People";
 import AccountBalanceIcon from "@mui/icons-material/AccountBalance";
 import SettingsIcon from "@mui/icons-material/Settings";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
-import NotificationsIcon from "@mui/icons-material/Notifications";
+import TimelineIcon from "@mui/icons-material/Timeline";
+import QrCode2Icon from "@mui/icons-material/QrCode2";
+import FactCheckIcon from "@mui/icons-material/FactCheck";
+import PrecisionManufacturingIcon from "@mui/icons-material/PrecisionManufacturing";
 
 // Components
 import UserDropdown from "../components/header/UserDropdown";
@@ -40,7 +42,7 @@ const INITIAL_APPS = [
     name: "Advance Voucher",
     icon: AdvaceVoucher,
     path: "/advance-voucher/dashboard", // Navigate to existing dashboard
-    notifications: 3,
+    notifications: 0,
     hasAccess: true,
     color: "#F37440", // Primary Orange
   },
@@ -50,7 +52,7 @@ const INITIAL_APPS = [
     name: "Purchase Order",
     icon: ShoppingCartIcon,
     path: "/purchase-order/dashboard",
-    notifications: 5,
+    notifications: 0,
     hasAccess: true,
     color: "#3B82F6", // Blue
   },
@@ -68,7 +70,7 @@ const INITIAL_APPS = [
     name: "Warehouse",
     icon: Inventory2Icon,
     path: "/Warehouse/dashboard",
-    notifications: 12,
+    notifications: 0,
     hasAccess: true,
     color: "#8B5CF6", // Purple
   },
@@ -77,7 +79,7 @@ const INITIAL_APPS = [
     name: "HR Management",
     icon: PeopleIcon,
     path: "/hr-management/dashboard",
-    notifications: 1,
+    notifications: 0,
     hasAccess: true,
     color: "#EC4899", // Pink
   },
@@ -99,41 +101,41 @@ const INITIAL_APPS = [
     hasAccess: false, // No Access
     color: "#64748B",
   },
-   {
+  {
     id: 8,
     name: "Order Tracking",
-    icon: AdvaceVoucher,
+    icon: TimelineIcon,
     path: "/order-tracking/dashboard", // Navigate to existing dashboard
-    notifications: 3,
+    notifications: 0,
     hasAccess: true,
-    color: "#F37440", // Primary Orange
+    color: "#0F766E",
   },
   {
     id: 9,
     name: "PBL Barcode",
-    icon: AdvaceVoucher,
+    icon: QrCode2Icon,
     path: "/barcode/dashboard", // Navigate to existing dashboard
-    notifications: 3,
+    notifications: 0,
     hasAccess: true,
-    color: "#F37440", // Primary Orange
+    color: "#1D4ED8",
   },
   {
     id: 10,
     name: "Evidance Collection",
-    icon: AdvaceVoucher,
+    icon: FactCheckIcon,
     path: "/evidance/dashboard", // Navigate to existing dashboard
-    notifications: 3,
+    notifications: 0,
     hasAccess: true,
-    color: "#F37440", // Primary Orange
+    color: "#7C3AED",
   },
   {
     id: 11,
     name: "Gearbox Monitoring",
-    icon: AdvaceVoucher,
+    icon: PrecisionManufacturingIcon,
     path: "/monitoring/dashboard", // Navigate to existing dashboard
-    notifications: 3,
+    notifications: 0,
     hasAccess: true,
-    color: "#F37440", // Primary Orange
+    color: "#B45309",
   },
 ];
 

@@ -13,6 +13,8 @@ import PersonOutlinedIcon from "@mui/icons-material/PersonOutlined";
 import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined";
 
 type WarehouseFormValues = {
+  orgId: string;
+  warehouseCode: string;
   warehouseName: string;
   managerName: string;
   contactNumber: string;
@@ -20,15 +22,35 @@ type WarehouseFormValues = {
   location: string;
   address: string;
   storageCapacity: number | string;
-  status: "active" | "inactive" | "maintenance";
+  status: "ACTIVE" | "INACTIVE";
   notes: string;
 };
 
+export type WarehouseSubmitPayload = WarehouseFormValues & {
+  id?: string | number;
+  storageCapacity: number;
+};
+
 type AddEditWarehouseProps = {
-  defaultValues?: Partial<WarehouseFormValues> & { id?: string; name?: string };
+  defaultValues?: Partial<WarehouseFormValues> & {
+    id?: string | number;
+    name?: string;
+    warehouse_name?: string;
+    warehouse_code?: string;
+    org_id?: string;
+    manager_name?: string;
+    contact_number?: string;
+    email?: string;
+    location?: string;
+    address?: string;
+    storage_capacity?: number | string;
+    notes?: string;
+    status?: "ACTIVE" | "INACTIVE";
+  };
   onSubmitWarehouse?: (
-    payload: WarehouseFormValues & { storageCapacity: number }
+    payload: WarehouseSubmitPayload
   ) => void | Promise<void>;
+  onDeleteWarehouse?: (id: string | number) => Promise<void>;
   setDisplayTitle?: (title: string) => void;
   setDataChanged?: (changed: boolean) => void;
   setHideFooter?: (hidden: boolean) => void;
@@ -42,6 +64,7 @@ export type AddEditWarehouseRef = {
 function Index({
   defaultValues,
   onSubmitWarehouse,
+  onDeleteWarehouse,
   setDisplayTitle,
   setDataChanged,
   setHideFooter,
@@ -49,7 +72,7 @@ function Index({
 }: AddEditWarehouseProps, ref: Ref<AddEditWarehouseRef>) {
   const { closeModal } = useModal();
   const { showToast } = useToast();
-  const hasExistingWarehouse = Boolean(defaultValues?.warehouseName || (defaultValues as any)?.name);
+  const hasExistingWarehouse = Boolean(defaultValues?.id);
 
   const {
     register,
@@ -57,15 +80,45 @@ function Index({
     formState: { errors, isDirty },
   } = useForm<WarehouseFormValues>({
     defaultValues: {
-      warehouseName: defaultValues?.warehouseName || (defaultValues as any)?.name || "",
-      managerName: defaultValues?.managerName || "",
-      contactNumber: defaultValues?.contactNumber || "",
-      email: defaultValues?.email || "",
-      location: defaultValues?.location || "",
-      address: defaultValues?.address || "",
-      storageCapacity: defaultValues?.storageCapacity || "",
-      status: defaultValues?.status || "active",
-      notes: defaultValues?.notes || "",
+      orgId: defaultValues?.orgId || (defaultValues as any)?.org_id || "",
+      warehouseCode:
+        defaultValues?.warehouseCode ||
+        (defaultValues as any)?.warehouse_code ||
+        "",
+      warehouseName:
+        defaultValues?.warehouseName ||
+        (defaultValues as any)?.warehouse_name ||
+        (defaultValues as any)?.name ||
+        "",
+      managerName:
+        defaultValues?.managerName ||
+        (defaultValues as any)?.manager_name ||
+        "",
+      contactNumber:
+        defaultValues?.contactNumber ||
+        (defaultValues as any)?.contact_number ||
+        "",
+      email:
+        defaultValues?.email ||
+        (defaultValues as any)?.email ||
+        "",
+      location:
+        defaultValues?.location ||
+        (defaultValues as any)?.location ||
+        "",
+      address:
+        defaultValues?.address ||
+        (defaultValues as any)?.address ||
+        "",
+      storageCapacity:
+        defaultValues?.storageCapacity ||
+        (defaultValues as any)?.storage_capacity ||
+        "",
+      status: defaultValues?.status || "ACTIVE",
+      notes:
+        defaultValues?.notes ||
+        (defaultValues as any)?.notes ||
+        "",
     },
     mode: "onBlur",
   });
@@ -81,9 +134,11 @@ function Index({
   }, [isDirty, setDataChanged]);
 
   const onSubmit = useCallback(async (data: WarehouseFormValues) => {
-    const payload = {
+    const payload: WarehouseSubmitPayload = {
       ...(defaultValues?.id ? { id: defaultValues.id } : {}),
       ...data,
+      orgId: data.orgId.trim(),
+      warehouseCode: data.warehouseCode.trim(),
       warehouseName: data.warehouseName.trim(),
       managerName: data.managerName.trim(),
       contactNumber: data.contactNumber.trim(),
@@ -100,10 +155,15 @@ function Index({
       console.log("warehouse-payload", payload);
     }
 
-    showToast("Warehouse details ready for posting", "success");
+    showToast(
+      hasExistingWarehouse
+        ? "Warehouse updated successfully"
+        : "Warehouse created successfully",
+      "success"
+    );
     setDataChanged?.(false);
     closeModal();
-  }, [closeModal, onSubmitWarehouse, setDataChanged, showToast]);
+  }, [closeModal, defaultValues?.id, hasExistingWarehouse, onSubmitWarehouse, setDataChanged, showToast]);
 
   useImperativeHandle(
     ref,
@@ -126,6 +186,26 @@ function Index({
         >
           <FormStackGrid columns={3}>
             <MuiTextField
+              id="orgId"
+              label="Organization ID"
+              placeholder="ORG-001"
+              {...register("orgId", {
+                required: "Organization ID is required",
+              })}
+              error={!!errors.orgId}
+              helperText={errors.orgId?.message}
+            />
+            <MuiTextField
+              id="warehouseCode"
+              label="Warehouse Code"
+              placeholder="WH-001"
+              {...register("warehouseCode", {
+                required: "Warehouse code is required",
+              })}
+              error={!!errors.warehouseCode}
+              helperText={errors.warehouseCode?.message}
+            />
+            <MuiTextField
               id="warehouseName"
               label="Warehouse Name"
               placeholder="Warehouse"
@@ -141,7 +221,6 @@ function Index({
               label="Storage Capacity"
               placeholder="1000"
               {...register("storageCapacity", {
-                required: "Storage capacity is required",
                 valueAsNumber: true,
                 min: {
                   value: 1,
@@ -155,10 +234,10 @@ function Index({
             <MuiSelect
               id="status"
               label="Status"
+              defaultValue={defaultValues?.status || "ACTIVE"}
               options={[
-                { value: "active", label: "Active" },
-                { value: "inactive", label: "Inactive" },
-                { value: "maintenance", label: "Maintenance" },
+                { value: "ACTIVE", label: "Active" },
+                { value: "INACTIVE", label: "Inactive" },
               ]}
               {...register("status", {
                 required: "Status is required",
@@ -276,8 +355,12 @@ function Index({
           <ConfirmDeleteButton
             entityLabel="Warehouse"
             successMessage="Warehouse deleted successfully"
-            onDelete={() => {
-              console.log("Delete warehouse", defaultValues);
+            onDelete={async () => {
+              if (!defaultValues?.id || !onDeleteWarehouse) {
+                return;
+              }
+
+              await onDeleteWarehouse(defaultValues.id);
               closeModal();
             }}
           >

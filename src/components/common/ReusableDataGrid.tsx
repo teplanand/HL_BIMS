@@ -1,10 +1,19 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  startTransition,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   DataGrid,
   GridCellParams,
   GridColDef,
   GridColumnVisibilityModel,
+  GridFilterItem,
   GridFilterModel,
+  GridLogicOperator,
   GridPaginationModel,
   GridSortModel,
   GridRenderCellParams,
@@ -20,7 +29,14 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   CardContent,
-  Button,
+  Chip,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  TextField,
+  InputAdornment,
+  type SelectChangeEvent,
 } from "@mui/material";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
@@ -28,10 +44,13 @@ import HeightIcon from '@mui/icons-material/Height';
 import ViewListIcon from '@mui/icons-material/ViewList';
 import ViewModuleIcon from '@mui/icons-material/ViewModule';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import SearchIcon from "@mui/icons-material/Search";
+import CancelIcon from "@mui/icons-material/Cancel";
 import DataGridToolbar from "./DataGridToolbar";
 import Loader from "../Loader/loader";
 import ActionButtonsEdit from "./ActionButtonsEdit";
 import ActionButtonsDelete from "./ActionButtonsDelete";
+import { formatDateOnly } from "../../utils/FormatDate";
 // Assuming you might want a View button later, or reuse Edit for view if read-only
 // import ActionButtonsView from "./ActionButtonsView";
 
@@ -73,6 +92,9 @@ export interface ReusableDataGridProps {
   addButtonLabel?: string;
   uniqueIdField?: string;
   rowHeight?: number | "auto";
+  height?: number | string;
+  searchableFields?: string[];
+  pageSizeOptions?: number[];
   compact?: boolean;
 
   // Permissions
@@ -96,10 +118,188 @@ export interface ReusableDataGridProps {
   };
 }
 
+type DataGridSearchInputProps = {
+  value: string;
+  onChange: (value: string) => void;
+};
+
+const DataGridSearchInput = React.memo(({ value, onChange }: DataGridSearchInputProps) => {
+  const [draftValue, setDraftValue] = useState(value);
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    setDraftValue(value);
+  }, [value]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      if (draftValue !== value) {
+        onChange(draftValue);
+      }
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [draftValue, onChange, value]);
+
+  return (
+    <TextField
+      value={draftValue}
+      inputRef={inputRef}
+      aria-label="Search"
+      placeholder="Search..."
+      size="small"
+      sx={{
+        width: { xs: "100%", sm: 260 },
+        minWidth: { xs: 0, sm: 240 },
+      }}
+      onChange={(event) => {
+        setDraftValue(event.target.value);
+      }}
+      slotProps={{
+        input: {
+          startAdornment: (
+            <InputAdornment position="start">
+              <SearchIcon fontSize="small" color="action" />
+            </InputAdornment>
+          ),
+          endAdornment: (
+            <InputAdornment position="end">
+              <IconButton
+                edge="end"
+                size="small"
+                aria-label="Clear search"
+                onClick={() => {
+                  setDraftValue("");
+                  onChange("");
+                  window.requestAnimationFrame(() => {
+                    inputRef.current?.focus();
+                  });
+                }}
+                sx={{
+                  marginRight: -0.75,
+                  opacity: draftValue ? 1 : 0.35,
+                }}
+              >
+                <CancelIcon fontSize="small" />
+              </IconButton>
+            </InputAdornment>
+          ),
+        },
+      }}
+    />
+  );
+});
+
+const formatFilterDisplayValue = (value: unknown) => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const trimmedValue = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}/.test(trimmedValue)) {
+    return value;
+  }
+
+  return formatDateOnly(trimmedValue) || value;
+};
+
+type DataGridHeaderSummaryProps = {
+  title: string;
+  activeFilters: Array<{ field: string; value: string }>;
+  onRemoveFilter: (field: string) => void;
+  onClearFilters: () => void;
+  headerControls?: React.ReactNode;
+};
+
+const DataGridHeaderSummary = React.memo(({
+  title,
+  activeFilters,
+  onRemoveFilter,
+  onClearFilters,
+  headerControls,
+}: DataGridHeaderSummaryProps) => (
+  <Box
+    sx={{
+      display: "flex",
+      alignItems: "center",
+      flexWrap: "wrap",
+      columnGap: 1,
+      rowGap: 0.75,
+      minWidth: 0,
+      overflow: "hidden",
+    }}
+  >
+    <Typography
+      variant="h6"
+      component="h1"
+      fontWeight="700"
+      sx={{ letterSpacing: "-0.02em", color: "text.primary", flexShrink: 0 }}
+    >
+      {title}
+    </Typography>
+
+    {activeFilters.length > 0 && (
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 0.75,
+          minWidth: 0,
+          overflowX: "auto",
+          overflowY: "hidden",
+          whiteSpace: "nowrap",
+          pr: 0.5,
+          "&::-webkit-scrollbar": {
+            height: 4,
+          },
+        }}
+      >
+        {activeFilters.map((filter) => (
+          <Chip
+            key={`${filter.field}-${filter.value}`}
+            label={`${filter.field}: ${filter.value}`}
+            onDelete={() => onRemoveFilter(filter.field)}
+            size="small"
+          />
+        ))}
+        <Typography
+          component="button"
+          type="button"
+          onClick={onClearFilters}
+          sx={{
+            flexShrink: 0,
+            whiteSpace: "nowrap",
+            border: "none",
+            background: "transparent",
+            color: "primary.main",
+            cursor: "pointer",
+            fontSize: "0.8125rem",
+            fontWeight: 500,
+          }}
+        >
+          Clear filters
+        </Typography>
+      </Box>
+    )}
+
+    {headerControls && (
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          minWidth: 0,
+          flex: "1 1 100%",
+        }}
+      >
+        {headerControls}
+      </Box>
+    )}
+  </Box>
+));
+
 const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
   rows,
   columns,
-  totalCount,
   loading,
   paginationModel,
   setPaginationModel,
@@ -118,6 +318,9 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
   addButtonLabel = "Add New",
   uniqueIdField = "id",
   rowHeight = 40,
+  height = "calc(100vh - 240px)",
+  searchableFields,
+  pageSizeOptions = [5, 10, 20, 50],
   compact = true,
   permissions = {
     create: true,
@@ -135,6 +338,8 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
   cardViewGridProps,
 }) => {
   const [viewMode, setViewMode] = useState<"table" | "grid">(defaultViewMode);
+  const [searchQuery, setSearchQuery] = useState("");
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [columnVisibilityModel, setColumnVisibilityModel] =
     useState<GridColumnVisibilityModel>(() =>
       columns.reduce<GridColumnVisibilityModel>((acc, column) => {
@@ -198,6 +403,143 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
       </Box>
     );
   }, [showViewToggle, viewMode, headerControls, handleViewModeChange]);
+
+  const getCellValue = useCallback((row: any, field: string) => row?.[field], []);
+
+  const getComparableValue = useCallback(
+    (row: any, field: string) => {
+      const rawValue = getCellValue(row, field);
+
+      if (rawValue === null || rawValue === undefined || rawValue === "") {
+        return null;
+      }
+
+      if (typeof rawValue === "number") {
+        return rawValue;
+      }
+
+      if (typeof rawValue === "boolean") {
+        return rawValue ? 1 : 0;
+      }
+
+      const normalizedString = String(rawValue).trim();
+      const numericValue = Number(normalizedString);
+
+      if (!Number.isNaN(numericValue) && normalizedString !== "") {
+        return numericValue;
+      }
+
+      const timestamp = Date.parse(normalizedString);
+      if (!Number.isNaN(timestamp)) {
+        return timestamp;
+      }
+
+      return normalizedString.toLowerCase();
+    },
+    [getCellValue],
+  );
+
+  const matchesFilterItem = useCallback(
+    (row: any, item: GridFilterItem) => {
+      const field = item.field;
+      const operator = String(item.operator ?? "contains");
+      const rawValue = getCellValue(row, field);
+      const normalizedValue = rawValue === null || rawValue === undefined ? "" : String(rawValue);
+      const normalizedFilterValue = item.value === null || item.value === undefined ? "" : String(item.value);
+      const valueLower = normalizedValue.toLowerCase();
+      const filterLower = normalizedFilterValue.toLowerCase();
+      const comparableRowValue = getComparableValue(row, field);
+      const comparableFilterValue = (() => {
+        if (item.value === null || item.value === undefined || item.value === "") {
+          return null;
+        }
+
+        if (typeof item.value === "number") {
+          return item.value;
+        }
+
+        const itemString = String(item.value).trim();
+        const itemNumber = Number(itemString);
+
+        if (!Number.isNaN(itemNumber) && itemString !== "") {
+          return itemNumber;
+        }
+
+        const timestamp = Date.parse(itemString);
+        if (!Number.isNaN(timestamp)) {
+          return timestamp;
+        }
+
+        return itemString.toLowerCase();
+      })();
+
+      switch (operator) {
+        case "contains":
+          return valueLower.includes(filterLower);
+        case "doesNotContain":
+          return !valueLower.includes(filterLower);
+        case "equals":
+        case "is":
+          return valueLower === filterLower;
+        case "doesNotEqual":
+        case "not":
+          return valueLower !== filterLower;
+        case "startsWith":
+          return valueLower.startsWith(filterLower);
+        case "endsWith":
+          return valueLower.endsWith(filterLower);
+        case "isEmpty":
+          return normalizedValue.trim() === "";
+        case "isNotEmpty":
+          return normalizedValue.trim() !== "";
+        case "isAnyOf": {
+          const filterValues = Array.isArray(item.value)
+            ? item.value.map((value) => String(value).toLowerCase())
+            : normalizedFilterValue
+                .split(",")
+                .map((value) => value.trim().toLowerCase())
+                .filter(Boolean);
+
+          return filterValues.includes(valueLower);
+        }
+        case ">":
+          return comparableRowValue !== null &&
+            comparableFilterValue !== null &&
+            comparableRowValue > comparableFilterValue;
+        case ">=":
+          return comparableRowValue !== null &&
+            comparableFilterValue !== null &&
+            comparableRowValue >= comparableFilterValue;
+        case "<":
+          return comparableRowValue !== null &&
+            comparableFilterValue !== null &&
+            comparableRowValue < comparableFilterValue;
+        case "<=":
+          return comparableRowValue !== null &&
+            comparableFilterValue !== null &&
+            comparableRowValue <= comparableFilterValue;
+        case "after":
+          return comparableRowValue !== null &&
+            comparableFilterValue !== null &&
+            comparableRowValue > comparableFilterValue;
+        case "onOrAfter":
+          return comparableRowValue !== null &&
+            comparableFilterValue !== null &&
+            comparableRowValue >= comparableFilterValue;
+        case "before":
+          return comparableRowValue !== null &&
+            comparableFilterValue !== null &&
+            comparableRowValue < comparableFilterValue;
+        case "onOrBefore":
+          return comparableRowValue !== null &&
+            comparableFilterValue !== null &&
+            comparableRowValue <= comparableFilterValue;
+        default:
+          return valueLower.includes(filterLower);
+      }
+    },
+    [getCellValue, getComparableValue],
+  );
 
   const renderCardRow = useCallback(
     (row: any) => {
@@ -294,23 +636,12 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
         );
       }
     },
-    [columns, onView, onEdit, onDelete, permissions, renderRowCard, uniqueIdField],
+    [columns, onView, onEdit, onDelete, permissions, renderRowCard],
   );
 
   // Active filters for chips display
   const activeFilters = useMemo(() => {
     const filters: Array<{ field: string; value: string }> = [];
-
-    // Quick filter
-    if (
-      filterModel.quickFilterValues &&
-      filterModel.quickFilterValues.length > 0
-    ) {
-      filters.push({
-        field: "Search",
-        value: filterModel.quickFilterValues.join(" "),
-      });
-    }
 
     // Column filters
     filterModel.items.forEach((item) => {
@@ -322,6 +653,8 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
         let displayValue = String(item.value);
         if (typeof item.value === "boolean") {
           displayValue = item.value ? "Active" : "Inactive";
+        } else {
+          displayValue = String(formatFilterDisplayValue(item.value));
         }
         filters.push({
           field: item.field,
@@ -333,22 +666,166 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
     return filters;
   }, [filterModel]);
 
-  const removeFilter = (filterType: string) => {
-    if (filterType === "Search") {
-      setFilterModel({ ...filterModel, quickFilterValues: [] });
-    } else {
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      startTransition(() => {
+        setSearchQuery(value);
+      });
+
+      if (paginationModel.page !== 0) {
+        setPaginationModel({ ...paginationModel, page: 0 });
+      }
+    },
+    [paginationModel, setPaginationModel],
+  );
+
+  const removeFilter = useCallback(
+    (filterType: string) => {
       setFilterModel({
         ...filterModel,
         items: filterModel.items.filter((item) => item.field !== filterType),
       });
+    },
+    [filterModel, setFilterModel],
+  );
+
+  const clearAllFilters = useCallback(() => {
+    setFilterModel({ ...filterModel, items: [] });
+  }, [filterModel, setFilterModel]);
+
+  const searchedRows = useMemo(() => {
+    const searchTerms = deferredSearchQuery
+      .split(/\s+/)
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean);
+
+    if (searchTerms.length === 0) {
+      return rows;
     }
-  };
 
-  const clearAllFilters = () => {
-    setFilterModel({ items: [], quickFilterValues: [] });
-  };
+    const fieldsToSearch =
+      searchableFields && searchableFields.length > 0
+        ? searchableFields
+        : columns
+            .filter((column) => column.field !== "actions")
+            .map((column) => column.field);
 
-  const totalPages = Math.max(1, Math.ceil(totalCount / paginationModel.pageSize));
+    return rows.filter((row) =>
+      searchTerms.every((term) =>
+        fieldsToSearch.some((field) =>
+          String(row?.[field] ?? "")
+            .toLowerCase()
+            .includes(term)
+        )
+      )
+    );
+  }, [columns, deferredSearchQuery, rows, searchableFields]);
+
+  const filteredRows = useMemo(() => {
+    const activeColumnFilters = filterModel.items.filter((item) => {
+      const operator = String(item.operator ?? "contains");
+      const needsValue = !["isEmpty", "isNotEmpty"].includes(operator);
+
+      if (!item.field) {
+        return false;
+      }
+
+      if (!needsValue) {
+        return true;
+      }
+
+      return item.value !== undefined && item.value !== null && String(item.value).trim() !== "";
+    });
+
+    if (activeColumnFilters.length === 0) {
+      return searchedRows;
+    }
+
+    const useOrLogic = filterModel.logicOperator === GridLogicOperator.Or;
+
+    return searchedRows.filter((row) => {
+      const results = activeColumnFilters.map((item) => matchesFilterItem(row, item));
+      return useOrLogic ? results.some(Boolean) : results.every(Boolean);
+    });
+  }, [filterModel.items, filterModel.logicOperator, matchesFilterItem, searchedRows]);
+
+  const sortedRows = useMemo(() => {
+    if (sortModel.length === 0) {
+      return filteredRows;
+    }
+
+    const sorted = [...filteredRows];
+
+    sorted.sort((leftRow, rightRow) => {
+      for (const sortItem of sortModel) {
+        if (!sortItem.sort) {
+          continue;
+        }
+
+        const leftValue = getComparableValue(leftRow, sortItem.field);
+        const rightValue = getComparableValue(rightRow, sortItem.field);
+
+        if (leftValue === rightValue) {
+          continue;
+        }
+
+        if (leftValue === null) {
+          return sortItem.sort === "asc" ? -1 : 1;
+        }
+
+        if (rightValue === null) {
+          return sortItem.sort === "asc" ? 1 : -1;
+        }
+
+        const comparison =
+          leftValue > rightValue ? 1 : leftValue < rightValue ? -1 : 0;
+
+        if (comparison !== 0) {
+          return sortItem.sort === "asc" ? comparison : -comparison;
+        }
+      }
+
+      return 0;
+    });
+
+    return sorted;
+  }, [filteredRows, getComparableValue, sortModel]);
+
+  const effectiveTotalCount = sortedRows.length;
+
+  const pagedRows = useMemo(() => {
+    const startIndex = paginationModel.page * paginationModel.pageSize;
+    const endIndex = startIndex + paginationModel.pageSize;
+
+    return sortedRows.slice(startIndex, endIndex);
+  }, [paginationModel.page, paginationModel.pageSize, sortedRows]);
+
+  useEffect(() => {
+    const maxPage = Math.max(0, Math.ceil(effectiveTotalCount / paginationModel.pageSize) - 1);
+
+    if (paginationModel.page > maxPage) {
+      setPaginationModel({ ...paginationModel, page: maxPage });
+    }
+  }, [effectiveTotalCount, paginationModel, setPaginationModel]);
+
+  const handlePageSizeChange = useCallback(
+    (event: SelectChangeEvent<number>) => {
+      setPaginationModel({
+        page: 0,
+        pageSize: Number(event.target.value),
+      });
+    },
+    [setPaginationModel],
+  );
+
+  const totalPages = Math.max(1, Math.ceil(effectiveTotalCount / paginationModel.pageSize));
+  const effectivePageSizeOptions = useMemo(
+    () =>
+      Array.from(new Set([...pageSizeOptions, paginationModel.pageSize])).sort(
+        (first, second) => first - second,
+      ),
+    [pageSizeOptions, paginationModel.pageSize],
+  );
 
   const normalizedColumns = useMemo(
     () =>
@@ -441,10 +918,10 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
       onAdd: permissions.create ? onAdd : undefined,
       addButtonLabel,
       showExport: permissions.download,
-      headerControls: effectiveHeaderControls,
       activeFilters,
       onRemoveFilter: removeFilter,
       onClearFilters: clearAllFilters,
+      hideTitleSection: true,
     }),
     [
       title,
@@ -453,8 +930,9 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
       permissions.download,
       onAdd,
       addButtonLabel,
-      effectiveHeaderControls,
       activeFilters,
+      clearAllFilters,
+      removeFilter,
     ],
   );
 
@@ -505,7 +983,6 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
       opacity: 1,
     },
     "& .MuiDataGrid-row": {
-      cursor: "pointer",
       transition: "all 0.15s ease-in-out",
       borderBottom: "0.5px solid",
       borderColor: "divider",
@@ -561,33 +1038,14 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
         autoHeight
         rows={rows}
         columns={finalColumns}
-        rowCount={totalCount}
-        loading={loading}
+        rowCount={rows.length}
+        loading={false}
         getRowId={(row) => row[uniqueIdField]}
-        pagination
-        paginationMode="server"
-        paginationModel={paginationModel}
-        onPaginationModelChange={setPaginationModel}
-        sortingMode="server"
-        sortModel={sortModel}
-        onSortModelChange={setSortModel}
-        sortingOrder={["asc", "desc"]}
-        density={compact ? "compact" : "standard"}
-        filterMode="server"
         filterModel={filterModel}
         onFilterModelChange={setFilterModel}
         disableRowSelectionOnClick
         hideFooter
         showToolbar
-        autosizeOnMount
-        autosizeOptions={{
-          includeHeaders: true,
-          includeOutliers: true,
-          expand: true,
-        }}
-        onRowClick={(params) => onRowClick?.(params.row)}
-        onCellClick={(params) => onCellClick?.(params)}
-
         columnVisibilityModel={columnVisibilityModel}
         onColumnVisibilityModelChange={setColumnVisibilityModel}
         slots={{
@@ -611,6 +1069,9 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
           ...sharedGridSx,
           position: "absolute",
           inset: 0,
+          border: "none",
+          backgroundColor: "transparent",
+          boxShadow: "none",
           borderBottom: "none",
           borderBottomLeftRadius: 0,
           borderBottomRightRadius: 0,
@@ -640,14 +1101,61 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
         borderRadius: "4px",
         border: "none",
         boxShadow: "0px 6px 24px rgba(0, 0, 0, 0.06)",
-        height: "calc(100vh - 240px)",
+        height,
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
       }}
     >
       {loading && <Loader />}
-      {renderSharedToolbar()}
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 1,
+          borderBottom: "1px solid",
+          borderColor: "divider",
+          backgroundColor: "background.paper",
+          px: compact ? 1 : 1.5,
+          py: 1,
+        }}
+      >
+        <Box
+          sx={{
+            order: 1,
+            flex: "1 1 280px",
+            minWidth: 0,
+          }}
+        >
+          <DataGridHeaderSummary
+            title={title}
+            activeFilters={activeFilters}
+            onRemoveFilter={removeFilter}
+            onClearFilters={clearAllFilters}
+            headerControls={effectiveHeaderControls}
+          />
+        </Box>
+        <Box
+          sx={{
+            order: { xs: 2, md: 2 },
+            display: "flex",
+            alignItems: "center",
+            justifyContent: { xs: "space-between", md: "flex-end" },
+            gap: 1,
+            flex: { xs: "1 1 100%", md: "0 0 auto" },
+            minWidth: 0,
+          }}
+        >
+          <Box sx={{ flex: { xs: "1 1 auto", md: "0 0 auto" }, minWidth: { xs: 0, md: 240 } }}>
+            <DataGridSearchInput value={searchQuery} onChange={handleSearchChange} />
+          </Box>
+          <Box sx={{ flex: "0 0 auto", width: { xs: "auto", md: 236 } }}>
+            {renderSharedToolbar()}
+          </Box>
+        </Box>
+      </Box>
       <Box
         sx={{
           flex: 1,
@@ -661,9 +1169,9 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
         }}
       >
         <DataGrid
-          rows={rows}
+          rows={pagedRows}
           columns={finalColumns}
-          rowCount={totalCount}
+          rowCount={effectiveTotalCount}
           loading={loading}
           getRowId={(row) => row[uniqueIdField]}
           pagination
@@ -746,13 +1254,13 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
           }}
         >
           <Box sx={{ flex: 1, overflow: "auto", p: 1.25 }}>
-            {rows.length === 0 ? (
+            {pagedRows.length === 0 ? (
               <Typography color="text.secondary" align="center" sx={{ mt: 4 }}>
                 No records found
               </Typography>
             ) : (
               <Grid container spacing={1.25}>
-                {rows.map((row) => {
+                {pagedRows.map((row) => {
                   try {
                     if (renderRowCard) {
                       return (
@@ -801,24 +1309,41 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
         }}
       >
         <Typography variant="body2" color="text.secondary">
-          {totalCount === 0
+          {effectiveTotalCount === 0
             ? "0 records"
             : `${paginationModel.page * paginationModel.pageSize + 1}-${Math.min(
-              totalCount,
-              (paginationModel.page + 1) * paginationModel.pageSize,
-            )} of ${totalCount}`}
+                effectiveTotalCount,
+                (paginationModel.page + 1) * paginationModel.pageSize,
+              )} of ${effectiveTotalCount}`}
         </Typography>
-        <Pagination
-          count={totalPages}
-          page={paginationModel.page + 1}
-          onChange={(_, page) =>
-            setPaginationModel({ ...paginationModel, page: page - 1 })
-          }
-          color="primary"
-          showFirstButton
-          showLastButton
-          size="small"
-        />
+        <Box sx={{ display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
+          <FormControl size="small" sx={{ minWidth: 110 }}>
+            <InputLabel id={`${title}-rows-per-page-label`}>Rows</InputLabel>
+            <Select<number>
+              labelId={`${title}-rows-per-page-label`}
+              value={paginationModel.pageSize}
+              label="Rows"
+              onChange={handlePageSizeChange}
+            >
+              {effectivePageSizeOptions.map((option) => (
+                <MenuItem key={option} value={option}>
+                  {option}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Pagination
+            count={totalPages}
+            page={paginationModel.page + 1}
+            onChange={(_, page) =>
+              setPaginationModel({ ...paginationModel, page: page - 1 })
+            }
+            color="primary"
+            showFirstButton
+            showLastButton
+            size="small"
+          />
+        </Box>
       </Box>
     </Card>
   );

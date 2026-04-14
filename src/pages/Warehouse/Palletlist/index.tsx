@@ -1,29 +1,77 @@
-import React, { useState } from "react";
-import { Box } from "@mui/material";
-import { GridColDef, GridPaginationModel, GridSortModel, GridFilterModel } from "@mui/x-data-grid";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Box, Chip } from "@mui/material";
+import { GridColDef, GridFilterModel, GridPaginationModel, GridSortModel } from "@mui/x-data-grid";
 import { Page } from "../../../components/common/Page";
 import ReusableDataGrid from "../../../components/common/ReusableDataGrid";
 import { useModal } from "../../../hooks/useModal";
-import { AddEditPallet, AddEditPalletRef } from "./addeditpallet";
+import { useToast } from "../../../hooks/useToast";
+import {
+    useCreatePalletMutation,
+    useDeletePalletMutation,
+    useListPalletsQuery,
+    useListRacksQuery,
+    useListWarehousesQuery,
+    useListZonesQuery,
+    useUpdatePalletMutation,
+} from "../../../redux/api/warehouse";
+import { AddEditPallet, AddEditPalletRef, type PalletSubmitPayload } from "./addeditpallet";
 import { openEntityFormModal } from "../shared/openEntityFormModal";
-
-const DUMMY_PALLETS = [
-    { id: "EA1-1", rack_id: "R1", rackName: "Rack 1", palletName: "Pallet A", capacity: 100, used: 45, pallets_count: 3 },
-    { id: "EA1-2", rack_id: "R1", rackName: "Rack 1", palletName: "Pallet B", capacity: 100, used: 20, pallets_count: 1 },
-    { id: "EA1-3", rack_id: "R1", rackName: "Rack 1", palletName: "Pallet C", capacity: 100, used: 80, pallets_count: 4 },
-    { id: "EA2-1", rack_id: "R2", rackName: "Rack 2", palletName: "Pallet D", capacity: 100, used: 0, pallets_count: 0 },
-    { id: "EA3-1", rack_id: "R3", rackName: "Rack 3", palletName: "Pallet E", capacity: 100, used: 100, pallets_count: 5 },
-];
+import { buildGridApiParams, extractApiRows, extractApiTotalCount } from "../shared/gridApiHelpers";
 
 const PalletlistPage: React.FC = () => {
     const { openModal } = useModal();
+    const { showToast } = useToast();
+    const [createPallet, { isLoading: isCreating }] = useCreatePalletMutation();
+    const [updatePallet, { isLoading: isUpdating }] = useUpdatePalletMutation();
+    const [deletePallet, { isLoading: isDeleting }] = useDeletePalletMutation();
+
+    const handleSubmitPallet = useCallback(async (payload: PalletSubmitPayload) => {
+        try {
+            if (payload.id) {
+                await updatePallet({
+                    id: payload.id,
+                    zone_id: payload.zone_id,
+                    rack_id: payload.rack_id,
+                    pallet_name: payload.pallet_name,
+                    max_capacity: payload.max_capacity,
+                    status: payload.status,
+                }).unwrap();
+            } else {
+                await createPallet({
+                    warehouse_id: Number(payload.warehouse_id),
+                    zone_id: payload.zone_id,
+                    rack_id: payload.rack_id,
+                    pallet_name: payload.pallet_name,
+                    max_capacity: payload.max_capacity,
+                    status: payload.status,
+                    created_by: "admin",
+                }).unwrap();
+            }
+        } catch (error: any) {
+            showToast(error?.data?.message || error?.message || "Failed to save pallet", "error");
+            throw error;
+        }
+    }, [createPallet, showToast, updatePallet]);
+
+    const handleDeletePallet = useCallback(async (id: string | number) => {
+        try {
+            await deletePallet(id).unwrap();
+        } catch (error: any) {
+            showToast(error?.data?.message || error?.message || "Failed to delete pallet", "error");
+            throw error;
+        }
+    }, [deletePallet, showToast]);
 
     const handleAddPallet = () => {
         openEntityFormModal<AddEditPalletRef>({
             openModal,
             entityLabel: "Pallet",
-            width: 500,
+            width: 520,
             FormComponent: AddEditPallet,
+            extraProps: {
+                onSubmitPallet: handleSubmitPallet,
+                onDeletePallet: handleDeletePallet,
+            },
         });
     };
 
@@ -31,13 +79,15 @@ const PalletlistPage: React.FC = () => {
         openEntityFormModal<AddEditPalletRef>({
             openModal,
             entityLabel: "Pallet",
-            width: 500,
+            width: 520,
             FormComponent: AddEditPallet,
             defaultValues: row,
+            extraProps: {
+                onSubmitPallet: handleSubmitPallet,
+                onDeletePallet: handleDeletePallet,
+            },
         });
     };
-
-
 
     const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
         page: 0,
@@ -49,22 +99,112 @@ const PalletlistPage: React.FC = () => {
         quickFilterValues: [],
     });
 
+    const apiParams = useMemo(
+        () => buildGridApiParams({ paginationModel, sortModel, filterModel }),
+        [filterModel, paginationModel, sortModel]
+    );
+
+    const { data, error, isLoading, isFetching, refetch } = useListPalletsQuery(apiParams);
+    const { data: racksData } = useListRacksQuery();
+    const { data: zonesData } = useListZonesQuery();
+    const { data: warehousesData } = useListWarehousesQuery();
+
+    const rackMap = useMemo(() => {
+        const entries = extractApiRows(racksData).map((rack: any) => [
+            String(rack.id),
+            rack.rack_code || rack.name || `Rack ${rack.id}`,
+        ]);
+        return new Map(entries);
+    }, [racksData]);
+
+    const zoneMap = useMemo(() => {
+        const entries = extractApiRows(zonesData).map((zone: any) => [
+            String(zone.id),
+            zone.zone_title || zone.zone_code || `Zone ${zone.id}`,
+        ]);
+        return new Map(entries);
+    }, [zonesData]);
+
+    const warehouseMap = useMemo(() => {
+        const entries = extractApiRows(warehousesData).map((warehouse: any) => [
+            String(warehouse.id),
+            warehouse.warehouse_name || warehouse.name || `Warehouse ${warehouse.id}`,
+        ]);
+        return new Map(entries);
+    }, [warehousesData]);
+
+    const rows = useMemo(
+        () =>
+            extractApiRows(data).map((pallet: any, index: number) => ({
+                ...pallet,
+                id: pallet.id ?? index + 1,
+                warehouse_id: pallet.warehouse_id,
+                zone_id: pallet.zone_id,
+                rack_id: pallet.rack_id,
+                warehouseName: warehouseMap.get(String(pallet.warehouse_id)) || `Warehouse ${pallet.warehouse_id ?? ""}`,
+                zoneName: zoneMap.get(String(pallet.zone_id)) || `Zone ${pallet.zone_id ?? ""}`,
+                rackName: rackMap.get(String(pallet.rack_id)) || `Rack ${pallet.rack_id ?? ""}`,
+                pallet_name: pallet.pallet_name || pallet.palletName || pallet.name || `Pallet ${pallet.id ?? index + 1}`,
+                max_capacity: Number(pallet.max_capacity ?? pallet.capacity ?? 0),
+                status: pallet.status || "AVAILABLE",
+                items_count: Number(pallet.items_count ?? pallet.pallets_count ?? 0),
+            })),
+        [data, rackMap, warehouseMap, zoneMap]
+    );
+
+    const totalCount = useMemo(() => extractApiTotalCount(data, rows.length), [data, rows.length]);
+    const loading = isLoading || isFetching || isCreating || isUpdating || isDeleting;
+
+    useEffect(() => {
+        if (!error) {
+            return;
+        }
+
+        showToast(
+            (error as any)?.data?.message || (error as any)?.message || "Failed to fetch pallets",
+            "error"
+        );
+    }, [error, showToast]);
+
     const columns: GridColDef[] = [
-        { field: "rackName", headerName: "Rack Name", flex: 1, minWidth: 160 },
-        { field: "palletName", headerName: "Pallet Name", flex: 1, minWidth: 160 },
-        { field: "capacity", headerName: "Capacity", flex: 1, minWidth: 120, type: 'number' },
-        { field: "used", headerName: "Used", flex: 1, minWidth: 120, type: 'number' },
-        { field: "pallets_count", headerName: "Items Count", flex: 1, minWidth: 120, type: 'number' },
+        { field: "warehouseName", headerName: "Warehouse", flex: 1, minWidth: 150 },
+        { field: "zoneName", headerName: "Zone", flex: 1, minWidth: 150 },
+        { field: "rackName", headerName: "Rack", flex: 1, minWidth: 150 },
+        { field: "pallet_name", headerName: "Pallet Name", flex: 1, minWidth: 170 },
+        { field: "max_capacity", headerName: "Capacity", flex: 0.9, minWidth: 120, type: "number" },
+        {
+            field: "status",
+            headerName: "Status",
+            flex: 0.9,
+            minWidth: 140,
+            renderCell: (params) => {
+                const isAvailable = params.value === "AVAILABLE";
+
+                return (
+                    <Chip
+                        label={isAvailable ? "Available" : "Occupied"}
+                        size="small"
+                        sx={{
+                            fontWeight: 700,
+                            color: isAvailable ? "#166534" : "#9A3412",
+                            bgcolor: isAvailable ? "rgba(34,197,94,0.12)" : "rgba(251,146,60,0.16)",
+                            borderRadius: "999px",
+                        }}
+                    />
+                );
+            },
+        },
+        { field: "items_count", headerName: "Items Count", flex: 0.9, minWidth: 120, type: "number" },
     ];
 
     return (
         <Page module="Warehouse">
             <Box className="p-0">
                 <ReusableDataGrid
-                    rows={DUMMY_PALLETS}
+                    rows={rows}
                     columns={columns}
-                    totalCount={DUMMY_PALLETS.length}
-                    loading={false}
+                    totalCount={totalCount}
+                    loading={loading}
                     paginationModel={paginationModel}
                     setPaginationModel={setPaginationModel}
                     sortModel={sortModel}
@@ -79,9 +219,9 @@ const PalletlistPage: React.FC = () => {
                         download: true,
                         view: true,
                     }}
+                    refetch={refetch}
                     onAdd={handleAddPallet}
                     onRowClick={handleEditPallet}
-
                 />
             </Box>
         </Page>

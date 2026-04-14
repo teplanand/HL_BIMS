@@ -9,8 +9,8 @@ import {
   Typography,
 } from "@mui/material";
 import NavigateNextIcon from "@mui/icons-material/NavigateNext";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import RemoveOutlinedIcon from "@mui/icons-material/RemoveOutlined";
@@ -23,23 +23,52 @@ import IconActionButton from "../../../../components/common/IconActionButton";
 import QuantityControl from "../../../../components/common/QuantityControl";
 import CompactAccordion from "../../../../components/common/CompactAccordion";
 import { openEntityFormModal } from "../../shared/openEntityFormModal";
-import { AddEditItem, AddEditItemRef } from "../../Itemlist/addedititem";
-import { AddEditWarehouse, AddEditWarehouseRef } from "../../Warehouselist/addeditwarehouse";
-import { AddEditZone, AddEditZoneRef } from "../../Zonelist/addeditzone";
-import { AddEditRack, AddEditRackRef } from "../../Racklist/addeditrack";
-import { AddEditPallet, AddEditPalletRef } from "../../Palletlist/addeditpallet";
+import {
+  AddEditItem,
+  AddEditItemRef,
+  type ItemSubmitPayload,
+} from "../../Itemlist/addedititem";
+import {
+  AddEditWarehouse,
+  AddEditWarehouseRef,
+  type WarehouseSubmitPayload,
+} from "../../Warehouselist/addeditwarehouse";
+import {
+  AddEditZone,
+  AddEditZoneRef,
+  type ZoneSubmitPayload,
+} from "../../Zonelist/addeditzone";
+import {
+  AddEditRack,
+  AddEditRackRef,
+  type RackSubmitPayload,
+} from "../../Racklist/addeditrack";
+import {
+  AddEditPallet,
+  AddEditPalletRef,
+  type PalletSubmitPayload,
+} from "../../Palletlist/addeditpallet";
 
 type Props = {
   warehouse: Warehouse;
   section: Section | null;
   selectedRack: Rack | null;
   setDisplayTitle?: (title: string) => void;
-  onWarehouseUpdate?: (warehouseId: string, payload: any) => void;
-  onSectionUpdate?: (warehouseId: string, sectionId: string, payload: any) => void;
-  onRackUpdate?: (warehouseId: string, sourceSectionId: string, rackId: string, payload: any) => void;
-  onAddPallet?: (warehouseId: string, sectionId: string, rackId: string, payload: any) => void;
-  onUpdatePallet?: (warehouseId: string, sectionId: string, rackId: string, palletId: string, payload: any) => void;
-  onRackReplace?: (warehouseId: string, sectionId: string, nextRack: Rack) => void;
+  onSubmitWarehouse?: (payload: WarehouseSubmitPayload) => Promise<void> | void;
+  onDeleteWarehouse?: (id: string | number) => Promise<void>;
+  onSubmitZone?: (payload: ZoneSubmitPayload) => Promise<void> | void;
+  onDeleteZone?: (id: string | number) => Promise<void>;
+  onSubmitRack?: (payload: RackSubmitPayload) => Promise<void> | void;
+  onDeleteRack?: (id: string | number) => Promise<void>;
+  onSubmitPallet?: (payload: PalletSubmitPayload) => Promise<void> | void;
+  onDeletePallet?: (id: string | number) => Promise<void>;
+  onSubmitItem?: (payload: ItemSubmitPayload) => Promise<void> | void;
+  onDeleteItem?: (id: string | number) => Promise<void>;
+  onAdjustItemQty?: (
+    shelf: Shelf,
+    item: Pallet,
+    direction: "in" | "out"
+  ) => Promise<void> | void;
 };
 
 type PalletRowProps = {
@@ -77,31 +106,8 @@ type ItemRowProps = {
 };
 
 const getShelfUsed = (shelf: Shelf) => shelf.pallets.reduce((total, item) => total + item.qty, 0);
-const getSectionPrefix = (name: string, seed?: string) =>
-  seed?.match(/^[A-Z]+/i)?.[0]?.toUpperCase() ||
-  name.split(" - ")[0]?.replace(/[^A-Z0-9]/gi, "").toUpperCase() ||
-  "PL";
-const createShelf = (id: string, capacity = 100): Shelf => ({ id, capacity, used: 0, pallets: [] });
-const createRack = (warehouse: Warehouse, sectionName: string): Rack => {
-  const next =
-    warehouse.sections
-      .flatMap((sectionItem) => sectionItem.racks)
-      .reduce((max, rackItem) => Math.max(max, Number(rackItem.id.match(/\d+/)?.[0] || 0)), 0) + 1;
-  const prefix = getSectionPrefix(sectionName);
 
-  return {
-    id: `R${next}`,
-    name: `Rack ${next}`,
-    shelves: Array.from({ length: 5 }).map((_, index) => createShelf(`${prefix}-${index + 1}`)),
-  };
-};
-const nextItemId = (shelf: Shelf) =>
-  `ITEM-${
-    shelf.pallets.reduce(
-      (max, item) => Math.max(max, Number(item.id.match(/\d+/)?.[0] || 0)),
-      0
-    ) + 1
-  }`;
+const nextItemLabel = (shelf: Shelf) => `Item ${shelf.pallets.length + 1}`;
 
 function ActionCard({ title, value, action }: ActionCardProps) {
   return (
@@ -119,7 +125,9 @@ function ActionCard({ title, value, action }: ActionCardProps) {
         <Typography variant="caption" color="text.secondary">
           {title}
         </Typography>
-        {action ? <Box sx={{ display: "flex", alignItems: "center", mt: -0.5, mr: -0.5 }}>{action}</Box> : null}
+        {action ? (
+          <Box sx={{ display: "flex", alignItems: "center", mt: -0.5, mr: -0.5 }}>{action}</Box>
+        ) : null}
       </Stack>
       <Typography variant="body2" sx={{ mt: 0.375, fontWeight: 700, color: "#334155" }}>
         {value}
@@ -182,29 +190,8 @@ function ItemRow({
           {name}
         </Typography>
         <Stack direction="row" spacing={0.75} alignItems="center" useFlexGap flexWrap="wrap">
-          <QuantityControl
-            label="In"
-            value={inQty}
-            icon={<AddOutlinedIcon sx={{ fontSize: 14 }} />}
-            onClick={(event) => {
-              event.stopPropagation();
-              onIncrementIn();
-            }}
-            color="#15803D"
-            backgroundColor="rgba(34,197,94,0.08)"
-          />
-          <QuantityControl
-            label="Out"
-            value={outQty}
-            icon={<RemoveOutlinedIcon sx={{ fontSize: 14 }} />}
-            onClick={(event) => {
-              event.stopPropagation();
-              onIncrementOut();
-            }}
-            disabled={totalQty <= 0}
-            color="#DC2626"
-            backgroundColor="rgba(248,113,113,0.08)"
-          />
+           
+           
           <Box
             sx={{
               px: 0.85,
@@ -214,7 +201,10 @@ function ItemRow({
             }}
           >
             <Typography variant="caption" sx={{ color: "#9A3412", fontWeight: 700 }}>
-              Total: <Box component="span" sx={{ color: "#C2410C", fontWeight: 800 }}>{totalQty}</Box>
+              Total:{" "}
+              <Box component="span" sx={{ color: "#C2410C", fontWeight: 800 }}>
+                {totalQty}
+              </Box>
             </Typography>
           </Box>
           <IconActionButton
@@ -271,7 +261,10 @@ const PalletRow = memo(function PalletRow({
                 }}
               />
             </Box>
-            <Typography variant="caption" sx={{ color: "#64748B", fontWeight: 700, minWidth: 40 }}>
+            <Typography
+              variant="caption"
+              sx={{ color: "#64748B", fontWeight: 700, minWidth: 40 }}
+            >
               {Math.round(usage)}%
             </Typography>
           </Stack>
@@ -357,19 +350,26 @@ function RackDetailsPanelComponent({
   section,
   selectedRack,
   setDisplayTitle,
-  onWarehouseUpdate,
-  onSectionUpdate,
-  onRackUpdate,
-  onAddPallet,
-  onUpdatePallet,
-  onRackReplace,
+  onSubmitWarehouse,
+  onDeleteWarehouse,
+  onSubmitZone,
+  onDeleteZone,
+  onSubmitRack,
+  onDeleteRack,
+  onSubmitPallet,
+  onDeletePallet,
+  onSubmitItem,
+  onDeleteItem,
+  onAdjustItemQty,
 }: Props) {
   const { openModal } = useModal();
   const { showToast } = useToast();
   const [warehouseState, setWarehouseState] = useState(warehouse);
   const [sectionId, setSectionId] = useState<string | null>(section?.id || null);
   const [rackId, setRackId] = useState<string | null>(selectedRack?.id || null);
-  const [expandedShelfId, setExpandedShelfId] = useState<string | null>(selectedRack?.shelves[0]?.id || null);
+  const [expandedShelfId, setExpandedShelfId] = useState<string | null>(
+    selectedRack?.shelves[0]?.id || null
+  );
 
   useEffect(() => {
     setWarehouseState(warehouse);
@@ -382,6 +382,7 @@ function RackDetailsPanelComponent({
     () => warehouseState.sections.find((sectionItem) => sectionItem.id === sectionId) || null,
     [sectionId, warehouseState.sections]
   );
+
   const currentRack = useMemo(
     () =>
       currentSection?.racks.find((rackItem) => rackItem.id === rackId) ||
@@ -391,6 +392,7 @@ function RackDetailsPanelComponent({
       null,
     [currentSection, rackId, warehouseState.sections]
   );
+
   const totals = currentRack ? getRackTotals(currentRack) : null;
 
   useEffect(() => {
@@ -414,8 +416,9 @@ function RackDetailsPanelComponent({
 
   const replaceRackLocal = useCallback(
     (updater: (rack: Rack) => Rack) => {
-      if (!sectionId || !rackId) return;
-      let nextRack: Rack | null = null;
+      if (!sectionId || !rackId) {
+        return;
+      }
 
       setWarehouseState((prev) => ({
         ...prev,
@@ -424,18 +427,14 @@ function RackDetailsPanelComponent({
             ? {
                 ...sectionItem,
                 racks: sectionItem.racks.map((rackItem) =>
-                  rackItem.id === rackId ? (nextRack = updater(rackItem), nextRack) : rackItem
+                  rackItem.id === rackId ? updater(rackItem) : rackItem
                 ),
               }
             : sectionItem
         ),
       }));
-
-      if (nextRack) {
-        onRackReplace?.(warehouseState.id, sectionId, nextRack);
-      }
     },
-    [onRackReplace, rackId, sectionId, warehouseState.id]
+    [rackId, sectionId]
   );
 
   const editWarehouse = useCallback(() => {
@@ -445,41 +444,41 @@ function RackDetailsPanelComponent({
       width: 720,
       FormComponent: AddEditWarehouse,
       defaultValues: {
-        id: warehouseState.id,
+        id: warehouseState.recordId,
+        warehouseCode: warehouseState.id,
         warehouseName: warehouseState.name,
-        managerName: "Warehouse Admin",
-        contactNumber: "9876543210",
-        email: `${warehouseState.name.replace(/\s+/g, "").toLowerCase()}@elecon.com`,
         location: warehouseState.location,
-        address: `${warehouseState.location} central warehouse`,
+        address: warehouseState.location,
         storageCapacity: warehouseState.sections.reduce(
           (sum, sectionItem) =>
             sum +
             sectionItem.racks.reduce(
-              (rackSum, rackItem) => rackSum + rackItem.shelves.length * 100,
+              (rackSum, rackItem) => rackSum + rackItem.shelves.reduce((shelfSum, shelf) => shelfSum + shelf.capacity, 0),
               0
             ),
           0
         ),
-        status: "active",
-        notes: "",
+        status: "ACTIVE",
       },
       extraProps: {
-        onSubmitWarehouse: async (payload: any) => {
+        onSubmitWarehouse: async (payload: WarehouseSubmitPayload) => {
+          await onSubmitWarehouse?.(payload);
           setWarehouseState((prev) => ({
             ...prev,
+            id: payload.warehouseCode || prev.id,
             name: payload.warehouseName.trim() || prev.name,
             location: payload.location.trim() || prev.location,
           }));
-          onWarehouseUpdate?.(warehouseState.id, payload);
-          showToast("Warehouse updated from rack details", "success");
         },
+        onDeleteWarehouse,
       },
     });
-  }, [onWarehouseUpdate, openModal, showToast, warehouseState]);
+  }, [onDeleteWarehouse, onSubmitWarehouse, openModal, warehouseState]);
 
   const editZone = useCallback(() => {
-    if (!currentSection) return;
+    if (!currentSection) {
+      return;
+    }
 
     openEntityFormModal<AddEditZoneRef>({
       openModal,
@@ -487,191 +486,219 @@ function RackDetailsPanelComponent({
       width: 720,
       FormComponent: AddEditZone,
       defaultValues: {
-        id: currentSection.id,
-        warehouseName: warehouseState.name,
-        name: currentSection.name,
-        color: currentSection.color,
-        rackCount: currentSection.racks.length,
-        prefix: getSectionPrefix(currentSection.name, currentSection.racks[0]?.shelves[0]?.id),
+        id: currentSection.recordId,
+        warehouse_id: currentSection.warehouse_id || warehouseState.recordId,
+        zone_code: currentSection.id,
+        zone_title: currentSection.name,
+        status: "ACTIVE",
       },
       extraProps: {
-        onSubmitSection: async (payload: any) => {
+        onSubmitZone: async (payload: ZoneSubmitPayload) => {
+          await onSubmitZone?.(payload);
           setWarehouseState((prev) => ({
             ...prev,
-            sections: prev.sections.map((sectionItem) => {
-              if (sectionItem.id !== currentSection.id) {
-                return sectionItem;
-              }
-
-              let racks = [...sectionItem.racks];
-              const count = Number(payload.rackCount);
-
-              if (Number.isFinite(count) && count > racks.length) {
-                racks = [
-                  ...racks,
-                  ...Array.from({ length: count - racks.length }).map(() =>
-                    createRack(prev, payload.name.trim() || sectionItem.name)
-                  ),
-                ];
-              } else if (Number.isFinite(count) && count > 0 && count < racks.length) {
-                racks = racks.slice(0, count);
-              }
-
-              return {
-                ...sectionItem,
-                name: payload.name.trim() || sectionItem.name,
-                color: payload.color || sectionItem.color,
-                racks,
-              };
-            }),
+            sections: prev.sections.map((sectionItem) =>
+              sectionItem.id === currentSection.id
+                ? {
+                    ...sectionItem,
+                    id: payload.zone_code || sectionItem.id,
+                    name: payload.zone_title.trim() || sectionItem.name,
+                  }
+                : sectionItem
+            ),
           }));
-          onSectionUpdate?.(warehouseState.id, currentSection.id, payload);
-          showToast("Zone updated from rack details", "success");
+          if (payload.zone_code && payload.zone_code !== currentSection.id) {
+            setSectionId(payload.zone_code);
+          }
         },
+        onDeleteZone,
       },
     });
-  }, [currentSection, onSectionUpdate, openModal, showToast, warehouseState]);
+  }, [currentSection, onDeleteZone, onSubmitZone, openModal, warehouseState.recordId]);
 
   const editRack = useCallback(() => {
-    if (!currentRack || !currentSection) return;
+    if (!currentRack || !currentSection) {
+      return;
+    }
 
     openEntityFormModal<AddEditRackRef>({
       openModal,
       entityLabel: "Rack",
-      width: 500,
+      width: 560,
       FormComponent: AddEditRack,
-      defaultValues: { id: currentRack.id, name: currentRack.name, section_id: currentSection.id },
+      defaultValues: {
+        id: currentRack.recordId,
+        warehouse_id: warehouseState.recordId,
+        zone_id: currentSection.recordId,
+        section_id: currentSection.recordId,
+        rack_code: currentRack.id,
+        rack_description: currentRack.name,
+        status: "ACTIVE",
+      },
       extraProps: {
-        onSubmitRack: async (payload: any) => {
-          const target = payload.section_id || currentSection.id;
+        onSubmitRack: async (payload: RackSubmitPayload) => {
+          await onSubmitRack?.(payload);
 
-          if (target === currentSection.id) {
-            setWarehouseState((prev) => ({
-              ...prev,
-              sections: prev.sections.map((sectionItem) =>
-                sectionItem.id === currentSection.id
-                  ? {
-                      ...sectionItem,
-                      racks: sectionItem.racks.map((rackItem) =>
-                        rackItem.id === currentRack.id
-                          ? { ...rackItem, name: payload.name.trim() || rackItem.name }
-                          : rackItem
-                      ),
-                    }
-                  : sectionItem
-              ),
-            }));
-          } else {
-            setWarehouseState((prev) => {
-              let moving: Rack | null = null;
-              const sections = prev.sections.map((sectionItem) =>
-                sectionItem.id === currentSection.id
-                  ? {
-                      ...sectionItem,
-                      racks: sectionItem.racks.filter((rackItem) => {
-                        if (rackItem.id === currentRack.id) {
-                          moving = {
-                            ...rackItem,
-                            name: payload.name.trim() || rackItem.name,
-                          };
-                          return false;
-                        }
+          let nextSectionDisplayId = currentSection.id;
 
-                        return true;
-                      }),
-                    }
-                  : sectionItem
-              );
+          setWarehouseState((prev) => {
+            const nextRack = {
+              ...currentRack,
+              id: payload.rack_code || currentRack.id,
+              name: payload.rack_description?.trim() || payload.rack_code || currentRack.name,
+            };
 
+            if (!payload.zone_id || String(payload.zone_id) === String(currentSection.recordId)) {
               return {
                 ...prev,
-                sections: sections.map((sectionItem) =>
-                  sectionItem.id === target && moving
-                    ? { ...sectionItem, racks: [...sectionItem.racks, moving] }
+                sections: prev.sections.map((sectionItem) =>
+                  sectionItem.id === currentSection.id
+                    ? {
+                        ...sectionItem,
+                        racks: sectionItem.racks.map((rackItem) =>
+                          rackItem.id === currentRack.id ? nextRack : rackItem
+                        ),
+                      }
                     : sectionItem
                 ),
               };
-            });
-            setSectionId(target);
-          }
+            }
 
-          onRackUpdate?.(warehouseState.id, currentSection.id, currentRack.id, payload);
-          showToast("Rack updated from details panel", "success");
+            const sectionsWithoutRack = prev.sections.map((sectionItem) =>
+              sectionItem.id === currentSection.id
+                ? {
+                    ...sectionItem,
+                    racks: sectionItem.racks.filter((rackItem) => rackItem.id !== currentRack.id),
+                  }
+                : sectionItem
+            );
+
+            return {
+              ...prev,
+              sections: sectionsWithoutRack.map((sectionItem) => {
+                if (String(sectionItem.recordId) !== String(payload.zone_id)) {
+                  return sectionItem;
+                }
+
+                nextSectionDisplayId = sectionItem.id;
+                return {
+                  ...sectionItem,
+                  racks: [...sectionItem.racks, nextRack],
+                };
+              }),
+            };
+          });
+
+          setSectionId(nextSectionDisplayId);
+          setRackId(payload.rack_code || currentRack.id);
         },
+        onDeleteRack,
       },
     });
-  }, [currentRack, currentSection, onRackUpdate, openModal, showToast, warehouseState.id]);
+  }, [
+    currentRack,
+    currentSection,
+    onDeleteRack,
+    onSubmitRack,
+    openModal,
+    warehouseState.recordId,
+  ]);
 
   const addPallet = useCallback(() => {
-    if (!currentRack || !currentSection) return;
+    if (!currentRack || !currentSection) {
+      return;
+    }
 
     openEntityFormModal<AddEditPalletRef>({
       openModal,
       entityLabel: "Pallet",
-      width: 500,
+      width: 520,
       FormComponent: AddEditPallet,
-      defaultValues: { rack_id: currentRack.id },
+      defaultValues: {
+        warehouse_id: warehouseState.recordId,
+        zone_id: currentSection.recordId,
+        rack_id: currentRack.recordId,
+        pallet_name: `Pallet ${currentRack.shelves.length + 1}`,
+      },
       extraProps: {
-        onSubmitPallet: async (payload: any) => {
+        onSubmitPallet: async (payload: PalletSubmitPayload) => {
+          await onSubmitPallet?.(payload);
           replaceRackLocal((rackItem) => ({
             ...rackItem,
             shelves: [
               ...rackItem.shelves,
               {
-                id: payload.palletName.trim() || `Pallet ${rackItem.shelves.length + 1}`,
-                capacity: Number(payload.capacity) || 100,
+                id: payload.pallet_name,
+                capacity: payload.max_capacity,
                 used: 0,
                 pallets: [],
               },
             ],
           }));
-          onAddPallet?.(warehouseState.id, currentSection.id, currentRack.id, payload);
-          showToast("New pallet added to rack", "success");
-          setExpandedShelfId(payload.palletName.trim() || `Pallet ${currentRack.shelves.length + 1}`);
         },
+        onDeletePallet,
       },
     });
-  }, [currentRack, currentSection, onAddPallet, openModal, replaceRackLocal, showToast, warehouseState.id]);
+  }, [
+    currentRack,
+    currentSection,
+    onDeletePallet,
+    onSubmitPallet,
+    openModal,
+    replaceRackLocal,
+    warehouseState.recordId,
+  ]);
 
   const editPallet = useCallback(
     (shelf: Shelf) => {
-      if (!currentRack || !currentSection) return;
+      if (!currentRack || !currentSection) {
+        return;
+      }
 
       openEntityFormModal<AddEditPalletRef>({
         openModal,
         entityLabel: "Pallet",
-        width: 500,
+        width: 520,
         FormComponent: AddEditPallet,
         defaultValues: {
-          id: shelf.id,
-          rack_id: currentRack.id,
-          palletName: shelf.id,
-          capacity: shelf.capacity,
+          id: shelf.recordId,
+          warehouse_id: warehouseState.recordId,
+          zone_id: currentSection.recordId,
+          rack_id: currentRack.recordId,
+          pallet_name: shelf.id,
+          max_capacity: shelf.capacity,
         },
         extraProps: {
-          onSubmitPallet: async (payload: any) => {
-            const nextPalletId = payload.palletName.trim() || shelf.id;
+          onSubmitPallet: async (payload: PalletSubmitPayload) => {
+            await onSubmitPallet?.(payload);
             replaceRackLocal((rackItem) => ({
               ...rackItem,
               shelves: rackItem.shelves.map((entry) =>
                 entry.id === shelf.id
                   ? {
                       ...entry,
-                      id: nextPalletId,
-                      capacity: Number(payload.capacity) || entry.capacity,
+                      id: payload.pallet_name,
+                      capacity: payload.max_capacity,
                       used: getShelfUsed(entry),
                     }
                   : entry
               ),
             }));
-            onUpdatePallet?.(warehouseState.id, currentSection.id, currentRack.id, shelf.id, payload);
-            showToast("Pallet updated successfully", "success");
-            setExpandedShelfId(nextPalletId);
+            setExpandedShelfId(payload.pallet_name);
           },
+          onDeletePallet,
         },
       });
     },
-    [currentRack, currentSection, onUpdatePallet, openModal, replaceRackLocal, showToast, warehouseState.id]
+    [
+      currentRack,
+      currentSection,
+      onDeletePallet,
+      onSubmitPallet,
+      openModal,
+      replaceRackLocal,
+      warehouseState.recordId,
+    ]
   );
 
   const openAddItem = useCallback(
@@ -682,46 +709,67 @@ function RackDetailsPanelComponent({
         width: 640,
         FormComponent: AddEditItem,
         defaultValues: {
-          pallet_id: shelf.id,
-          palletName: shelf.id,
-          inQty: 1,
-          outQty: 0,
+          pallet_id: String(shelf.recordId || ""),
+          rack_id: currentRack?.recordId || "",
+          sub_loc_id: "",
+          oracle_code: "",
+          item_desc: "",
+          item_category: "",
+          locator: "",
+          sub_inventory: "",
+          detail_qty: "",
+          in_qty: "",
+          out_qty: "",
         },
         extraProps: {
-          onSubmitItem: async (payload: any) => {
+          onSubmitItem: async (payload: ItemSubmitPayload) => {
+            await onSubmitItem?.(payload);
             replaceRackLocal((rackItem) => ({
               ...rackItem,
               shelves: rackItem.shelves.map((entry) => {
-                if (entry.id !== shelf.id) return entry;
+                if (entry.id !== shelf.id) {
+                  return entry;
+                }
+
                 const nextShelf = {
                   ...entry,
                   pallets: [
                     ...entry.pallets,
                     {
-                      id: nextItemId(entry),
-                      product: payload.product,
+                      id: payload.oracle_code || nextItemLabel(entry),
+                      product: payload.oracle_code,
                       qty: payload.qty,
-                      inQty: payload.inQty,
-                      outQty: payload.outQty,
+                      inQty: payload.in_qty ?? 0,
+                      outQty: payload.out_qty ?? 0,
+                      pallet_id: payload.pallet_id,
+                      rack_id: payload.rack_id,
+                      sub_loc_id: payload.sub_loc_id,
                       oracle_code: payload.oracle_code,
-                      description: payload.description,
+                      item_desc: payload.item_desc,
+                      item_category: payload.item_category,
+                      locator: payload.locator,
+                      description: payload.item_desc,
                       sub_inventory: payload.sub_inventory,
-                      has_expiry_date: payload.has_expiry_date,
+                      has_expiry_date: payload.has_expiry,
                       expiry_date: payload.expiry_date,
+                      item_image_document_id: payload.item_image_document_id ?? null,
+                      item_image_name: payload.item_image_name ?? null,
+                      item_image_path: payload.item_image_path ?? null,
                       qr_code: payload.qr_code,
                     },
                   ],
                 };
+
                 return { ...nextShelf, used: getShelfUsed(nextShelf) };
               }),
             }));
-            showToast("New item added in pallet", "success");
             setExpandedShelfId(shelf.id);
           },
+          onDeleteItem,
         },
       });
     },
-    [openModal, replaceRackLocal, showToast]
+    [onDeleteItem, onSubmitItem, openModal, replaceRackLocal]
   );
 
   const openEditItem = useCallback(
@@ -732,95 +780,132 @@ function RackDetailsPanelComponent({
         width: 640,
         FormComponent: AddEditItem,
         defaultValues: {
-          id: item.id,
-          pallet_id: shelf.id,
-          palletName: shelf.id,
-          product: item.product,
-          inQty: item.inQty ?? item.qty,
-          outQty: item.outQty ?? 0,
-          qty: item.qty,
-          oracle_code: item.oracle_code || "",
-          description: item.description || "",
+          id: item.recordId,
+          pallet_id: String(shelf.recordId || item.pallet_id || ""),
+          rack_id: currentRack?.recordId || item.rack_id || "",
+          sub_loc_id: item.sub_loc_id || "",
+          oracle_code: item.oracle_code || item.product,
+          item_desc: item.item_desc || item.description || "",
+          item_category: item.item_category || "",
+          locator: item.locator || "",
           sub_inventory: item.sub_inventory || "",
-          has_expiry_date: item.has_expiry_date || false,
+          detail_qty: item.qty,
+          in_qty: "",
+          out_qty: "",
+          has_expiry: item.has_expiry_date || false,
           expiry_date: item.expiry_date || null,
-          qr_code: item.qr_code || "",
+          item_image_document_id: item.item_image_document_id ?? null,
+          item_image_name: item.item_image_name ?? null,
+          item_image_path: item.item_image_path || null,
         },
         extraProps: {
-          onSubmitItem: async (payload: any) => {
+          onSubmitItem: async (payload: ItemSubmitPayload) => {
+            await onSubmitItem?.(payload);
             replaceRackLocal((rackItem) => ({
               ...rackItem,
               shelves: rackItem.shelves.map((entry) => {
-                if (entry.id !== shelf.id) return entry;
+                if (entry.id !== shelf.id) {
+                  return entry;
+                }
+
                 const nextShelf = {
                   ...entry,
                   pallets: entry.pallets.map((existingItem) =>
                     existingItem.id === item.id
                       ? {
                           ...existingItem,
-                          product: payload.product,
+                          id: payload.oracle_code || existingItem.id,
+                          product: payload.oracle_code,
                           qty: payload.qty,
-                          inQty: payload.inQty,
-                          outQty: payload.outQty,
+                          inQty: payload.in_qty ?? existingItem.inQty ?? existingItem.qty,
+                          outQty: payload.out_qty ?? existingItem.outQty ?? 0,
+                          pallet_id: payload.pallet_id,
+                          rack_id: payload.rack_id,
+                          sub_loc_id: payload.sub_loc_id,
                           oracle_code: payload.oracle_code,
-                          description: payload.description,
+                          item_desc: payload.item_desc,
+                          item_category: payload.item_category,
+                          locator: payload.locator,
+                          description: payload.item_desc,
                           sub_inventory: payload.sub_inventory,
-                          has_expiry_date: payload.has_expiry_date,
+                          has_expiry_date: payload.has_expiry,
                           expiry_date: payload.expiry_date,
+                          item_image_document_id: payload.item_image_document_id ?? null,
+                          item_image_name: payload.item_image_name ?? null,
+                          item_image_path: payload.item_image_path ?? null,
                           qr_code: payload.qr_code,
                         }
                       : existingItem
                   ),
                 };
+
                 return { ...nextShelf, used: getShelfUsed(nextShelf) };
               }),
             }));
-            showToast("Item updated successfully", "success");
             setExpandedShelfId(shelf.id);
           },
+          onDeleteItem,
         },
       });
     },
-    [openModal, replaceRackLocal, showToast]
+    [onDeleteItem, onSubmitItem, openModal, replaceRackLocal]
   );
 
   const adjustItemQty = useCallback(
-    (shelfId: string, itemId: string, direction: "in" | "out") => {
-      replaceRackLocal((rackItem) => ({
-        ...rackItem,
-        shelves: rackItem.shelves.map((shelf) => {
-          if (shelf.id !== shelfId) return shelf;
+    async (shelfId: string, itemId: string, direction: "in" | "out") => {
+      if (!currentRack) {
+        return;
+      }
 
-          const pallets = shelf.pallets.map((item) => {
-            if (item.id !== itemId) {
-              return item;
+      const shelf = currentRack.shelves.find((entry) => entry.id === shelfId);
+      const item = shelf?.pallets.find((entry) => entry.id === itemId);
+
+      if (!shelf || !item) {
+        return;
+      }
+
+      try {
+        await onAdjustItemQty?.(shelf, item, direction);
+        replaceRackLocal((rackItem) => ({
+          ...rackItem,
+          shelves: rackItem.shelves.map((entry) => {
+            if (entry.id !== shelfId) {
+              return entry;
             }
 
-            if (direction === "in") {
+            const pallets = entry.pallets.map((row) => {
+              if (row.id !== itemId) {
+                return row;
+              }
+
+              if (direction === "in") {
+                return {
+                  ...row,
+                  inQty: (row.inQty ?? row.qty) + 1,
+                  qty: row.qty + 1,
+                };
+              }
+
+              if (row.qty <= 0) {
+                return row;
+              }
+
               return {
-                ...item,
-                inQty: (item.inQty ?? item.qty) + 1,
-                qty: item.qty + 1,
+                ...row,
+                outQty: (row.outQty ?? 0) + 1,
+                qty: Math.max(row.qty - 1, 0),
               };
-            }
+            });
+            const nextShelf = { ...entry, pallets };
 
-            if (item.qty <= 0) {
-              return item;
-            }
-
-            return {
-              ...item,
-              outQty: (item.outQty ?? 0) + 1,
-              qty: Math.max(item.qty - 1, 0),
-            };
-          });
-          const nextShelf = { ...shelf, pallets };
-
-          return { ...nextShelf, used: getShelfUsed(nextShelf) };
-        }),
-      }));
+            return { ...nextShelf, used: getShelfUsed(nextShelf) };
+          }),
+        }));
+      } catch (error: any) {
+        showToast(error?.data?.message || error?.message || "Failed to update item quantity", "error");
+      }
     },
-    [replaceRackLocal]
+    [currentRack, onAdjustItemQty, replaceRackLocal, showToast]
   );
 
   return (
@@ -850,7 +935,7 @@ function RackDetailsPanelComponent({
             <Box
               sx={{
                 display: "grid",
-                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
                 gap: 1,
                 mt: 1,
               }}

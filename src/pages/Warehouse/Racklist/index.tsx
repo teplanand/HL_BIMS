@@ -1,29 +1,75 @@
-import React, { useState } from "react";
-import { Box } from "@mui/material";
-import { GridColDef, GridPaginationModel, GridSortModel, GridFilterModel } from "@mui/x-data-grid";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Box, Chip } from "@mui/material";
+import { GridColDef, GridFilterModel, GridPaginationModel, GridSortModel } from "@mui/x-data-grid";
 import { Page } from "../../../components/common/Page";
 import ReusableDataGrid from "../../../components/common/ReusableDataGrid";
 import { useModal } from "../../../hooks/useModal";
-import { AddEditRack, AddEditRackRef } from "./addeditrack";
+import { useToast } from "../../../hooks/useToast";
+import {
+    useCreateRackMutation,
+    useDeleteRackMutation,
+    useListRacksQuery,
+    useListWarehousesQuery,
+    useListZonesQuery,
+    useUpdateRackMutation,
+} from "../../../redux/api/warehouse";
+import { AddEditRack, AddEditRackRef, type RackSubmitPayload } from "./addeditrack";
 import { openEntityFormModal } from "../shared/openEntityFormModal";
-
-const DUMMY_RACKS = [
-    { id: "R1", name: "Rack 1", section_id: "WH1-SEC-A", zoneName: "A - Electronics", shelves_count: 12 },
-    { id: "R2", name: "Rack 2", section_id: "WH1-SEC-A", zoneName: "A - Electronics", shelves_count: 12 },
-    { id: "R3", name: "Rack 3", section_id: "WH1-SEC-B", zoneName: "B - Appliances", shelves_count: 12 },
-    { id: "R4", name: "Rack 4", section_id: "WH1-SEC-C", zoneName: "C - Home Decor", shelves_count: 12 },
-    { id: "R5", name: "Rack 5", section_id: "WH1-SEC-D", zoneName: "D - Sports", shelves_count: 12 },
-];
+import { buildGridApiParams, extractApiRows, extractApiTotalCount } from "../shared/gridApiHelpers";
 
 const RacklistPage: React.FC = () => {
     const { openModal } = useModal();
+    const { showToast } = useToast();
+    const [createRack, { isLoading: isCreating }] = useCreateRackMutation();
+    const [updateRack, { isLoading: isUpdating }] = useUpdateRackMutation();
+    const [deleteRack, { isLoading: isDeleting }] = useDeleteRackMutation();
+
+    const handleSubmitRack = useCallback(async (payload: RackSubmitPayload) => {
+        try {
+            if (payload.id) {
+                await updateRack({
+                    id: payload.id,
+                    warehouse_id: payload.warehouse_id,
+                    zone_id: payload.zone_id,
+                    rack_code: payload.rack_code,
+                    rack_description: payload.rack_description,
+                    status: payload.status,
+                }).unwrap();
+            } else {
+                await createRack({
+                    warehouse_id: Number(payload.warehouse_id),
+                    zone_id: payload.zone_id,
+                    rack_code: payload.rack_code,
+                    rack_description: payload.rack_description,
+                    status: payload.status,
+                    created_by: "admin",
+                }).unwrap();
+            }
+        } catch (error: any) {
+            showToast(error?.data?.message || error?.message || "Failed to save rack", "error");
+            throw error;
+        }
+    }, [createRack, showToast, updateRack]);
+
+    const handleDeleteRack = useCallback(async (id: string | number) => {
+        try {
+            await deleteRack(id).unwrap();
+        } catch (error: any) {
+            showToast(error?.data?.message || error?.message || "Failed to delete rack", "error");
+            throw error;
+        }
+    }, [deleteRack, showToast]);
 
     const handleAddRack = () => {
         openEntityFormModal<AddEditRackRef>({
             openModal,
             entityLabel: "Rack",
-            width: 500,
+            width: 560,
             FormComponent: AddEditRack,
+            extraProps: {
+                onSubmitRack: handleSubmitRack,
+                onDeleteRack: handleDeleteRack,
+            },
         });
     };
 
@@ -31,23 +77,13 @@ const RacklistPage: React.FC = () => {
         openEntityFormModal<AddEditRackRef>({
             openModal,
             entityLabel: "Rack",
-            width: 500,
+            width: 560,
             FormComponent: AddEditRack,
             defaultValues: row,
-        });
-    };
-
-    const handleDeleteRack = (row: any) => {
-        console.log("Delete Rack:", row);
-    };
-
-    const handleViewRack = (row: any) => {
-        openEntityFormModal<AddEditRackRef>({
-            openModal,
-            entityLabel: "Rack",
-            width: 500,
-            FormComponent: AddEditRack,
-            defaultValues: row,
+            extraProps: {
+                onSubmitRack: handleSubmitRack,
+                onDeleteRack: handleDeleteRack,
+            },
         });
     };
 
@@ -61,20 +97,103 @@ const RacklistPage: React.FC = () => {
         quickFilterValues: [],
     });
 
+    const apiParams = useMemo(
+        () => buildGridApiParams({ paginationModel, sortModel, filterModel }),
+        [filterModel, paginationModel, sortModel]
+    );
+
+    const { data, error, isLoading, isFetching, refetch } = useListRacksQuery(apiParams);
+    const { data: zonesData } = useListZonesQuery();
+    const { data: warehousesData } = useListWarehousesQuery();
+
+    const zoneMap = useMemo(() => {
+        const entries = extractApiRows(zonesData).map((zone: any) => [
+            String(zone.id),
+            zone.zone_title || zone.name || zone.zone_code || `Zone ${zone.id}`,
+        ]);
+        return new Map(entries);
+    }, [zonesData]);
+
+    const warehouseMap = useMemo(() => {
+        const entries = extractApiRows(warehousesData).map((warehouse: any) => [
+            String(warehouse.id),
+            warehouse.warehouse_name || warehouse.warehouseName || warehouse.name || `Warehouse ${warehouse.id}`,
+        ]);
+        return new Map(entries);
+    }, [warehousesData]);
+
+    const rows = useMemo(
+        () =>
+            extractApiRows(data).map((rack: any, index: number) => ({
+                ...rack,
+                id: rack.id ?? index + 1,
+                warehouse_id: rack.warehouse_id,
+                zone_id: rack.zone_id,
+                warehouseName: warehouseMap.get(String(rack.warehouse_id)) || `Warehouse ${rack.warehouse_id ?? ""}`,
+                zoneName:
+                    rack.zoneName ||
+                    zoneMap.get(String(rack.zone_id)) ||
+                    `Zone ${rack.zone_id ?? ""}`,
+                rack_code: rack.rack_code || rack.name || "",
+                rack_description: rack.rack_description || "",
+                name: rack.rack_code || rack.name || "",
+                status: rack.status || (rack.is_active === false ? "INACTIVE" : "ACTIVE"),
+                pallets_count: Number(rack.pallets_count ?? rack.shelves_count ?? 0),
+            })),
+        [data, warehouseMap, zoneMap]
+    );
+
+    const totalCount = useMemo(() => extractApiTotalCount(data, rows.length), [data, rows.length]);
+    const loading = isLoading || isFetching || isCreating || isUpdating || isDeleting;
+
+    useEffect(() => {
+        if (!error) {
+            return;
+        }
+
+        showToast(
+            (error as any)?.data?.message || (error as any)?.message || "Failed to fetch racks",
+            "error"
+        );
+    }, [error, showToast]);
+
     const columns: GridColDef[] = [
-        { field: "name", headerName: "Name", flex: 1, minWidth: 200 },
-        { field: "zoneName", headerName: "Zone Name", flex: 1, minWidth: 180 },
-        { field: "shelves_count", headerName: "Pallet Count", flex: 1, minWidth: 150, type: 'number' },
+        { field: "warehouseName", headerName: "Warehouse", flex: 1, minWidth: 160 },
+        { field: "zoneName", headerName: "Zone", flex: 1, minWidth: 160 },
+        { field: "rack_code", headerName: "Rack Code", flex: 1, minWidth: 160 },
+        {
+            field: "status",
+            headerName: "Status",
+            flex: 0.8,
+            minWidth: 140,
+            renderCell: (params) => {
+                const isActive = params.value === "ACTIVE";
+
+                return (
+                    <Chip
+                        label={isActive ? "Active" : "Inactive"}
+                        size="small"
+                        sx={{
+                            fontWeight: 700,
+                            color: isActive ? "#166534" : "#991B1B",
+                            bgcolor: isActive ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
+                            borderRadius: "999px",
+                        }}
+                    />
+                );
+            },
+        },
+        { field: "pallets_count", headerName: "Pallet Count", flex: 0.9, minWidth: 140, type: "number" },
     ];
 
     return (
         <Page module="Warehouse">
             <Box className="p-0">
                 <ReusableDataGrid
-                    rows={DUMMY_RACKS}
+                    rows={rows}
                     columns={columns}
-                    totalCount={DUMMY_RACKS.length}
-                    loading={false}
+                    totalCount={totalCount}
+                    loading={loading}
                     paginationModel={paginationModel}
                     setPaginationModel={setPaginationModel}
                     sortModel={sortModel}
@@ -89,9 +208,9 @@ const RacklistPage: React.FC = () => {
                         download: true,
                         view: true,
                     }}
+                    refetch={refetch}
                     onAdd={handleAddRack}
                     onRowClick={handleEditRack}
-
                 />
             </Box>
         </Page>

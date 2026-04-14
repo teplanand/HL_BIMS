@@ -1,13 +1,13 @@
 import { memo } from "react";
-import { Box, List, ListItemButton, ListItemText, TextField, InputAdornment } from "@mui/material";
+import { Box, InputAdornment, List, ListItemButton, ListItemText, TextField } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
+
 import type { Location } from "../data";
 
 type LocationSidebarProps = {
   locations: Location[];
-  selectedIndex: number | null; // null = "All Locations"
-  onSelect: (index: number | null) => void;
-  totalMachineCount: number;
+  selectedIndex: number;
+  onSelect: (index: number) => void;
   searchValue: string;
   onSearchChange: (value: string) => void;
 };
@@ -16,7 +16,6 @@ function LocationSidebarInner({
   locations,
   selectedIndex,
   onSelect,
-  totalMachineCount,
   searchValue,
   onSearchChange,
 }: LocationSidebarProps) {
@@ -29,17 +28,15 @@ function LocationSidebarInner({
         borderColor: "divider",
         height: "100%",
         overflow: "auto",
-
       }}
     >
-      {/* Search Header */}
       <Box sx={{ px: 2, pt: 2.5, pb: 1.5 }}>
         <TextField
           fullWidth
           size="small"
           placeholder="Search Location..."
           value={searchValue}
-          onChange={(e) => onSearchChange(e.target.value)}
+          onChange={(event) => onSearchChange(event.target.value)}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
@@ -65,51 +62,11 @@ function LocationSidebarInner({
       </Box>
 
       <List disablePadding sx={{ px: 1 }}>
-        {/* All Locations */}
-        <ListItemButton
-          selected={selectedIndex === null}
-          onClick={() => onSelect(null)}
-          disableRipple
-          sx={{
-            borderRadius: 2,
-            mb: 0.5,
-            py: 1,
-            px: 1.5,
-            borderLeft: "3px solid transparent",
-            transition: "background-color 0.15s ease, border-color 0.15s ease",
-            "&.Mui-selected": {
-
-              borderLeftColor: "#FF8A3D",
-              "&:hover": { bgcolor: "#FFF4ED", py: 1 },
-            },
-            "&:hover:not(.Mui-selected)": {
-              bgcolor: "rgba(0,0,0,0.03)",
-              py: 1,
-            },
-          }}
-        >
-          <ListItemText
-            primary="All Locations"
-            secondary={`${totalMachineCount} machines`}
-            primaryTypographyProps={{
-              fontWeight: 700,
-              fontSize: "0.88rem",
-
-            }}
-            secondaryTypographyProps={{
-              fontWeight: 600,
-              fontSize: "0.75rem",
-
-            }}
-          />
-        </ListItemButton>
-
-        {/* Per-Location */}
-        {locations.map((loc, i) => (
+        {locations.map((location, index) => (
           <ListItemButton
-            key={loc.name}
-            selected={selectedIndex === i}
-            onClick={() => onSelect(i)}
+            key={location.name}
+            selected={selectedIndex === index}
+            onClick={() => onSelect(index)}
             disableRipple
             sx={{
               borderRadius: 2,
@@ -118,9 +75,7 @@ function LocationSidebarInner({
               px: 1.5,
               borderLeft: "3px solid transparent",
               transition: "background-color 0.15s ease, border-color 0.15s ease",
-
               "&.Mui-selected": {
-
                 borderLeftColor: "#FF8A3D",
                 "&:hover": { bgcolor: "#FFF4ED", py: 1 },
               },
@@ -131,12 +86,11 @@ function LocationSidebarInner({
             }}
           >
             <ListItemText
-              primary={loc.name}
-              secondary={`${loc.clientName} | ${loc.machines.length} machines`}
+              primary={location.name}
+              secondary={`${location.clientName} | ${location.machines.length} machines`}
               primaryTypographyProps={{
                 fontWeight: 700,
                 fontSize: "0.88rem",
-
               }}
               secondaryTypographyProps={{
                 fontWeight: 500,

@@ -551,7 +551,8 @@ const OrderTrackingDashboard = () => {
   const rows = useMemo(() => {
 
   const apiRows = Array.isArray(data?.data) ? data.data : [];
-  const sourceRows = apiRows.length > 0 ? apiRows : ordertrackingdata;
+  //const sourceRows = apiRows.length > 0 ? apiRows : ordertrackingdata;
+  const sourceRows =  apiRows;
  
   return sourceRows.map((item: any, index: number) => {
     const status = getFullStatus(item);

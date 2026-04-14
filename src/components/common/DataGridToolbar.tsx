@@ -3,13 +3,10 @@ import {
   Box,
   Typography,
   IconButton,
-  Divider,
   Chip,
   Button,
   Menu,
   MenuItem,
-  TextField,
-  InputAdornment,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
@@ -17,11 +14,7 @@ import {
   GridToolbarContainer,
   ColumnsPanelTrigger,
   FilterPanelTrigger,
-  ExportPrint,
   ExportCsv,
-  QuickFilter,
-  QuickFilterControl,
-  QuickFilterClear,
   GridToolbarProps,
 } from "@mui/x-data-grid";
 import Tooltip from "@mui/material/Tooltip";
@@ -29,12 +22,9 @@ import Badge from "@mui/material/Badge";
 import ViewColumnIcon from "@mui/icons-material/ViewColumn";
 import FilterListIcon from "@mui/icons-material/FilterList";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
-import SearchIcon from "@mui/icons-material/Search";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import AddIcon from "@mui/icons-material/Add";
-import CancelIcon from "@mui/icons-material/Cancel";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
-import { styled } from "@mui/material/styles";
 
 // Module augmentation to allow custom props in slotProps.toolbar
 declare module "@mui/x-data-grid" {
@@ -49,21 +39,9 @@ declare module "@mui/x-data-grid" {
     onRemoveFilter?: (field: string) => void;
     onClearFilters?: () => void;
     isGridView?: boolean;
+    hideTitleSection?: boolean;
   }
 }
-
-const StyledQuickFilter = styled(QuickFilter)({
-  display: "flex",
-  alignItems: "center",
-});
-
-const StyledTextField = styled(TextField)(({ theme }) => ({
-  overflowX: "clip",
-  width: 260,
-  [theme.breakpoints.down("sm")]: {
-    width: "100%",
-  },
-}));
 
 export interface DataGridToolbarProps extends GridToolbarProps {
   title?: string;
@@ -76,12 +54,12 @@ export interface DataGridToolbarProps extends GridToolbarProps {
   onRemoveFilter?: (field: string) => void;
   onClearFilters?: () => void;
   isGridView?: boolean;
+  hideTitleSection?: boolean;
 }
 
 const DataGridToolbar: React.FC<DataGridToolbarProps> = ({
   title,
   onAdd,
-  addButtonLabel = "Add New",
   refetch,
   showExport = true,
   headerControls,
@@ -89,7 +67,7 @@ const DataGridToolbar: React.FC<DataGridToolbarProps> = ({
   onRemoveFilter,
   onClearFilters,
   isGridView = false,
-  ...other
+  hideTitleSection = false,
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -114,60 +92,62 @@ const DataGridToolbar: React.FC<DataGridToolbarProps> = ({
 
   const ToolbarContent = () => (
     <>
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          gap: 1,
-          minWidth: 0,
-          flex: 1,
-          mr: 2,
-          overflow: "hidden",
-        }}
-      >
-        <Typography
-          variant="h6"
-          component="h1"
-          fontWeight="700"
-          sx={{ letterSpacing: "-0.02em", color: "text.primary", flexShrink: 0 }}
+      {!hideTitleSection && (
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 1,
+            minWidth: 0,
+            flex: 1,
+            mr: 2,
+            overflow: "hidden",
+          }}
         >
-          {title || "List"}
-        </Typography>
-
-        {hasActiveFilters && (
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 0.75,
-              minWidth: 0,
-              overflowX: "auto",
-              overflowY: "hidden",
-              whiteSpace: "nowrap",
-              pr: 0.5,
-              "&::-webkit-scrollbar": {
-                height: 4,
-              },
-            }}
+          <Typography
+            variant="h6"
+            component="h1"
+            fontWeight="700"
+            sx={{ letterSpacing: "-0.02em", color: "text.primary", flexShrink: 0 }}
           >
-            {activeFilters.map((filter) => (
-              <Chip
-                key={`${filter.field}-${filter.value}`}
-                label={`${filter.field}: ${filter.value}`}
-                onDelete={() => onRemoveFilter?.(filter.field)}
-                size="small"
-              />
-            ))}
-            <Button
-              size="small"
-              onClick={onClearFilters}
-              sx={{ flexShrink: 0, whiteSpace: "nowrap" }}
+            {title || "List"}
+          </Typography>
+
+          {hasActiveFilters && (
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 0.75,
+                minWidth: 0,
+                overflowX: "auto",
+                overflowY: "hidden",
+                whiteSpace: "nowrap",
+                pr: 0.5,
+                "&::-webkit-scrollbar": {
+                  height: 4,
+                },
+              }}
             >
-              Clear filters
-            </Button>
-          </Box>
-        )}
-      </Box>
+              {activeFilters.map((filter) => (
+                <Chip
+                  key={`${filter.field}-${filter.value}`}
+                  label={`${filter.field}: ${filter.value}`}
+                  onDelete={() => onRemoveFilter?.(filter.field)}
+                  size="small"
+                />
+              ))}
+              <Button
+                size="small"
+                onClick={onClearFilters}
+                sx={{ flexShrink: 0, whiteSpace: "nowrap" }}
+              >
+                Clear filters
+              </Button>
+            </Box>
+          )}
+        </Box>
+      )}
 
       {/* Right Side Controls */}
       <Box
@@ -177,50 +157,6 @@ const DataGridToolbar: React.FC<DataGridToolbarProps> = ({
         {headerControls && (
           <Box sx={{ mr: 1 }}>{headerControls}</Box>
         )}
-
-        {/* Search - Default Open */}
-        <StyledQuickFilter defaultExpanded>
-          <QuickFilterControl
-            render={({ ref, ...controlProps }, state) => (
-              <StyledTextField
-                {...controlProps}
-                inputRef={ref}
-                aria-label="Search"
-                placeholder="Search..."
-                size="small"
-                sx={{ minWidth: { xs: 180, sm: 240 } }}
-                slotProps={{
-                  input: {
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <SearchIcon fontSize="small" color="action" />
-                      </InputAdornment>
-                    ),
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <QuickFilterClear
-                          edge="end"
-                          size="small"
-                          aria-label="Clear search"
-                          material={{
-                            sx: {
-                              marginRight: -0.75,
-                              opacity: state.value ? 1 : 0.35,
-                            },
-                          }}
-                        >
-                          <CancelIcon fontSize="small" />
-                        </QuickFilterClear>
-                      </InputAdornment>
-                    ),
-                    ...controlProps.slotProps?.input,
-                  },
-                  ...controlProps.slotProps,
-                }}
-              />
-            )}
-          />
-        </StyledQuickFilter>
 
         {/* MOBILE VIEW: Add Button -> Menu */}
         {isMobile && (
@@ -330,18 +266,11 @@ const DataGridToolbar: React.FC<DataGridToolbarProps> = ({
         {/* DESKTOP VIEW: Divider -> Actions Box -> Add Button */}
         {!isMobile && (
           <>
-            <Divider
-              orientation="vertical"
-              flexItem
-              variant="middle"
-              sx={{ height: 24, alignSelf: "center", mx: 0.5 }}
-            />
             <Box
               sx={{
                 display: "flex",
-                bgcolor: "action.hover",
-                borderRadius: "4px",
-                p: 0.5,
+                alignItems: "center",
+                gap: 0.25,
               }}
             >
               <Tooltip title="Columns">
@@ -395,12 +324,6 @@ const DataGridToolbar: React.FC<DataGridToolbarProps> = ({
                     open={isExportMenuOpen}
                     onClose={() => setExportMenuPosition(null)}
                   >
-                    <ExportPrint
-                      render={<MenuItem />}
-                      onClick={() => setExportMenuPosition(null)}
-                    >
-                      Print
-                    </ExportPrint>
                     <ExportCsv
                       render={<MenuItem />}
                       options={{
@@ -457,13 +380,13 @@ const DataGridToolbar: React.FC<DataGridToolbarProps> = ({
           display: "flex",
           flexDirection: "row", // Always row
           alignItems: "center",
-          justifyContent: "space-between",
+          justifyContent: hideTitleSection ? "flex-end" : "space-between",
           height: "auto",
           minHeight: 64, // Standard height
-          px: { xs: 1, sm: 2 },
-          py: { xs: 1, sm: 1 },
+          px: hideTitleSection ? 0 : { xs: 1, sm: 2 },
+          py: hideTitleSection ? 0 : { xs: 1, sm: 1 },
           width: "100%",
-          borderBottom: "1px solid",
+          borderBottom: hideTitleSection ? "none" : "1px solid",
           borderColor: "divider",
           gap: 1,
         }}
@@ -475,18 +398,17 @@ const DataGridToolbar: React.FC<DataGridToolbarProps> = ({
 
   return (
     <GridToolbarContainer
-      {...other}
       sx={{
         display: "flex",
         flexDirection: "row", // Always row
         alignItems: "center",
-        justifyContent: "space-between",
+        justifyContent: hideTitleSection ? "flex-end" : "space-between",
         height: "auto",
         minHeight: 64, // Standard height
-        px: { xs: 1, sm: 2 },
-        py: { xs: 1, sm: 1 },
+        px: hideTitleSection ? 0 : { xs: 1, sm: 2 },
+        py: hideTitleSection ? 0 : { xs: 1, sm: 1 },
         width: "100%",
-        borderBottom: "1px solid",
+        borderBottom: hideTitleSection ? "none" : "1px solid",
         borderColor: "divider",
         gap: 1,
       }}

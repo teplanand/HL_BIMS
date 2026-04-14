@@ -2,30 +2,26 @@ import { memo } from "react";
 import { Box, Button, Tab, Tabs } from "@mui/material";
 
 import { Section } from "../types";
-import { AddEditZone, AddEditZoneRef } from "../../Zonelist/addeditzone";
-import { useModal } from "../../../../hooks/useModal";
-import { openEntityFormModal } from "../../shared/openEntityFormModal";
 
 type SectionTabsProps = {
   sections: Section[];
   activeSectionIndex: number;
   onChange: (event: React.SyntheticEvent, newValue: number | string) => void;
+  onAddZone: () => void;
 };
 
 function SectionTabsComponent({
   sections,
   activeSectionIndex,
   onChange,
+  onAddZone,
 }: SectionTabsProps) {
-  const { openModal } = useModal();
-
   return (
     <Box
       sx={{
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
-
       }}
     >
       <Tabs
@@ -44,7 +40,6 @@ function SectionTabsComponent({
             fontSize: "0.78rem",
             color: "#64748B",
             px: 2,
-
           },
           "& .MuiTabs-indicator": {
             bgcolor: "#0F172A",
@@ -54,11 +49,7 @@ function SectionTabsComponent({
         }}
       >
         {sections.map((section, index) => (
-          <Tab
-            key={section.id}
-            value={index}
-            label={section.name}
-          />
+          <Tab key={section.id} value={index} label={section.name} />
         ))}
       </Tabs>
 
@@ -74,14 +65,7 @@ function SectionTabsComponent({
           ml: 1,
           "&:hover": { backgroundColor: "rgba(255, 138, 61, 0.08)" },
         }}
-        onClick={() => {
-          openEntityFormModal<AddEditZoneRef>({
-            openModal,
-            entityLabel: "Zone",
-            width: 400,
-            FormComponent: AddEditZone,
-          });
-        }}
+        onClick={onAddZone}
       >
         + Add Zone
       </Button>

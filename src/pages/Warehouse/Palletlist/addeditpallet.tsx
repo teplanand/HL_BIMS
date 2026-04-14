@@ -1,4 +1,4 @@
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, type Ref } from "react";
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, type Ref } from "react";
 import { useForm } from "react-hook-form";
 import { Stack, Box } from "@mui/material";
 
@@ -8,17 +8,42 @@ import { FormStackGrid } from "../../../components/ui/form/stack";
 import FormSection from "../../../components/ui/form/FormSection";
 import { useModal } from "../../../hooks/useModal";
 import { useToast } from "../../../hooks/useToast";
+import { useListRacksQuery, useListZonesQuery } from "../../../redux/api/warehouse";
+import { extractApiRows } from "../shared/gridApiHelpers";
 import ViewStreamOutlinedIcon from "@mui/icons-material/ViewStreamOutlined";
 
 type PalletFormValues = {
+  zone_id: string;
   rack_id: string;
-  palletName: string;
-  capacity: number | string;
+  pallet_name: string;
+  max_capacity: number | string;
+  status: "AVAILABLE" | "OCCUPIED";
+};
+
+export type PalletSubmitPayload = {
+  id?: string | number;
+  warehouse_id?: number;
+  zone_id: number;
+  rack_id: number;
+  pallet_name: string;
+  max_capacity: number;
+  status: "AVAILABLE" | "OCCUPIED";
 };
 
 type AddEditPalletProps = {
-  defaultValues?: Partial<PalletFormValues> & { id?: string };
-  onSubmitPallet?: (payload: PalletFormValues & { id?: string; capacity: number }) => void | Promise<void>;
+  defaultValues?: Partial<PalletFormValues> & {
+    id?: string | number;
+    zone_id?: string | number;
+    rack_id?: string | number;
+    warehouse_id?: string | number;
+    pallet_name?: string;
+    palletName?: string;
+    name?: string;
+    max_capacity?: number;
+    capacity?: number | string;
+  };
+  onSubmitPallet?: (payload: PalletSubmitPayload) => void | Promise<void>;
+  onDeletePallet?: (id: string | number) => Promise<void>;
   setDisplayTitle?: (title: string) => void;
   setDataChanged?: (changed: boolean) => void;
   setHideFooter?: (hidden: boolean) => void;
@@ -29,17 +54,10 @@ export type AddEditPalletRef = {
   submit: () => Promise<void>;
 };
 
-const RACK_OPTIONS = [
-  { value: "R1", label: "Rack 1" },
-  { value: "R2", label: "Rack 2" },
-  { value: "R3", label: "Rack 3" },
-  { value: "R4", label: "Rack 4" },
-  { value: "R5", label: "Rack 5" },
-];
-
 function Index({
   defaultValues,
   onSubmitPallet,
+  onDeletePallet,
   setDisplayTitle,
   setDataChanged,
   setHideFooter,
@@ -47,7 +65,30 @@ function Index({
 }: AddEditPalletProps, ref: Ref<AddEditPalletRef>) {
   const { closeModal } = useModal();
   const { showToast } = useToast();
-  const isEditMode = Boolean(defaultValues && Object.keys(defaultValues).length > 0);
+  const isEditMode = Boolean(defaultValues?.id);
+  const { data: zonesData } = useListZonesQuery();
+  const { data: racksData } = useListRacksQuery();
+
+  const zones = useMemo(() => extractApiRows(zonesData), [zonesData]);
+  const racks = useMemo(() => extractApiRows(racksData), [racksData]);
+
+  const zoneOptions = useMemo(
+    () =>
+      zones.map((zone: any) => ({
+        value: String(zone.id),
+        label: zone.zone_title || zone.zone_code || `Zone ${zone.id}`,
+      })),
+    [zones]
+  );
+
+  const rackOptions = useMemo(
+    () =>
+      racks.map((rack: any) => ({
+        value: String(rack.id),
+        label: rack.rack_code || rack.name || `Rack ${rack.id}`,
+      })),
+    [racks]
+  );
 
   const {
     register,
@@ -55,9 +96,15 @@ function Index({
     formState: { errors, isDirty },
   } = useForm<PalletFormValues>({
     defaultValues: {
-      rack_id: defaultValues?.rack_id || "",
-      palletName: defaultValues?.palletName || "",
-      capacity: defaultValues?.capacity || "",
+      zone_id: String(defaultValues?.zone_id || ""),
+      rack_id: String(defaultValues?.rack_id || ""),
+      pallet_name:
+        defaultValues?.pallet_name ||
+        defaultValues?.palletName ||
+        defaultValues?.name ||
+        "",
+      max_capacity: defaultValues?.max_capacity ?? defaultValues?.capacity ?? "",
+      status: defaultValues?.status || "AVAILABLE",
     },
     mode: "onBlur",
   });
@@ -65,7 +112,7 @@ function Index({
   useEffect(() => {
     setDisplayTitle?.(isEditMode ? "Edit Pallet" : "Add Pallet");
     setHideFooter?.(false);
-    setWidth?.(500);
+    setWidth?.(520);
   }, [isEditMode, setDisplayTitle, setHideFooter, setWidth]);
 
   useEffect(() => {
@@ -73,23 +120,34 @@ function Index({
   }, [isDirty, setDataChanged]);
 
   const onSubmit = useCallback(async (data: PalletFormValues) => {
-    const payload = {
+    const selectedZone = zones.find((zone: any) => String(zone.id) === data.zone_id);
+    const selectedRack = racks.find((rack: any) => String(rack.id) === data.rack_id);
+
+    const payload: PalletSubmitPayload = {
       ...(defaultValues?.id ? { id: defaultValues.id } : {}),
-      rack_id: data.rack_id.trim().toUpperCase(),
-      palletName: data.palletName.trim(),
-      capacity: Number(data.capacity),
+      warehouse_id: Number(
+        defaultValues?.warehouse_id ||
+        selectedZone?.warehouse_id ||
+        selectedRack?.warehouse_id
+      ),
+      zone_id: Number(data.zone_id),
+      rack_id: Number(data.rack_id),
+      pallet_name: data.pallet_name.trim(),
+      max_capacity: Number(data.max_capacity),
+      status: data.status,
     };
 
     if (onSubmitPallet) {
       await onSubmitPallet(payload);
-    } else {
-      console.log("pallet-payload", payload);
     }
 
-    showToast("Pallet details ready for posting", "success");
+    showToast(
+      isEditMode ? "Pallet updated successfully" : "Pallet created successfully",
+      "success"
+    );
     setDataChanged?.(false);
     closeModal();
-  }, [closeModal, onSubmitPallet, setDataChanged, showToast]);
+  }, [closeModal, defaultValues?.id, defaultValues?.warehouse_id, isEditMode, onSubmitPallet, racks, setDataChanged, showToast, zones]);
 
   useImperativeHandle(
     ref,
@@ -106,42 +164,67 @@ function Index({
       <Stack spacing={1}>
         <FormSection
           title="Pallet Details"
-          description="Pallet rack assignment and capacity configuration"
+          description="Rack mapping and capacity configuration"
           icon={<ViewStreamOutlinedIcon fontSize="small" />}
         >
-          <FormStackGrid columns={1}>
+          <FormStackGrid columns={2}>
+            <MuiSelect
+              id="zone_id"
+              label="Zone"
+              placeholder="Select zone"
+              displayEmpty
+              defaultValue={String(defaultValues?.zone_id || "")}
+              options={zoneOptions}
+              {...register("zone_id", { required: "Zone is required" })}
+              error={!!errors.zone_id}
+              helperText={errors.zone_id?.message}
+            />
             <MuiSelect
               id="rack_id"
-              label="Rack Name"
+              label="Rack"
               placeholder="Select rack"
               displayEmpty
-              defaultValue={defaultValues?.rack_id || ""}
-              options={RACK_OPTIONS}
+              defaultValue={String(defaultValues?.rack_id || "")}
+              options={rackOptions}
               {...register("rack_id", { required: "Rack is required" })}
               error={!!errors.rack_id}
               helperText={errors.rack_id?.message}
             />
             <MuiTextField
-              id="palletName"
+              id="pallet_name"
               label="Pallet Name"
-              placeholder="Pallet A"
-              {...register("palletName", { required: "Pallet name is required" })}
-              error={!!errors.palletName}
-              helperText={errors.palletName?.message}
+              placeholder="Pallet A1"
+              {...register("pallet_name", {
+                required: "Pallet name is required",
+              })}
+              error={!!errors.pallet_name}
+              helperText={errors.pallet_name?.message}
             />
             <MuiTextField
-              id="capacity"
+              id="max_capacity"
               type="number"
-              label="Capacity"
-              placeholder="100"
-              {...register("capacity", {
+              label="Max Capacity"
+              placeholder="500"
+              {...register("max_capacity", {
                 required: "Capacity is required",
                 valueAsNumber: true,
                 min: { value: 1, message: "Must be at least 1" },
               })}
-              error={!!errors.capacity}
-              helperText={errors.capacity?.message}
+              error={!!errors.max_capacity}
+              helperText={errors.max_capacity?.message}
               inputProps={{ min: 1 }}
+            />
+            <MuiSelect
+              id="status"
+              label="Status"
+              defaultValue={defaultValues?.status || "AVAILABLE"}
+              options={[
+                { value: "AVAILABLE", label: "Available" },
+                { value: "OCCUPIED", label: "Occupied" },
+              ]}
+              {...register("status", { required: "Status is required" })}
+              error={!!errors.status}
+              helperText={errors.status?.message}
             />
           </FormStackGrid>
         </FormSection>
@@ -159,9 +242,13 @@ function Index({
           <ConfirmDeleteButton
             entityLabel="Pallet"
             successMessage="Pallet deleted successfully"
-            onDelete={() => {
-                console.log("Delete pallet", defaultValues);
-                closeModal();
+            onDelete={async () => {
+              if (!defaultValues?.id || !onDeletePallet) {
+                return;
+              }
+
+              await onDeletePallet(defaultValues.id);
+              closeModal();
             }}
           >
             Delete

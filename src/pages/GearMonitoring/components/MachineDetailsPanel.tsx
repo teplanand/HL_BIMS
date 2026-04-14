@@ -1,17 +1,14 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import {
   Box,
-  Typography,
-  Stack,
-  Divider,
-  IconButton,
   Breadcrumbs,
   Chip,
+  IconButton,
+  Stack,
+  Typography,
 } from "@mui/material";
 import NavigateNextIcon from "@mui/icons-material/NavigateNext";
 import CloseIcon from "@mui/icons-material/Close";
-import NotificationsActiveOutlinedIcon from "@mui/icons-material/NotificationsActiveOutlined";
-import SensorsIcon from "@mui/icons-material/Sensors";
 
 import { Machine } from "../data";
 import { useMachineData } from "../context/MachineDataContext";
@@ -34,10 +31,6 @@ function createSeedHistory(baseValue: number | null) {
   });
 }
 
-function getPrimaryMetric(machine: Machine) {
-  return machine.monitoringParams.find((param) => typeof param.value === "number") ?? machine.monitoringParams[0] ?? null;
-}
-
 function getVisualSeverity(machine: Machine): "normal" | "warning" | "critical" {
   if (machine.alertCount >= 8) return "critical";
   if (machine.status === "warning" || machine.alertCount > 0) return "warning";
@@ -50,7 +43,6 @@ function getSeverityStyles(severity: "normal" | "warning" | "critical") {
       label: "critical",
       color: "#BE123C",
       background: "#FFF1F2",
-      accent: "#E11D48",
     };
   }
 
@@ -59,7 +51,6 @@ function getSeverityStyles(severity: "normal" | "warning" | "critical") {
       label: "warning",
       color: "#B45309",
       background: "#FFF7ED",
-      accent: "#F59E0B",
     };
   }
 
@@ -67,25 +58,59 @@ function getSeverityStyles(severity: "normal" | "warning" | "critical") {
     label: "normal",
     color: "#0F766E",
     background: "#ECFDF5",
-    accent: "#10B981",
   };
 }
 
-function formatMetricSummary(value: number | null, unit: string) {
-  if (value === null) return `No ${unit} feed`;
-  return `${value.toFixed(value >= 10 ? 1 : 2)} ${unit}`;
+function formatMetricValue(value: number | null) {
+  if (value === null) return "--";
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: value >= 100 ? 0 : 2,
+    maximumFractionDigits: 2,
+  });
 }
 
-function MachineDetailsPanelComponent({
-  machineId,
-  onClose,
-}: MachineDetailsPanelProps) {
+function buildAlertMessages(machine: Machine, severity: "normal" | "warning" | "critical") {
+  if (machine.alertCount <= 0) {
+    return ["No active alerts on this machine."];
+  }
+
+  const topMetric =
+    machine.monitoringParams.find((param) => typeof param.value === "number") || machine.monitoringParams[0];
+
+  const metricMessage = topMetric
+    ? `${topMetric.label} is currently reading ${formatMetricValue(topMetric.value)} ${topMetric.unit}.`
+    : "Telemetry feed is active for this machine.";
+
+  if (severity === "critical") {
+    return [
+      `${machine.alertCount} active alerts need immediate attention.`,
+      metricMessage,
+      "Please inspect the machine and validate the safety condition.",
+    ];
+  }
+
+  return [
+    `${machine.alertCount} active alerts are being monitored.`,
+    metricMessage,
+    "Review the machine trend and plan intervention if values continue rising.",
+  ];
+}
+
+function MachineDetailsPanelComponent({ machineId, onClose }: MachineDetailsPanelProps) {
   const { allMachines } = useMachineData();
-  const machine = allMachines.find(m => m.id === machineId) || null;
+  const machine = allMachines.find((entry) => entry.id === machineId) || null;
 
   if (!machine) {
     return (
-      <Box sx={{ p: 4, textAlign: "center", mt: 10 }}>
+      <Box
+        sx={{
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          p: 4,
+        }}
+      >
         <Typography color="text.secondary">Select a machine to view details</Typography>
       </Box>
     );
@@ -93,26 +118,42 @@ function MachineDetailsPanelComponent({
 
   const severity = getVisualSeverity(machine);
   const severityStyles = getSeverityStyles(severity);
-  const statusColor = severityStyles.color;
-  const primaryMetric = getPrimaryMetric(machine);
-  const primaryValue = typeof primaryMetric?.value === "number" ? primaryMetric.value : null;
+  const alertMessages = buildAlertMessages(machine, severity);
 
-  const [history, setHistory] = useState<number[]>(() => createSeedHistory(primaryValue));
+  const [paramHistories, setParamHistories] = useState<Record<string, number[]>>(() =>
+    Object.fromEntries(
+      machine.monitoringParams.map((param) => [param.label, createSeedHistory(param.value)])
+    )
+  );
 
   useEffect(() => {
-    if (primaryValue === null) return;
+    setParamHistories(
+      Object.fromEntries(
+        machine.monitoringParams.map((param) => [param.label, createSeedHistory(param.value)])
+      )
+    );
+  }, [machine.id, machine.monitoringParams]);
 
-    setHistory((previous) => {
-      const lastValue = previous[previous.length - 1];
-      if (lastValue === primaryValue) return previous;
-      return [...previous.slice(-(HISTORY_LENGTH - 1)), primaryValue];
-    });
-  }, [primaryValue]);
+  useEffect(() => {
+    setParamHistories((previous) =>
+      Object.fromEntries(
+        machine.monitoringParams.map((param) => {
+          const previousSeries = previous[param.label] || createSeedHistory(param.value);
 
-  const statLine = useMemo(() => {
-    if (!primaryMetric) return "Awaiting telemetry";
-    return `${primaryMetric.label} • ${formatMetricSummary(primaryValue, primaryMetric.unit)}`;
-  }, [primaryMetric, primaryValue]);
+          if (param.value === null) {
+            return [param.label, previousSeries];
+          }
+
+          const lastValue = previousSeries[previousSeries.length - 1];
+          if (lastValue === param.value) {
+            return [param.label, previousSeries];
+          }
+
+          return [param.label, [...previousSeries.slice(-(HISTORY_LENGTH - 1)), param.value]];
+        })
+      )
+    );
+  }, [machine.monitoringParams]);
 
   return (
     <Box
@@ -120,13 +161,10 @@ function MachineDetailsPanelComponent({
         display: "flex",
         flexDirection: "column",
         height: "100%",
-        overflowY: "auto",
-        "&::-webkit-scrollbar": { width: "4px" },
-        "&::-webkit-scrollbar-thumb": { backgroundColor: "#E2E8F0", borderRadius: "4px" },
+        overflow: "hidden",
       }}
     >
-      {/* Header */}
-      <Box sx={{ px: 2.5, pt: 2, pb: 1.5 }}>
+      <Box sx={{ px: 2.5, pt: 2, pb: 1.5, borderBottom: "1px solid", borderColor: "divider" }}>
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
           <Breadcrumbs
             separator={<NavigateNextIcon fontSize="small" />}
@@ -136,12 +174,13 @@ function MachineDetailsPanelComponent({
             <Typography color="text.secondary">{machine.locationName}</Typography>
             <Typography color="text.primary">{machine.id}</Typography>
           </Breadcrumbs>
-          {onClose && (
+          {onClose ? (
             <IconButton size="small" onClick={onClose}>
               <CloseIcon fontSize="small" />
             </IconButton>
-          )}
+          ) : null}
         </Stack>
+
         <Typography variant="h5" sx={{ fontWeight: 800, mb: 0.5 }}>
           {machine.name}
         </Typography>
@@ -163,202 +202,153 @@ function MachineDetailsPanelComponent({
         </Stack>
       </Box>
 
-      <Divider />
-
-      {/* Machine Image */}
-      <Box sx={{ p: 2.5 }}>
-        <Box
-          component="img"
-          src={machine.image || `https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=800`}
-          alt={machine.name}
-          sx={{
-            width: "100%",
-            height: 200,
-            objectFit: "cover",
-            borderRadius: 3,
-            border: "1px solid rgba(15,23,42,0.1)",
-          }}
-        />
-      </Box>
-
-      {/* Live Monitoring Parameters */}
-      <Box sx={{ px: 2.5, pb: 2.5 }}>
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-          <SensorsIcon sx={{ color: "#0D9488", fontSize: 20 }} />
-          <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
-            Live Parameters
-          </Typography>
-          <Box sx={{
-            width: 8,
-            height: 8,
-            borderRadius: "50%",
-            bgcolor: severityStyles.accent,
-            animation: "pulse 2s infinite ease-in-out",
-            "@keyframes pulse": {
-              "0%": { opacity: 1, transform: "scale(1)" },
-              "50%": { opacity: 0.4, transform: "scale(1.2)" },
-              "100%": { opacity: 1, transform: "scale(1)" },
-            }
-          }} />
-        </Stack>
-
+      <Box
+        sx={{
+          px: 2.5,
+          py: 2,
+          display: "grid",
+          gridTemplateColumns: "1.25fr 1fr",
+          gap: 1.25,
+          alignItems: "stretch",
+          borderBottom: "1px solid",
+          borderColor: "divider",
+        }}
+      >
         <Box
           sx={{
-            mb: 2,
-            p: 2,
             borderRadius: 3,
-            bgcolor: "rgba(255,255,255,0.72)",
-            border: "1px solid rgba(255,255,255,0.7)",
-            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9)",
-            backdropFilter: "blur(14px)",
+            overflow: "hidden",
+            border: "1px solid rgba(15,23,42,0.08)",
+            minHeight: 360,
+            backgroundColor: "#E2E8F0",
           }}
         >
-          <Stack
-            direction="row"
-            justifyContent="space-between"
-            alignItems="flex-start"
-            spacing={2}
-            sx={{ mb: 1.5 }}
-          >
-            <Box>
-              <Typography
-                variant="body2"
-                sx={{ fontWeight: 800, color: statusColor }}
-              >
-                {statLine}
-              </Typography>
-            </Box>
+          <Box
+            component="img"
+            src={
+              machine.image ||
+              "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=1200"
+            }
+            alt={machine.name}
+            sx={{
+              width: "100%",
+              height: "100%",
+              minHeight: 360,
+              objectFit: "cover",
+              display: "block",
+            }}
+          />
+        </Box>
 
+        <Box
+          sx={{
+            display: "grid",
+            gap: 1,
+            alignContent: "start",
+            maxHeight: 360,
+            overflowY: "auto",
+            pr: 0.25,
+          }}
+        >
+          {machine.monitoringParams.map((param) => (
             <Box
+              key={param.label}
               sx={{
-                px: 1.5,
-                py: 1,
-                borderRadius: 2,
-                bgcolor: "rgba(15,23,42,0.04)",
-                textAlign: "right",
+                p: 1.1,
+                borderRadius: 2.5,
+                bgcolor: "rgba(255,255,255,0.9)",
+                border: "1px solid rgba(15,23,42,0.06)",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9)",
+                minHeight: 102,
               }}
             >
-              <Typography
-                variant="caption"
-                sx={{
-                  color: "#94A3B8",
-                  fontWeight: 800,
-                  letterSpacing: "0.18em",
-                  textTransform: "uppercase",
-                  display: "block",
-                }}
-              >
-                Alerts
-              </Typography>
-              <Typography variant="h6" sx={{ fontWeight: 800, color: "#0F172A", lineHeight: 1.1 }}>
-                {machine.alertCount}
+              <Stack direction="row" justifyContent="space-between" spacing={1} sx={{ mb: 0.75 }}>
+                <Typography
+                  variant="caption"
+                  sx={{ color: "#64748B", fontWeight: 700, textTransform: "uppercase" }}
+                >
+                  {param.label}
+                </Typography>
+                <Typography variant="caption" sx={{ color: "#0F172A", fontWeight: 800 }}>
+                  {formatMetricValue(param.value)} {param.unit}
+                </Typography>
+              </Stack>
+
+              <MiniChart
+                values={paramHistories[param.label] || createSeedHistory(param.value)}
+                severity={severity}
+                compact
+              />
+            </Box>
+          ))}
+
+          {!machine.monitoringParams.length ? (
+            <Box
+              sx={{
+                p: 1.5,
+                borderRadius: 3,
+                bgcolor: "rgba(15,23,42,0.03)",
+                border: "1px solid rgba(15,23,42,0.06)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Typography variant="body2" sx={{ color: "#64748B", fontWeight: 700 }}>
+                No live parameters
               </Typography>
             </Box>
-          </Stack>
-
-          <Box sx={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 2,
-            mb: 2
-          }}>
-            {machine.monitoringParams.map((param) => (
-              <Box key={param.label}>
-                <Box sx={{
-                  p: 2,
-                  borderRadius: 2,
-                  bgcolor: "#F8FAFC",
-                  border: "1px solid rgba(15,23,42,0.05)",
-                  height: "100%"
-                }}>
-                  <Typography variant="caption" sx={{ color: "#64748B", fontWeight: 600, textTransform: "uppercase" }}>
-                    {param.label}
-                  </Typography>
-                  <Typography variant="h6" sx={{ fontWeight: 800, mt: 0.5, color: "#1E293B" }}>
-                    {param.value !== null ? `${param.value}` : "--"}
-                    <Typography component="span" variant="caption" sx={{ ml: 0.5, fontWeight: 700 }}>
-                      {param.unit}
-                    </Typography>
-                  </Typography>
-                </Box>
-              </Box>
-            ))}
-          </Box>
-
-          <MiniChart values={history} severity={severity} />
+          ) : null}
         </Box>
       </Box>
 
-      <Divider />
-
-      {/* Recent Alerts */}
-      <Box sx={{ p: 2.5, flex: 1 }}>
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-          <NotificationsActiveOutlinedIcon
+      <Box sx={{ px: 2.5, py: 2 }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.25 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 800, color: "#0F172A" }}>
+            Alerts
+          </Typography>
+          <Chip
+            label={machine.alertCount > 0 ? `${machine.alertCount} active` : "No alerts"}
+            size="small"
             sx={{
-              color:
-                severity === "critical"
-                  ? "#E11D48"
-                  : severity === "warning"
-                    ? "#E97A2B"
-                    : "#64748B",
-              fontSize: 20,
+              bgcolor: severityStyles.background,
+              color: severityStyles.color,
+              fontWeight: 800,
+              fontSize: "0.72rem",
             }}
           />
-          <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
-            Active Alerts ({machine.alertCount})
-          </Typography>
         </Stack>
 
-        {machine.alertCount > 0 ? (
-          <Stack spacing={1.5}>
-            {[...Array(Math.min(machine.alertCount, 3))].map((_, i) => (
-              <Box
-                key={i}
+        <Box
+          sx={{
+            display: "grid",
+            gap: 1,
+          }}
+        >
+          {alertMessages.map((message, index) => (
+            <Box
+              key={`${machine.id}-alert-${index}`}
+              sx={{
+                px: 1.5,
+                py: 1.15,
+                borderRadius: 2.5,
+                bgcolor: index === 0 ? severityStyles.background : "rgba(248,250,252,0.95)",
+                border: "1px solid rgba(15,23,42,0.08)",
+              }}
+            >
+              <Typography
+                variant="body2"
                 sx={{
-                  p: 1.5,
-                  borderRadius: 2,
-                  bgcolor:
-                    i === 0
-                      ? severity === "critical"
-                        ? "#FFF1F2"
-                        : severity === "warning"
-                          ? "#FFF3E8"
-                          : "#F1F5F9"
-                      : "#F1F5F9",
-                  borderLeft: "4px solid",
-                  borderColor:
-                    i === 0
-                      ? severity === "critical"
-                        ? "#E11D48"
-                        : severity === "warning"
-                          ? "#E97A2B"
-                          : "#CBD5E1"
-                      : "#CBD5E1"
+                  color: index === 0 ? severityStyles.color : "#475569",
+                  fontWeight: index === 0 ? 800 : 600,
                 }}
               >
-                <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>
-                  {i === 0 ? "Critical Threshold Reached" : "Warning: Parameter Fluctuation"}
-                </Typography>
-                <Typography variant="caption" sx={{ color: "#64748B", display: "block" }}>
-                  {i === 0 ? "Vibration levels exceeded 5.0 mm/s safety limit." : "Minor variance detected in sensor readings."}
-                </Typography>
-                <Typography variant="caption" sx={{ color: "#94A3B8", mt: 0.5, display: "block", fontSize: "0.65rem" }}>
-                  {new Date().toLocaleTimeString()}
-                </Typography>
-              </Box>
-            ))}
-          </Stack>
-        ) : (
-          <Box sx={{ py: 4, textAlign: "center", bgcolor: "#F8FAFC", borderRadius: 3 }}>
-            <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
-              No active alerts detected.
-            </Typography>
-          </Box>
-        )}
+                {message}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
       </Box>
-
-
     </Box>
   );
 }

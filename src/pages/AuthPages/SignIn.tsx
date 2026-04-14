@@ -22,7 +22,7 @@ import { setToken } from "../../redux/authSlice";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import logo from "../../assets/logo1.png";
-import signinLeftImage from "../../assets/signin-left-image.jpeg";
+import signinLeftImage from "../../assets/singin-login.png";
 
 // --- ANIMATIONS ---
 

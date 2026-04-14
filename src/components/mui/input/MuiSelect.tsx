@@ -20,18 +20,19 @@ const MuiSelect: React.FC<MuiSelectProps> = ({
   ...props 
 }) => {
   const labelId = `${id || name}-label`;
+  const currentValue = props.value ?? props.defaultValue;
   const hasValue =
-    props.value !== undefined &&
-    props.value !== null &&
-    props.value !== '';
+    currentValue !== undefined &&
+    currentValue !== null &&
+    currentValue !== '';
 
   const renderDisplayValue = (selected: unknown): React.ReactNode => {
     if (selected === '' || selected === undefined || selected === null) {
-      return (
-        <span style={{ color: 'rgba(0, 0, 0, 0.6)' }}>
-          {placeholder || label}
-        </span>
-      );
+      if (!placeholder) {
+        return <span>&nbsp;</span>;
+      }
+
+      return <span style={{ color: 'rgba(0, 0, 0, 0.6)' }}>{placeholder}</span>;
     }
 
     const selectedOption = options.find((opt) => opt.value === selected);
@@ -51,7 +52,7 @@ const MuiSelect: React.FC<MuiSelectProps> = ({
       {label && (
         <InputLabel
           id={labelId}
-          shrink={Boolean(props.displayEmpty || hasValue)}
+          shrink={Boolean(hasValue || placeholder)}
         >
           {label}
         </InputLabel>

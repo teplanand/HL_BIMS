@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 type MiniChartProps = {
   values: number[];
   severity: "normal" | "warning" | "critical";
+  compact?: boolean;
 };
 
 type Point = {
@@ -50,11 +51,11 @@ function buildAreaPath(points: Point[], height: number) {
   return `${line} L ${last.x} ${height} L ${first.x} ${height} Z`;
 }
 
-function MiniChartComponent({ values, severity }: MiniChartProps) {
+function MiniChartComponent({ values, severity, compact = false }: MiniChartProps) {
   const gradientId = useId();
   const areaId = useId();
   const width = 320;
-  const height = 104;
+  const height = compact ? 72 : 104;
   const theme = chartTheme[severity];
 
   const { linePath, areaPath, latestPoint } = useMemo(() => {
@@ -80,10 +81,14 @@ function MiniChartComponent({ values, severity }: MiniChartProps) {
       className={clsx(
         "relative overflow-hidden rounded-[22px] border border-white/70 bg-gradient-to-br p-1",
         theme.shell,
+        compact && "rounded-2xl",
       )}
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.85),transparent_42%)]" />
-      <svg viewBox={`0 0 ${width} ${height}`} className="relative h-28 w-full">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className={clsx("relative w-full", compact ? "h-20" : "h-28")}
+      >
         <defs>
           <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="#22c55e" />
@@ -119,7 +124,7 @@ function MiniChartComponent({ values, severity }: MiniChartProps) {
           transition={{ duration: 0.6, ease: "easeInOut" }}
           fill="none"
           stroke={`url(#${gradientId})`}
-          strokeWidth="3"
+          strokeWidth={compact ? "2.5" : "3"}
           strokeLinecap="round"
           strokeLinejoin="round"
         />
@@ -127,7 +132,7 @@ function MiniChartComponent({ values, severity }: MiniChartProps) {
         <motion.circle
           cx={latestPoint.x}
           cy={latestPoint.y}
-          r="5.5"
+          r={compact ? "4.5" : "5.5"}
           animate={{ cx: latestPoint.x, cy: latestPoint.y, scale: [1, 1.18, 1] }}
           transition={{ duration: 0.7, ease: "easeInOut" }}
           fill="#ffffff"
