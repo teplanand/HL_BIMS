@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
-import { Box, Button, ButtonBase, Card, CardContent, Grid, Tooltip, Typography } from "@mui/material";
+import { Box, Button, ButtonBase, Card, CardContent, Grid, TextField, Tooltip, Typography } from "@mui/material";
 import {
   GridColDef,
   GridFilterInputValueProps,
@@ -11,8 +11,8 @@ import {
   GridRenderCellParams,
   GridSortModel,
 } from "@mui/x-data-grid";
-import { DatePicker } from "@mui/x-date-pickers/DatePicker";
-import dayjs, { Dayjs } from "dayjs";
+import dayjs from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat";
 
 import ApiActionButton from "../../components/common/ApiActionButton";
 import ReusableDataGrid from "../../components/common/ReusableDataGrid";
@@ -159,33 +159,115 @@ type ProcessStageField = (typeof processStageColumns)[number]["field"];
 type DateFilterInputProps = GridFilterInputValueProps;
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
+dayjs.extend(customParseFormat);
+
+const parseOrderTrackingFilterDate = (value: unknown) => {
+  if (!value || typeof value !== "string") {
+    return null;
+  }
+
+  const parsedValue = dayjs(value, ["YYYY-MM-DD", "DD/MM/YYYY", "D/M/YYYY"], true);
+  return parsedValue.isValid() ? parsedValue : null;
+};
+
+const formatOrderTrackingFilterDate = (value: unknown) => {
+  const parsedValue = parseOrderTrackingFilterDate(value);
+  return parsedValue ? parsedValue.format("DD/MM/YYYY") : "";
+};
+
+const normalizeOrderTrackingDateInput = (value: string) => {
+  const digitsOnly = value.replace(/\D/g, "").slice(0, 8);
+
+  if (digitsOnly.length <= 2) {
+    return digitsOnly;
+  }
+
+  if (digitsOnly.length <= 4) {
+    return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2)}`;
+  }
+
+  return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2, 4)}/${digitsOnly.slice(4)}`;
+};
+
 const OrderTrackingDateFilterInput = React.memo((props: DateFilterInputProps) => {
   const { item, applyValue, focusElementRef, disabled, slotProps } = props;
-  const parsedValue = typeof item.value === "string" && item.value
-    ? dayjs(item.value)
-    : null;
+  const [inputValue, setInputValue] = useState(() => formatOrderTrackingFilterDate(item.value));
+
+  useEffect(() => {
+    setInputValue(formatOrderTrackingFilterDate(item.value));
+  }, [item.value]);
+
+  const commitValue = useCallback((nextInputValue: string) => {
+    if (!nextInputValue) {
+      applyValue({
+        ...item,
+        value: "",
+      });
+      return;
+    }
+
+    const parsedValue = parseOrderTrackingFilterDate(nextInputValue);
+    if (!parsedValue) {
+      return;
+    }
+
+    applyValue({
+      ...item,
+      value: parsedValue.format("YYYY-MM-DD"),
+    });
+  }, [applyValue, item]);
 
   return (
-    <DatePicker
-      value={parsedValue && parsedValue.isValid() ? parsedValue : null}
-      format="DD/MM/YYYY"
+    <TextField
+      value={inputValue}
       disabled={disabled}
-      onChange={(newValue: Dayjs | null) => {
-        applyValue({
-          ...item,
-          value: newValue && newValue.isValid() ? newValue.format("YYYY-MM-DD") : "",
-        });
+      onChange={(event) => {
+        const normalizedValue = normalizeOrderTrackingDateInput(event.target.value);
+        setInputValue(normalizedValue);
+        commitValue(normalizedValue);
       }}
-      slotProps={{
-        textField: {
-          size: "small",
-          inputRef: focusElementRef,
-          placeholder: "dd/mm/yyyy",
-          sx: {
-            width: 160,
-            ...(slotProps?.root ?? {}),
-          },
-        },
+      onBlur={() => {
+        const parsedValue = parseOrderTrackingFilterDate(inputValue);
+
+        if (!inputValue) {
+          commitValue("");
+          return;
+        }
+
+        if (!parsedValue) {
+          setInputValue("");
+          commitValue("");
+          return;
+        }
+
+        const normalizedValue = parsedValue.format("DD/MM/YYYY");
+        setInputValue(normalizedValue);
+        commitValue(normalizedValue);
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter") {
+          return;
+        }
+
+        const parsedValue = parseOrderTrackingFilterDate(inputValue);
+        if (!parsedValue) {
+          return;
+        }
+
+        const normalizedValue = parsedValue.format("DD/MM/YYYY");
+        setInputValue(normalizedValue);
+        commitValue(normalizedValue);
+      }}
+      placeholder="DD/MM/YYYY"
+      size="small"
+      inputRef={focusElementRef}
+      inputProps={{
+        inputMode: "numeric",
+        maxLength: 10,
+      }}
+      sx={{
+        width: 160,
+        ...(slotProps?.root ?? {}),
       }}
     />
   );
@@ -205,6 +287,18 @@ const getGridDateValue = (row: Record<string, unknown>, field: string) => {
 
   const parsedDate = new Date(String(rawValue));
   return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+};
+
+const getOrderTrackingPlanOrActualDateValue = (
+  row: Record<string, unknown>,
+  actualField: string,
+) => {
+  const planField = actualToPlanFieldMap[actualField];
+
+  return (
+    getGridDateValue(row, actualField) ||
+    (planField ? getGridDateValue(row, planField) : null)
+  );
 };
 
 
@@ -552,8 +646,9 @@ const OrderTrackingDashboard = () => {
 
   const apiRows = Array.isArray(data?.data) ? data.data : [];
   //const sourceRows = apiRows.length > 0 ? apiRows : ordertrackingdata;
-  const sourceRows =  apiRows;
  
+  const sourceRows =  apiRows;
+  
   return sourceRows.map((item: any, index: number) => {
     const status = getFullStatus(item);
 
@@ -904,18 +999,24 @@ const renderProcessCell = useCallback(
         minWidth:70,
         renderCell: renderProcessCell,
       })),
-      ...planDateColumns.map<GridColDef>((column) => ({
-        ...column,
-        type: "date" as const,
-        sortable: false,
-        filterable: true,
-        filterOperators: orderTrackingDateFilterOperators,
-        valueGetter: (_value: unknown, row: Record<string, unknown>) =>
-          getGridDateValue(row, column.field),
-        width:90, 
-        minWidth:90,
-        renderCell: renderActualDateCell,
-      })),
+      ...planDateColumns.map<GridColDef>((column) => {
+        const planDateColumn = {
+          ...column,
+          type: "date" as const,
+          sortable: false,
+          filterable: true,
+          filterOperators: orderTrackingDateFilterOperators,
+          valueGetter: (_value: unknown, row: Record<string, unknown>) =>
+            getGridDateValue(row, column.field),
+          filterValueGetter: (row: Record<string, unknown>) =>
+            getOrderTrackingPlanOrActualDateValue(row, column.field),
+          width:90, 
+          minWidth:90,
+          renderCell: renderActualDateCell,
+        };
+
+        return planDateColumn as unknown as GridColDef;
+      }),
     ],
     [handleLineIdClick, renderActualDateCell, renderDateCell, renderMetricCell, renderProcessCell]
   );

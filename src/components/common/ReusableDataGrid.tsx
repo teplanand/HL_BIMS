@@ -118,6 +118,10 @@ export interface ReusableDataGridProps {
   };
 }
 
+type ColumnWithFilterValueGetter = GridColDef & {
+  filterValueGetter?: (row: any, field: string) => unknown;
+};
+
 type DataGridSearchInputProps = {
   value: string;
   onChange: (value: string) => void;
@@ -404,25 +408,90 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
     );
   }, [showViewToggle, viewMode, headerControls, handleViewModeChange]);
 
-  const getCellValue = useCallback((row: any, field: string) => row?.[field], []);
+  const columnLookup = useMemo(
+    () =>
+      columns.reduce<Record<string, GridColDef>>((acc, column) => {
+        acc[column.field] = column;
+        return acc;
+      }, {}),
+    [columns],
+  );
 
-  const getComparableValue = useCallback(
+  const isDateColumn = useCallback(
+    (field: string) => {
+      const columnType = columnLookup[field]?.type;
+      return columnType === "date" || columnType === "dateTime";
+    },
+    [columnLookup],
+  );
+
+  const getDateOnlyComparableValue = useCallback((value: unknown) => {
+    if (!value) {
+      return null;
+    }
+
+    const parsedDate =
+      value instanceof Date ? value : new Date(String(value));
+
+    if (Number.isNaN(parsedDate.getTime())) {
+      return null;
+    }
+
+    return Date.UTC(
+      parsedDate.getFullYear(),
+      parsedDate.getMonth(),
+      parsedDate.getDate(),
+    );
+  }, []);
+
+  const getCellValue = useCallback(
     (row: any, field: string) => {
-      const rawValue = getCellValue(row, field);
+      const column = columnLookup[field] as ColumnWithFilterValueGetter | undefined;
 
-      if (rawValue === null || rawValue === undefined || rawValue === "") {
+      if (column?.filterValueGetter) {
+        try {
+          return column.filterValueGetter(row, field);
+        } catch {
+          return row?.[field];
+        }
+      }
+
+      if (column?.valueGetter) {
+        try {
+          return (column.valueGetter as any)(row?.[field], row, column, null);
+        } catch {
+          return row?.[field];
+        }
+      }
+
+      return row?.[field];
+    },
+    [columnLookup],
+  );
+
+  const getComparablePrimitive = useCallback(
+    (value: unknown, field: string) => {
+      if (value === null || value === undefined || value === "") {
         return null;
       }
 
-      if (typeof rawValue === "number") {
-        return rawValue;
+      if (isDateColumn(field)) {
+        return getDateOnlyComparableValue(value);
       }
 
-      if (typeof rawValue === "boolean") {
-        return rawValue ? 1 : 0;
+      if (value instanceof Date) {
+        return Number.isNaN(value.getTime()) ? null : value.getTime();
       }
 
-      const normalizedString = String(rawValue).trim();
+      if (typeof value === "number") {
+        return value;
+      }
+
+      if (typeof value === "boolean") {
+        return value ? 1 : 0;
+      }
+
+      const normalizedString = String(value).trim();
       const numericValue = Number(normalizedString);
 
       if (!Number.isNaN(numericValue) && normalizedString !== "") {
@@ -436,7 +505,15 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
 
       return normalizedString.toLowerCase();
     },
-    [getCellValue],
+    [getDateOnlyComparableValue, isDateColumn],
+  );
+
+  const getComparableValue = useCallback(
+    (row: any, field: string) => {
+      const rawValue = getCellValue(row, field);
+      return getComparablePrimitive(rawValue, field);
+    },
+    [getCellValue, getComparablePrimitive],
   );
 
   const matchesFilterItem = useCallback(
@@ -449,29 +526,7 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
       const valueLower = normalizedValue.toLowerCase();
       const filterLower = normalizedFilterValue.toLowerCase();
       const comparableRowValue = getComparableValue(row, field);
-      const comparableFilterValue = (() => {
-        if (item.value === null || item.value === undefined || item.value === "") {
-          return null;
-        }
-
-        if (typeof item.value === "number") {
-          return item.value;
-        }
-
-        const itemString = String(item.value).trim();
-        const itemNumber = Number(itemString);
-
-        if (!Number.isNaN(itemNumber) && itemString !== "") {
-          return itemNumber;
-        }
-
-        const timestamp = Date.parse(itemString);
-        if (!Number.isNaN(timestamp)) {
-          return timestamp;
-        }
-
-        return itemString.toLowerCase();
-      })();
+      const comparableFilterValue = getComparablePrimitive(item.value, field);
 
       switch (operator) {
         case "contains":
@@ -480,9 +535,15 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
           return !valueLower.includes(filterLower);
         case "equals":
         case "is":
+          if (comparableRowValue !== null && comparableFilterValue !== null) {
+            return comparableRowValue === comparableFilterValue;
+          }
           return valueLower === filterLower;
         case "doesNotEqual":
         case "not":
+          if (comparableRowValue !== null && comparableFilterValue !== null) {
+            return comparableRowValue !== comparableFilterValue;
+          }
           return valueLower !== filterLower;
         case "startsWith":
           return valueLower.startsWith(filterLower);
@@ -538,7 +599,7 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
           return valueLower.includes(filterLower);
       }
     },
-    [getCellValue, getComparableValue],
+    [getCellValue, getComparablePrimitive, getComparableValue],
   );
 
   const renderCardRow = useCallback(
