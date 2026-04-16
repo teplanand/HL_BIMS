@@ -6,6 +6,7 @@ import ReusableDataGrid from "../../../components/common/ReusableDataGrid";
 import { useModal } from "../../../hooks/useModal";
 import { useToast } from "../../../hooks/useToast";
 import {
+    buildWarehouseItemFormData,
     useCreateWarehouseItemMutation,
     useDeleteWarehouseItemMutation,
     useListPalletsQuery,
@@ -29,10 +30,15 @@ const ItemlistPage: React.FC = () => {
         try {
             if (payload.id) {
                 const { id, ...updatePayload } = payload;
-                return await updateItem({ id, ...updatePayload } as any).unwrap();
+                return await updateItem({
+                    id,
+                    body: buildWarehouseItemFormData(updatePayload),
+                }).unwrap();
             } else {
                 const { id, ...createPayload } = payload;
-                return await createItem(createPayload).unwrap();
+                return await createItem(
+                    buildWarehouseItemFormData(createPayload, ["qty", "detail_qty", "file_name"])
+                ).unwrap();
             }
         } catch (error: any) {
             showToast(error?.data?.message || error?.message || "Failed to save item", "error");

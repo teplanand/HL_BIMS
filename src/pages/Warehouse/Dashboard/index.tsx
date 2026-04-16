@@ -13,6 +13,7 @@ import { useModal } from "../../../hooks/useModal";
 import { useToast } from "../../../hooks/useToast";
  import { openEntityFormModal } from "../shared/openEntityFormModal";
 import {
+  buildWarehouseItemFormData,
   useCreatePalletMutation,
   useCreateRackMutation,
   useCreateWarehouseItemMutation,
@@ -340,12 +341,17 @@ export default function InventoryDashboard() {
       try {
         if (payload.id !== undefined && payload.id !== null) {
           const { id, ...updatePayload } = payload;
-          return await updateItem({ id, ...updatePayload }).unwrap();
+          return await updateItem({
+            id,
+            body: buildWarehouseItemFormData(updatePayload),
+          }).unwrap();
         }
 
         const createPayload = { ...payload } as Omit<ItemSubmitPayload, "id">;
         delete (createPayload as Partial<ItemSubmitPayload>).id;
-        return await createItem(createPayload).unwrap();
+        return await createItem(
+          buildWarehouseItemFormData(createPayload, ["qty", "detail_qty", "file_name"])
+        ).unwrap();
       } catch (error: any) {
         showToast(error?.data?.message || error?.message || "Failed to save item", "error");
         throw error;

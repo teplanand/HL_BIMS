@@ -33,7 +33,6 @@ import FormSection from "../../../components/ui/form/FormSection";
 import { useModal } from "../../../hooks/useModal";
 import { useToast } from "../../../hooks/useToast";
 import { useLazyListWarehouseItemsQuery, useListPalletsQuery } from "../../../redux/api/warehouse";
-import { useUploadDocumentMutation } from "../../../redux/api/document";
 import { extractApiRows } from "../shared/gridApiHelpers";
 import WidgetsOutlinedIcon from "@mui/icons-material/WidgetsOutlined";
 
@@ -72,6 +71,8 @@ export type ItemSubmitPayload = {
   item_image_document_id?: number | null;
   item_image_name?: string | null;
   item_image_path?: string | null;
+  file_name?: string | null;
+  item_image_file?: File | null;
   qr_code?: string;
 };
 
@@ -161,14 +162,6 @@ const toPreviewUrl = (path: string | null | undefined) => {
   return `${import.meta.env.VITE_API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
 };
 
-const escapeHtml = (value: string) =>
-  value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-
 function Index({
   defaultValues,
   onSubmitItem,
@@ -186,7 +179,6 @@ function Index({
   const { data: palletsData } = useListPalletsQuery();
   const [fetchItemDetails, { isFetching: isFetchingItemDetails }] =
     useLazyListWarehouseItemsQuery();
-  const [uploadDocument, { isLoading: isUploadingImage }] = useUploadDocumentMutation();
   const defaultImagePath =
     defaultValues?.item_image_path || defaultValues?.image_path || defaultValues?.path || null;
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
@@ -245,16 +237,12 @@ function Index({
   const watchedItemCategory = watch("item_category");
   const watchedLocator = watch("locator");
   const watchedSubInventory = watch("sub_inventory");
-  const watchedDetailQty = watch("detail_qty");
+   
   const watchedPalletId = watch("pallet_id");
   const watchedRackId = watch("rack_id");
-  const watchedInQty = watch("in_qty");
-  const watchedOutQty = watch("out_qty");
-  const watchedExpiryDate = watch("expiry_date");
-  const normalizedOracleCode = useMemo(() => normalizeOracleCode(watchedOracleCode || ""), [watchedOracleCode]);
-  const inQtyValue = Number(watchedInQty || 0);
-  const outQtyValue = Number(watchedOutQty || 0);
-  const currentQuantityValue = Number(watchedDetailQty || 0);
+ 
+   const normalizedOracleCode = useMemo(() => normalizeOracleCode(watchedOracleCode || ""), [watchedOracleCode]);
+ 
   const resolvedRackId = useMemo(() => {
     if (watchedRackId) {
       return Number(watchedRackId);
@@ -266,17 +254,44 @@ function Index({
 
     return Number(selectedPallet?.rack_id || 0);
   }, [palletsData, watchedPalletId, watchedRackId]);
-  const netQuantity = useMemo(() => {
-    if (inQtyValue > 0) {
-      return currentQuantityValue + inQtyValue;
+ 
+  const selectedPalletMeta = useMemo(() => {
+    const selectedPallet = extractApiRows(palletsData).find(
+      (pallet: any) => String(pallet.id) === String(watchedPalletId)
+    );
+
+    if (!selectedPallet) {
+      return {
+        palletName: "",
+        rackName: resolvedRackId ? `Rack ${resolvedRackId}` : "",
+        palletCapacity: "",
+      };
     }
 
-    if (outQtyValue > 0) {
-      return currentQuantityValue - outQtyValue;
-    }
+    const palletName =
+      firstString(
+        selectedPallet.pallet_name,
+        selectedPallet.pallet_code,
+        selectedPallet.name
+      ) || `Pallet ${selectedPallet.id}`;
+    const rackName =
+      firstString(
+        selectedPallet.rack_name,
+        selectedPallet.rackName,
+        selectedPallet.rack_code,
+        selectedPallet.rackCode
+      ) || (resolvedRackId ? `Rack ${resolvedRackId}` : "");
+    const palletCapacity = firstNumber(
+      selectedPallet.max_capacity,
+      selectedPallet.capacity
+    );
 
-    return currentQuantityValue;
-  }, [currentQuantityValue, inQtyValue, outQtyValue]);
+    return {
+      palletName,
+      rackName,
+      palletCapacity: palletCapacity ? String(palletCapacity) : "",
+    };
+  }, [palletsData, resolvedRackId, watchedPalletId]);
   const qrPayload = useMemo(
     () =>
       [
@@ -285,34 +300,23 @@ function Index({
         ["Item Category", watchedItemCategory?.trim()],
         ["Locator", watchedLocator?.trim()],
         ["Sub Inventory", watchedSubInventory?.trim()],
-        ["Quantity", String(watchedDetailQty || "")],
+        ["Pallet Name", selectedPalletMeta.palletName],
         ["Pallet", watchedPalletId],
+        ["Rack Name", selectedPalletMeta.rackName],
         ["Rack", resolvedRackId ? String(resolvedRackId) : ""],
-        ["Item Expiry Applicable", hasExpiry ? "Yes" : "No"],
-        ["Expiry Date", hasExpiry && watchedExpiryDate ? watchedExpiryDate.format("DD-MM-YYYY") : ""],
-        ["In Quantity", String(watchedInQty || "")],
-        ["Out Quantity", String(watchedOutQty || "")],
-        ["Net Quantity", Number.isFinite(netQuantity) ? String(netQuantity) : ""],
-        ["Item Image", uploadedItemImage.name || (selectedImageFile ? selectedImageFile.name : "")],
+        ["Pallet Capacity", selectedPalletMeta.palletCapacity]
       ]
         .filter(([, value]) => value && String(value).trim().length > 0)
         .map(([label, value]) => `${label}: ${value}`)
         .join("\n"),
     [
-      hasExpiry,
-      netQuantity,
       normalizedOracleCode,
       resolvedRackId,
-      selectedImageFile,
-      uploadedItemImage.name,
-      watchedDetailQty,
-      watchedExpiryDate,
       watchedItemCategory,
       watchedItemDesc,
-      watchedInQty,
       watchedLocator,
-      watchedOutQty,
       watchedPalletId,
+      selectedPalletMeta,
       watchedSubInventory,
     ]
   );
@@ -405,29 +409,6 @@ function Index({
     reader.readAsDataURL(file);
   }, []);
 
-  const handleUploadItemImage = useCallback(async () => {
-    if (!selectedImageFile) {
-      showToast("Select an image first", "warning");
-      return uploadedItemImage;
-    }
-
-    const formData = new FormData();
-    formData.append("name", selectedImageFile.name);
-    formData.append("file", selectedImageFile);
-    formData.append("type", "warehouse_item");
-    const response = await uploadDocument(formData).unwrap();
-    const nextImage = {
-      documentId: firstNumber(response?.document_id, response?.id) ?? null,
-      path: firstString(response?.path, response?.file_path) || null,
-      name: firstString(response?.name, response?.file_name) || selectedImageFile.name,
-    };
-
-    setUploadedItemImage(nextImage);
-    setSelectedImageFile(null);
-    showToast("Item image uploaded successfully", "success");
-    return nextImage;
-  }, [selectedImageFile, showToast, uploadDocument, uploadedItemImage]);
-
   const handlePrintQr = useCallback(() => {
     const canvas = qrCanvasWrapperRef.current?.querySelector("canvas") as HTMLCanvasElement | null;
     if (!canvas || !qrPayload) {
@@ -443,7 +424,96 @@ function Index({
       return;
     }
 
-    printWindow.document.write(`<html><head><title>QR Print</title><style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#fff;}img{width:320px;height:320px;object-fit:contain;display:block;}</style></head><body><img id="qr-print-image" src="${qrDataUrl}" alt="QR Code" /></body></html>`);
+    const sanitizeHtml = (value: string) =>
+      value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+
+    const printablePayload = qrPayload
+      .split("\n")
+      .map((line) => `<div class="qr-print-line">${sanitizeHtml(line)}</div>`)
+      .join("");
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>QR Print</title>
+          <style>
+            body {
+              margin: 0;
+              min-height: 100vh;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              background: #fff;
+              font-family: Arial, sans-serif;
+            }
+            .qr-print-wrap {
+              display: flex;
+              align-items: flex-start;
+              gap: 24px;
+              padding: 24px;
+            }
+            .qr-print-qr-box {
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              padding: 20px;
+              border: 1px solid #e5e7eb;
+              border-radius: 12px;
+              background: #fff;
+              box-sizing: border-box;
+            }
+            .qr-print-image {
+              width: 320px;
+              height: 320px;
+              object-fit: contain;
+              display: block;
+            }
+            .qr-print-content {
+              min-width: 260px;
+              max-width: 420px;
+              color: #111827;
+              font-size: 14px;
+              line-height: 1.5;
+              padding: 20px;
+              border: 1px solid #e5e7eb;
+              border-radius: 12px;
+              background: #fff;
+              box-sizing: border-box;
+            }
+            .qr-print-title {
+              font-size: 18px;
+              font-weight: 700;
+              margin-bottom: 12px;
+            }
+            .qr-print-line {
+              margin-bottom: 6px;
+              word-break: break-word;
+            }
+            @media print {
+              body {
+                min-height: auto;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="qr-print-wrap">
+            <div class="qr-print-qr-box">
+              <img id="qr-print-image" class="qr-print-image" src="${qrDataUrl}" alt="QR Code" />
+            </div>
+            <div class="qr-print-content">
+              
+              ${printablePayload}
+            </div>
+          </div>
+        </body>
+      </html>
+    `);
     printWindow.document.close();
 
     const triggerPrint = () => {
@@ -484,30 +554,30 @@ function Index({
       return;
     }
 
-    if (!rackId) {
-      showToast("Rack details not found for selected pallet", "warning");
-      return;
-    }
+    // if (!rackId) {
+    //   showToast("Rack details not found for selected pallet", "warning");
+    //   return;
+    // }
 
-    if (!subLocId) {
-      showToast("Click 'Get Item Detail' to load locator details", "warning");
-      return;
-    }
+    // if (!subLocId) {
+    //   showToast("Click 'Get Item Detail' to load locator details", "warning");
+    //   return;
+    // }
 
-    if (inQty > 0 && outQty > 0) {
-      showToast("Only one of In Quantity or Out Quantity can be filled", "warning");
-      return;
-    }
+    // if (inQty > 0 && outQty > 0) {
+    //   showToast("Only one of In Quantity or Out Quantity can be filled", "warning");
+    //   return;
+    // }
 
-    if (!inQty && !outQty) {
-      showToast("Enter In Quantity or Out Quantity", "warning");
-      return;
-    }
+    // if (!inQty && !outQty) {
+    //   showToast("Enter In Quantity or Out Quantity", "warning");
+    //   return;
+    // }
 
-    if (outQty > baseQty) {
-      showToast("Out quantity cannot be greater than current quantity", "warning");
-      return;
-    }
+    // if (outQty > baseQty) {
+    //   showToast("Out quantity cannot be greater than current quantity", "warning");
+    //   return;
+    // }
 
     // if (selectedImageFile) {
     //   showToast("Please upload the selected image before saving", "warning");
@@ -515,6 +585,8 @@ function Index({
     // }
 
     const uploadedImage = uploadedItemImage;
+    const selectedImageName = selectedImageFile?.name || uploadedImage.name || null;
+    const selectedImagePath = selectedImageFile ? imagePreviewUrl || null : uploadedImage.path;
     const payload: ItemSubmitPayload = {
       ...(defaultValues?.id ? { id: defaultValues.id } : {}),
       pallet_id: palletId,
@@ -531,9 +603,11 @@ function Index({
       detail_qty: baseQty,
       in_qty: inQty,
       out_qty: outQty,
-      item_image_document_id: uploadedImage.documentId,
-      item_image_name: uploadedImage.name,
-      item_image_path: uploadedImage.path,
+      item_image_document_id: selectedImageFile ? null : uploadedImage.documentId,
+      item_image_name: selectedImageName,
+      item_image_path: selectedImagePath,
+      file_name: selectedImageName,
+      item_image_file: selectedImageFile,
       qr_code: qrPayload || undefined,
     };
 
@@ -544,7 +618,7 @@ function Index({
     showToast(isEditMode ? "Item updated successfully" : "Item created successfully", "success");
     setDataChanged?.(false);
     closeModal();
-  }, [closeModal, defaultValues?.id, isEditMode, onSubmitItem, qrPayload, resolvedRackId, selectedImageFile, setDataChanged, showToast, uploadedItemImage]);
+  }, [closeModal, defaultValues?.id, imagePreviewUrl, isEditMode, onSubmitItem, qrPayload, resolvedRackId, selectedImageFile, setDataChanged, showToast, uploadedItemImage]);
 
   useImperativeHandle(
     ref,
@@ -779,15 +853,11 @@ function Index({
                         borderColor: "divider",
                       }}
                     />
-                    <Button
-                      type="button"
-                      variant="contained"
-                      onClick={handleUploadItemImage}
-                      disabled={!selectedImageFile || isUploadingImage}
-                      sx={{ width: 180, textTransform: "none", fontWeight: 700 }}
-                    >
-                      {isUploadingImage ? "Uploading..." : "Upload"}
-                    </Button>
+                    {selectedImageFile ? (
+                      <Typography variant="body2" color="text.secondary">
+                        Image will be uploaded when you save the item.
+                      </Typography>
+                    ) : null}
                   </Stack>
                 ) : (
                   <Typography variant="body2" color="text.secondary">
@@ -837,9 +907,7 @@ function Index({
                   borderColor: "divider",
                 }}
               >
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
-                  QR Content
-                </Typography>
+                 
                 <Typography component="pre" sx={{ m: 0, whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: "0.8rem", color: "#334155", fontFamily: "monospace" }}>
                   {qrPayload || "Fill item details to generate QR code."}
                 </Typography>

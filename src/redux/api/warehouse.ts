@@ -125,12 +125,19 @@ export interface CreateWarehouseItemPayload {
   item_image_document_id?: number | null;
   item_image_name?: string | null;
   item_image_path?: string | null;
+  file_name?: string | null;
+  item_image_file?: File | null;
   qr_code?: string;
   qty: number;
 }
 
 export interface UpdateWarehouseItemPayload extends CreateWarehouseItemPayload {
   id: number | string;
+}
+
+export interface UpdateWarehouseItemRequest {
+  id: number | string;
+  body: Omit<UpdateWarehouseItemPayload, "id"> | FormData;
 }
 
 export interface CreateTransactionPayload {
@@ -160,14 +167,55 @@ const cleanParams = (params?: ListParams | void) => {
 const resolveId = (arg: number | string | IdArg) =>
   typeof arg === "object" ? arg.id : arg;
 
+const appendFormDataValue = (formData: FormData, key: string, value: unknown) => {
+  if (value === undefined || value === null) {
+    return;
+  }
+
+  if (value instanceof Blob) {
+    formData.append(key, value);
+    return;
+  }
+
+  formData.append(key, typeof value === "boolean" ? String(value) : String(value));
+};
+
+export const buildWarehouseItemFormData = (
+  payload: Omit<CreateWarehouseItemPayload, never> | Omit<UpdateWarehouseItemPayload, "id">,
+  excludedKeys: string[] = []
+) => {
+  const formData = new FormData();
+
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value === undefined || value === null) {
+      return;
+    }
+
+    if (excludedKeys.includes(key)) {
+      return;
+    }
+
+    if (key === "item_image_file") {
+      if (value instanceof File) {
+        formData.append("file", value);
+      }
+      return;
+    }
+
+    if (key === "item_image_path" && typeof value === "string" && value.startsWith("data:")) {
+      return;
+    }
+
+    appendFormDataValue(formData, key, value);
+  });
+
+  return formData;
+};
+
 export const warehouseApi = createApi({
   reducerPath: "warehouseApi",
   baseQuery: fetchBaseQuery({
     baseUrl: "https://wmsapi.techelecon.in/api",
-    prepareHeaders: (headers) => {
-      headers.set("Content-Type", "application/json");
-      return headers;
-    },
   }),
   tagTypes: ["Warehouse"],
   endpoints: (builder) => ({
@@ -349,7 +397,7 @@ export const warehouseApi = createApi({
 
     createWarehouseItem: builder.mutation<
       WarehouseResponse<WarehouseRecord>,
-      CreateWarehouseItemPayload
+      CreateWarehouseItemPayload | FormData
     >({
       query: (body) => ({
         url: "/item",
@@ -378,9 +426,9 @@ export const warehouseApi = createApi({
     }),
     updateWarehouseItem: builder.mutation<
       WarehouseResponse<WarehouseRecord>,
-      UpdateWarehouseItemPayload
+      UpdateWarehouseItemRequest
     >({
-      query: ({ id, ...body }) => ({
+      query: ({ id, body }) => ({
         url: `/item/${id}`,
         method: "PUT",
         body,

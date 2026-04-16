@@ -4,9 +4,6 @@ import {
   Button,
   Card,
   Chip,
-  Collapse,
-  IconButton,
-  LinearProgress,
   Pagination,
   Stack,
   Table,
@@ -19,8 +16,6 @@ import {
   Typography,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
-import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import PrecisionManufacturingOutlinedIcon from "@mui/icons-material/PrecisionManufacturingOutlined";
 import QrCode2OutlinedIcon from "@mui/icons-material/QrCode2Outlined";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
@@ -124,7 +119,7 @@ const editStatusOptions = [
   { value: "Cancel", label: "Cancel" },
 ];
 
-const sampleRows = (defaultValues: any): LineItemRow[] => {
+const sampleRows = (): LineItemRow[] => {
   // Mapping all line_items from JSON and adding a unique `id`.
   return (salesorderslineitems.salesOrders || []).flatMap((order: any) =>
     (order.line_items || []).map((line: any) => ({
@@ -166,21 +161,140 @@ const dateHeaderLabel = (label: string) => (
 );
 
 // ─── Row Component ───────────────────────────────────────────────────
+function SerialNumberDrawer({
+  row,
+  setDisplayTitle,
+  setHideFooter,
+  setWidth,
+}: {
+  row: LineItemRow;
+  setDisplayTitle?: (title: string) => void;
+  setHideFooter?: (hidden: boolean) => void;
+  setWidth?: (width: number | string) => void;
+}) {
+  const serialsCount = row.quantitys?.length || 0;
+
+  useEffect(() => {
+    setDisplayTitle?.(`Line ${row.line_no} Serial Numbers`);
+    setHideFooter?.(true);
+    setWidth?.(980);
+  }, [row.line_no, setDisplayTitle, setHideFooter, setWidth]);
+
+  return (
+    <Box sx={{ px: { xs: 0.5, md: 1 }, py: 1 }}>
+      <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} sx={{ mb: 2.5 }}>
+        <Card sx={{ ...cardSx, flex: 1 }}>
+          <Box sx={{ p: 2 }}>
+            <Typography variant="caption" color="text.secondary">Serial Register</Typography>
+            <Typography variant="h6" fontWeight={800}>{serialsCount} serials logged</Typography>
+            <Typography variant="body2" color="text.secondary">Each serial child can drive manufacturing, issue and label workflow.</Typography>
+          </Box>
+        </Card>
+        <Card sx={{ ...cardSx, flex: 1 }}>
+          <Box sx={{ p: 2 }}>
+            <Typography variant="caption" color="text.secondary">Dispatch Readiness</Typography>
+            <Typography variant="h6" fontWeight={800}>{row.actions?.printLabel?.enabled ? "Ready for label print" : "Not ready for label print"}</Typography>
+            <Typography variant="body2" color="text.secondary">Work order {row.wo_no} with target dispatch {formatDate(row.client_delivery_date)}.</Typography>
+          </Box>
+        </Card>
+      </Stack>
+
+      <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} sx={{ mb: 2 }}>
+        <Card sx={{ ...cardSx, flex: 1 }}>
+          <Box sx={{ p: 2 }}>
+            <Typography variant="caption" color="text.secondary">Ordered Item</Typography>
+            <Typography variant="h6" fontWeight={800}>{row.item_code}</Typography>
+            <Typography variant="body2" color="text.secondary">{row.description || "--"}</Typography>
+          </Box>
+        </Card>
+        <Card sx={{ ...cardSx, flex: 1 }}>
+          <Box sx={{ p: 2 }}>
+            <Typography variant="caption" color="text.secondary">Line Snapshot</Typography>
+            <Typography variant="h6" fontWeight={800}>Qty {row.quantity}</Typography>
+            <Typography variant="body2" color="text.secondary">Ship to {row.ship_to_location || "--"} | Status {meta[row.status]?.label || row.status}</Typography>
+          </Box>
+        </Card>
+      </Stack>
+
+      <Typography variant="body1" fontWeight={800} sx={{ mb: 1.5, color: "text.primary" }}>
+        Serial Number Wise Child Items
+      </Typography>
+      <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, bgcolor: "#FFF" }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow sx={{ "& th": { bgcolor: "#F8FAFC", color: "#475569", fontWeight: 700, whiteSpace: "nowrap" } }}>
+              <TableCell>Serial No</TableCell>
+              <TableCell>{dateHeaderLabel("Ass Rel")}</TableCell>
+              <TableCell>{dateHeaderLabel("Ac Ua")}</TableCell>
+              <TableCell>{dateHeaderLabel("Ac Comp")}</TableCell>
+              <TableCell>{dateHeaderLabel("Ac Pk")}</TableCell>
+              <TableCell>{dateHeaderLabel("Ac Ds")}</TableCell>
+              <TableCell>{dateHeaderLabel("Tent Rel")}</TableCell>
+              <TableCell>{dateHeaderLabel("Ac Ho")}</TableCell>
+              <TableCell>{dateHeaderLabel("Ac Ca")}</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell>Sh Type</TableCell>
+              <TableCell>Sh Item</TableCell>
+              <TableCell>Rpm</TableCell>
+              <TableCell>Motor Serial No</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {row.quantitys && row.quantitys.length ? row.quantitys.map((serial) => (
+              <TableRow key={serial.serial_no} hover>
+                <TableCell><Typography fontWeight={700}>{serial.serial_no}</Typography></TableCell>
+                <TableCell>{formatDate(serial.ass_rel_date)}</TableCell>
+                <TableCell>{formatDate(serial.ac_ua_date)}</TableCell>
+                <TableCell>{formatDate(serial.ac_comp_date)}</TableCell>
+                <TableCell>{formatDate(serial.ac_pk_date)}</TableCell>
+                <TableCell>{formatDate(serial.ac_ds_date)}</TableCell>
+                <TableCell>{formatDate(serial.tent_rel_date)}</TableCell>
+                <TableCell>{formatDate(serial.ac_ho_date)}</TableCell>
+                <TableCell>{formatDate(serial.ac_ca_date)}</TableCell>
+                <TableCell>
+                  <Chip
+                    size="small"
+                    label={meta[serial.status || ""]?.label || serial.status}
+                    sx={{
+                      bgcolor: meta[serial.status || ""]?.bg || "#ccc",
+                      color: meta[serial.status || ""]?.color || "#000",
+                      fontWeight: 700,
+                    }}
+                  />
+                </TableCell>
+                <TableCell>{serial.sh_type || "--"}</TableCell>
+                <TableCell>{serial.sh_item || "--"}</TableCell>
+                <TableCell>{serial.rpm || "--"}</TableCell>
+                <TableCell>{serial.motor_serial_no || "--"}</TableCell>
+              </TableRow>
+            )) : (
+              <TableRow>
+                <TableCell colSpan={14} align="center" sx={{ py: 4 }}>
+                  <Typography fontWeight={700}>Serials not generated yet.</Typography>
+                  <Typography variant="body2" color="text.secondary">Start with work order approval, then enable serial number generation.</Typography>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Box>
+  );
+}
+
 function Row({
   row,
-  open,
-  onToggle,
+  onOpenSerialDrawer,
   onAction,
 }: {
   row: LineItemRow;
-  open: boolean;
-  onToggle: (rowId: string) => void;
+  onOpenSerialDrawer: (row: LineItemRow) => void;
   onAction: (row: LineItemRow, actionKey: ActionKey) => void;
 }) {
   const serialsCount = row.quantitys?.length || 0;
   const coverage = Math.min(100, Math.round((serialsCount / Math.max(row.quantity || 1, 1)) * 100));
   const statusMeta = meta[row.status] || meta["PL"];
-  const handleRowToggle = () => onToggle(row.id);
+  const handleOpenSerialDrawer = () => onOpenSerialDrawer(row);
   const stopRowToggle = (event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation();
   };
@@ -189,28 +303,15 @@ function Row({
     <>
       <TableRow
         hover
-        onClick={handleRowToggle}
+        onClick={handleOpenSerialDrawer}
         sx={{
           "& > *": {
             verticalAlign: "top",
             borderColor: "divider",
-            borderBottom: open ? "none" : undefined,
           },
-          bgcolor: open ? alpha(statusMeta.accent, 0.04) : "transparent",
           cursor: "pointer",
         }}
       >
-        <TableCell width={52}>
-          <IconButton
-            size="small"
-            onClick={(event) => {
-              event.stopPropagation();
-              handleRowToggle();
-            }}
-          >
-            {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
-          </IconButton>
-        </TableCell>
         <TableCell sx={{ minWidth: 70 }}>
           <Typography fontWeight={700}>{row.line_no}</Typography>
           <Typography variant="caption" color="text.secondary">{row.con_auth || "--"}</Typography>
@@ -244,6 +345,9 @@ function Row({
         </TableCell>
         <TableCell sx={{ minWidth: 130 }}>
           <Chip label={statusMeta?.label || row.status} size="small" sx={{ bgcolor: statusMeta?.bg, color: statusMeta?.color, fontWeight: 800, mb: 1 }} />
+          <Typography variant="caption" color="text.secondary" display="block">
+            {serialsCount} serials | {coverage}% mapped
+          </Typography>
         </TableCell>
          
         <TableCell sx={{ minWidth: 280 }}>
@@ -282,78 +386,6 @@ function Row({
           </Stack>
         </TableCell>
       </TableRow>
-      <TableRow sx={{ bgcolor: open ? alpha(statusMeta.accent, 0.04) : "transparent" }}>
-        <TableCell
-          colSpan={10}
-          sx={{
-            py: 0,
-            border: "none",
-            borderBottom: open ? "1px solid" : "none",
-            borderColor: "divider",
-          }}
-        >
-          <Collapse in={open} timeout="auto" unmountOnExit>
-            <Box sx={{ px: { xs: 2, md: 3 }, py: 2 }}>
-              <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} sx={{ mb: 2.5 }}>
-                <Card sx={{ ...cardSx, flex: 1 }}><Box sx={{ p: 2 }}><Typography variant="caption" color="text.secondary">Serial Register</Typography><Typography variant="h6" fontWeight={800}>{serialsCount} serials logged</Typography><Typography variant="body2" color="text.secondary">Each serial child can drive manufacturing, issue and label workflow.</Typography></Box></Card>
-                <Card sx={{ ...cardSx, flex: 1 }}><Box sx={{ p: 2 }}><Typography variant="caption" color="text.secondary">Dispatch Readiness</Typography><Typography variant="h6" fontWeight={800}>{row.actions?.printLabel?.enabled ? "Ready for label print" : "Not ready for label print"}</Typography><Typography variant="body2" color="text.secondary">Work order {row.wo_no} with target dispatch {formatDate(row.client_delivery_date)}.</Typography></Box></Card>
-              </Stack>
-              <Typography variant="body1" fontWeight={800} sx={{ mb: 1.5, color: "text.primary" }}>Serial Number Wise Child Items</Typography>
-              <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, bgcolor: "#FFF" }}>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow sx={{ "& th": { bgcolor: "#F8FAFC", color: "#475569", fontWeight: 700, whiteSpace: "nowrap" } }}>
-                      <TableCell>Serial No</TableCell>
-                      <TableCell>{dateHeaderLabel("Ass Rel")}</TableCell>
-                      <TableCell>{dateHeaderLabel("Ac Ua")}</TableCell>
-                      <TableCell>{dateHeaderLabel("Ac Comp")}</TableCell>
-                      <TableCell>{dateHeaderLabel("Ac Pk")}</TableCell>
-                      <TableCell>{dateHeaderLabel("Ac Ds")}</TableCell>
-                      <TableCell>{dateHeaderLabel("Tent Rel")}</TableCell>
-                       <TableCell>{dateHeaderLabel("Ac Ho")}</TableCell>
-                      <TableCell>{dateHeaderLabel("Ac Ca")}</TableCell>
-                      <TableCell>Status</TableCell>
-                      <TableCell>Sh Type</TableCell>
-                      <TableCell>Sh Item</TableCell>
-                      <TableCell>Rpm</TableCell>
-                      <TableCell>Motor Serial No</TableCell>
-                     
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {row.quantitys && row.quantitys.length ? row.quantitys.map((serial) => (
-                      <TableRow key={serial.serial_no} hover>
-                        <TableCell><Typography fontWeight={700}>{serial.serial_no}</Typography></TableCell>
-                        <TableCell>{formatDate(serial.ass_rel_date)}</TableCell>
-                        <TableCell>{formatDate(serial.ac_ua_date)}</TableCell>
-                        <TableCell>{formatDate(serial.ac_comp_date)}</TableCell>
-                        <TableCell>{formatDate(serial.ac_pk_date)}</TableCell>
-                        <TableCell>{formatDate(serial.ac_ds_date)}</TableCell>
-                        <TableCell>{formatDate(serial.tent_rel_date)}</TableCell>
-                         <TableCell>{formatDate(serial.ac_ho_date)}</TableCell>
-                        <TableCell>{formatDate(serial.ac_ca_date)}</TableCell>
-                        <TableCell><Chip size="small" label={meta[serial.status || ""]?.label || serial.status} sx={{ bgcolor: meta[serial.status || ""]?.bg || "#ccc", color: meta[serial.status || ""]?.color || "#000", fontWeight: 700 }} /></TableCell>
-                        <TableCell>{serial.sh_type || "--"}</TableCell>
-                        <TableCell>{serial.sh_item || "--"}</TableCell>
-                        <TableCell>{serial.rpm || "--"}</TableCell>
-                        <TableCell>{serial.motor_serial_no || "--"}</TableCell>
-                       
-                      </TableRow>
-                    )) : (
-                      <TableRow>
-                        <TableCell colSpan={14} align="center" sx={{ py: 4 }}>
-                          <Typography fontWeight={700}>Serials not generated yet.</Typography>
-                          <Typography variant="body2" color="text.secondary">Start with work order approval, then enable serial number generation.</Typography>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Box>
-          </Collapse>
-        </TableCell>
-      </TableRow>
     </>
   );
 }
@@ -366,12 +398,11 @@ function Index({ defaultValues = {} }: LineItemsProps) {
   const [location, setLocation] = useState("");
   const [searchText, setSearchText] = useState("");
   const [page, setPage] = useState(1);
-  const [openRowId, setOpenRowId] = useState<string | null>(null);
-  const [rows, setRows] = useState<LineItemRow[]>(() => sampleRows(defaultValues));
+  const [rows, setRows] = useState<LineItemRow[]>(() => sampleRows());
   const rowsPerPage = 4;
 
   useEffect(() => {
-    setRows(sampleRows(defaultValues));
+    setRows(sampleRows());
   }, [defaultValues]);
 
   const statusOptions = useMemo(() => [{ value: "", label: "All Status" }, ...Array.from(new Set(rows.map((row) => row.status))).map((value) => ({ value, label: meta[value]?.label || value }))], [rows]);
@@ -418,8 +449,14 @@ function Index({ defaultValues = {} }: LineItemsProps) {
     { title: "ORDER VALUE", value: formatAmount(summary.amount), caption: "Net selling value", icon: <CurrencyRupeeOutlinedIcon />, accent: "#B45309" },
   ];
 
-  const handleToggleRow = (rowId: string) => {
-    setOpenRowId((current) => (current === rowId ? null : rowId));
+  const handleOpenSerialDrawer = (row: LineItemRow) => {
+    openModal({
+      title: `Line ${row.line_no} Serial Numbers`,
+      width: "calc(100% - 180px)",
+      showCloseButton: true,
+      askDataChangeConfirm: false,
+      component: (modalProps: any) => <SerialNumberDrawer {...modalProps} row={row} />,
+    });
   };
 
   const normalizeRoadPermitValue = (value: string | boolean) => {
@@ -526,7 +563,7 @@ function Index({ defaultValues = {} }: LineItemsProps) {
       {/* ══════════ Line Items Table ══════════ */}
       <FormSection
         title="Sales Order Line Items"
-        description="Each parent row controls serial-number child items and workflow buttons"
+        description="Click any line item to open its serial-number child records in a child drawer"
         icon={<ViewListOutlinedIcon fontSize="small" />}
         accentColor="#1D4ED8"
 
@@ -539,7 +576,7 @@ function Index({ defaultValues = {} }: LineItemsProps) {
             <Table>
               <TableHead>
                 <TableRow sx={{ "& th": { bgcolor: "#F8FAFC", color: "#475569", fontSize: "0.78rem", fontWeight: 800, whiteSpace: "nowrap" } }}>
-                  <TableCell /><TableCell>Line</TableCell><TableCell>Ordered Item</TableCell><TableCell>Qty</TableCell><TableCell>Commercial</TableCell><TableCell>Delivery</TableCell><TableCell>Work Order</TableCell><TableCell>Status</TableCell> <TableCell>Actions</TableCell>
+                  <TableCell>Line</TableCell><TableCell>Ordered Item</TableCell><TableCell>Qty</TableCell><TableCell>Commercial</TableCell><TableCell>Delivery</TableCell><TableCell>Work Order</TableCell><TableCell>Status</TableCell> <TableCell>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -547,8 +584,7 @@ function Index({ defaultValues = {} }: LineItemsProps) {
                   <Row
                     key={row.id}
                     row={row}
-                    open={openRowId === row.id}
-                    onToggle={handleToggleRow}
+                    onOpenSerialDrawer={handleOpenSerialDrawer}
                     onAction={handleRowAction}
                   />
                 ))}

@@ -1,0 +1,920 @@
+{
+  "info": {
+    "_postman_id": "8f0d1fc5-69fe-4b87-9fda-warehouse-module",
+    "name": "Warehouse Module APIs",
+    "description": "Postman collection generated from `src/redux/api/warehouse.ts` and warehouse item upload flow. Update collection variables like `authToken`, `warehouseId`, `zoneId`, `rackId`, `palletId`, `itemId`, and `transactionId` before running requests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{authToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://wmsapi.techelecon.in/api"
+    },
+    {
+      "key": "authToken",
+      "value": ""
+    },
+    {
+      "key": "orgId",
+      "value": "1"
+    },
+    {
+      "key": "createdBy",
+      "value": "1"
+    },
+    {
+      "key": "warehouseId",
+      "value": "1"
+    },
+    {
+      "key": "zoneId",
+      "value": "1"
+    },
+    {
+      "key": "rackId",
+      "value": "1"
+    },
+    {
+      "key": "palletId",
+      "value": "1"
+    },
+    {
+      "key": "itemId",
+      "value": "1"
+    },
+    {
+      "key": "transactionId",
+      "value": "1"
+    },
+    {
+      "key": "documentId",
+      "value": "1"
+    },
+    {
+      "key": "subLocId",
+      "value": "1"
+    },
+    {
+      "key": "supplierId",
+      "value": "1"
+    },
+    {
+      "key": "filePath",
+      "value": "C:/path/to/image.png"
+    }
+  ],
+  "item": [
+    {
+      "name": "Warehouse",
+      "item": [
+        {
+          "name": "List Warehouses",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/warehouse?skip=0&limit=15&sort_by=id&sort_order=desc&search=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "warehouse"
+              ],
+              "query": [
+                {
+                  "key": "skip",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "15"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "id"
+                },
+                {
+                  "key": "sort_order",
+                  "value": "desc"
+                },
+                {
+                  "key": "search",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Warehouse By ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/warehouse/{{warehouseId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "warehouse",
+                "{{warehouseId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Warehouse",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"org_id\": \"{{orgId}}\",\n  \"warehouse_code\": \"WH-001\",\n  \"warehouse_name\": \"Main Warehouse\",\n  \"manager_name\": \"Warehouse Manager\",\n  \"contact_number\": \"9876543210\",\n  \"email\": \"warehouse@example.com\",\n  \"location\": \"Ahmedabad\",\n  \"address\": \"GIDC Industrial Area\",\n  \"storage_capacity\": 5000,\n  \"notes\": \"Primary warehouse\",\n  \"status\": \"ACTIVE\",\n  \"created_by\": \"{{createdBy}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/warehouse",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "warehouse"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Warehouse",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"warehouse_code\": \"WH-001\",\n  \"warehouse_name\": \"Main Warehouse Updated\",\n  \"manager_name\": \"Warehouse Manager\",\n  \"contact_number\": \"9876543210\",\n  \"email\": \"warehouse@example.com\",\n  \"location\": \"Ahmedabad\",\n  \"address\": \"Updated address\",\n  \"storage_capacity\": 5500,\n  \"notes\": \"Updated notes\",\n  \"status\": \"ACTIVE\",\n  \"is_active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/warehouse/{{warehouseId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "warehouse",
+                "{{warehouseId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Warehouse",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/warehouse/{{warehouseId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "warehouse",
+                "{{warehouseId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Warehouse Dashboard",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/warehouse/dashboard?warehouse_id={{warehouseId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "warehouse",
+                "dashboard"
+              ],
+              "query": [
+                {
+                  "key": "warehouse_id",
+                  "value": "{{warehouseId}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Zone",
+      "item": [
+        {
+          "name": "List Zones",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/zone?skip=0&limit=15&sort_by=id&sort_order=desc&search=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "zone"
+              ],
+              "query": [
+                {
+                  "key": "skip",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "15"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "id"
+                },
+                {
+                  "key": "sort_order",
+                  "value": "desc"
+                },
+                {
+                  "key": "search",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Zone By ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/zone/{{zoneId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "zone",
+                "{{zoneId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Zone",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"warehouse_id\": {{warehouseId}},\n  \"zone_code\": \"ZN-001\",\n  \"zone_title\": \"Receiving Zone\",\n  \"zone_description\": \"Goods inward area\",\n  \"status\": \"ACTIVE\",\n  \"created_by\": \"{{createdBy}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/zone",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "zone"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Zone",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"zone_code\": \"ZN-001\",\n  \"zone_title\": \"Receiving Zone Updated\",\n  \"zone_description\": \"Updated description\",\n  \"status\": \"ACTIVE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/zone/{{zoneId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "zone",
+                "{{zoneId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Zone",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/zone/{{zoneId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "zone",
+                "{{zoneId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rack",
+      "item": [
+        {
+          "name": "List Racks",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/rack?skip=0&limit=15&sort_by=id&sort_order=desc&search=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rack"
+              ],
+              "query": [
+                {
+                  "key": "skip",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "15"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "id"
+                },
+                {
+                  "key": "sort_order",
+                  "value": "desc"
+                },
+                {
+                  "key": "search",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Rack By ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/rack/{{rackId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rack",
+                "{{rackId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Rack",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"warehouse_id\": {{warehouseId}},\n  \"zone_id\": {{zoneId}},\n  \"rack_code\": \"RK-001\",\n  \"rack_description\": \"Main storage rack\",\n  \"status\": \"ACTIVE\",\n  \"created_by\": \"{{createdBy}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/rack",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rack"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Rack",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"warehouse_id\": {{warehouseId}},\n  \"zone_id\": {{zoneId}},\n  \"rack_code\": \"RK-001\",\n  \"rack_description\": \"Updated rack description\",\n  \"status\": \"ACTIVE\",\n  \"fifo\": true,\n  \"exp_date\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/rack/{{rackId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rack",
+                "{{rackId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Rack",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/rack/{{rackId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rack",
+                "{{rackId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Pallet",
+      "item": [
+        {
+          "name": "List Pallets",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/pallet?skip=0&limit=15&sort_by=id&sort_order=desc&search=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pallet"
+              ],
+              "query": [
+                {
+                  "key": "skip",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "15"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "id"
+                },
+                {
+                  "key": "sort_order",
+                  "value": "desc"
+                },
+                {
+                  "key": "search",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Pallet By ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/pallet/{{palletId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pallet",
+                "{{palletId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Pallet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"warehouse_id\": {{warehouseId}},\n  \"zone_id\": {{zoneId}},\n  \"rack_id\": {{rackId}},\n  \"pallet_name\": \"Pallet A1\",\n  \"max_capacity\": 100,\n  \"status\": \"AVAILABLE\",\n  \"created_by\": \"{{createdBy}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pallet",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pallet"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Pallet",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"zone_id\": {{zoneId}},\n  \"rack_id\": {{rackId}},\n  \"pallet_name\": \"Pallet A1 Updated\",\n  \"max_capacity\": 120,\n  \"status\": \"AVAILABLE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pallet/{{palletId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pallet",
+                "{{palletId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Pallet",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/pallet/{{palletId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pallet",
+                "{{palletId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Item",
+      "item": [
+        {
+          "name": "List Items",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/item?skip=0&limit=15&sort_by=id&sort_order=desc&search=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "item"
+              ],
+              "query": [
+                {
+                  "key": "skip",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "15"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "id"
+                },
+                {
+                  "key": "sort_order",
+                  "value": "desc"
+                },
+                {
+                  "key": "search",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Item By ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/item/{{itemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "item",
+                "{{itemId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Item",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"oracle_code\": \"OC-001\",\n  \"rack_id\": {{rackId}},\n  \"sub_loc_id\": {{subLocId}},\n  \"pallet_id\": {{palletId}},\n  \"item_desc\": \"Warehouse sample item\",\n  \"item_category\": \"Spares\",\n  \"locator\": \"LOC-A1\",\n  \"sub_inventory\": \"MAIN\",\n  \"detail_qty\": 10,\n  \"in_qty\": 0,\n  \"out_qty\": 0,\n  \"has_expiry\": false,\n  \"expiry_date\": null,\n  \"item_image_document_id\": null,\n  \"item_image_name\": null,\n  \"item_image_path\": null,\n  \"qr_code\": \"Oracle Code: OC-001\",\n  \"qty\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/item",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "item"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Item",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"oracle_code\": \"OC-001\",\n  \"rack_id\": {{rackId}},\n  \"sub_loc_id\": {{subLocId}},\n  \"pallet_id\": {{palletId}},\n  \"item_desc\": \"Warehouse sample item updated\",\n  \"item_category\": \"Spares\",\n  \"locator\": \"LOC-A1\",\n  \"sub_inventory\": \"MAIN\",\n  \"detail_qty\": 8,\n  \"in_qty\": 3,\n  \"out_qty\": 0,\n  \"has_expiry\": true,\n  \"expiry_date\": \"2026-04-16\",\n  \"item_image_document_id\": null,\n  \"item_image_name\": null,\n  \"item_image_path\": null,\n  \"qr_code\": \"Oracle Code: OC-001\\nQuantity: 8\",\n  \"qty\": 11\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/item/{{itemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "item",
+                "{{itemId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Item",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/item/{{itemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "item",
+                "{{itemId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transaction",
+      "item": [
+        {
+          "name": "List Transactions",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/transaction?skip=0&limit=15&sort_by=id&sort_order=desc&search=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transaction"
+              ],
+              "query": [
+                {
+                  "key": "skip",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "15"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "id"
+                },
+                {
+                  "key": "sort_order",
+                  "value": "desc"
+                },
+                {
+                  "key": "search",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Transaction By ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/transaction/{{transactionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transaction",
+                "{{transactionId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"item_id\": {{itemId}},\n  \"oracle_code\": \"OC-001\",\n  \"rack_id\": {{rackId}},\n  \"sub_loc_id\": {{subLocId}},\n  \"operation\": \"IN\",\n  \"qty\": 5,\n  \"supplier_id\": {{supplierId}},\n  \"transaction_date\": \"2026-04-14\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transaction",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transaction"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Document Upload",
+      "item": [
+        {
+          "name": "Upload Warehouse Item Document",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "item-image.png",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "{{filePath}}"
+                },
+                {
+                  "key": "type",
+                  "value": "warehouse_item",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/document/upload",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "document",
+                "upload"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Document By ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/document/{{documentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "document",
+                "{{documentId}}"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

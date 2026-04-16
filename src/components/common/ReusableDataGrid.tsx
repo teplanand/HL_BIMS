@@ -116,6 +116,8 @@ export interface ReusableDataGridProps {
     md?: number;
     lg?: number;
   };
+  headerTextAlign?: "left" | "center";
+  headerVerticalAlign?: "top" | "center";
 }
 
 type ColumnWithFilterValueGetter = GridColDef & {
@@ -340,6 +342,8 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
   onViewModeChange,
   renderRowCard,
   cardViewGridProps,
+  headerTextAlign = "center",
+  headerVerticalAlign = "center",
 }) => {
   const [viewMode, setViewMode] = useState<"table" | "grid">(defaultViewMode);
   const [searchQuery, setSearchQuery] = useState("");
@@ -997,8 +1001,14 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
     ],
   );
 
+  const sharedGridHeaderBackground = (theme: any) =>
+    theme.palette.mode === "dark" ? "#0F172A" : "#F8FAFC";
+  const sharedGridHeaderBorder = (theme: any) =>
+    theme.palette.mode === "dark" ? "#334155" : "#CBD5E1";
+
   const sharedGridSx = {
     border: "1px solid",
+    padding: 0,
     borderColor: "divider",
     borderRadius: "4px",
     backgroundColor: "background.paper",
@@ -1009,27 +1019,61 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
     overflow: "hidden",
     "& .MuiDataGrid-main": {
       overflow: "hidden",
+      border: "none",
     },
     "& .MuiDataGrid-virtualScroller": {
       overflowY: "auto",
+      border: "none",
+    },
+    "& .MuiDataGrid-scrollbar": {
+      border: "none",
+    },
+    "& .MuiDataGrid-scrollbar--horizontal": {
+      borderTop: "none",
+    },
+    "& .MuiDataGrid-scrollbar--vertical": {
+      borderLeft: "none",
+    },
+    "& .MuiDataGrid-scrollbarFiller": {
+      border: "none",
+      backgroundColor: "transparent",
     },
     "& .MuiDataGrid-columnHeaders": {
-      backgroundColor: "background.default",
-      borderBottom: "0.5px solid",
-      borderColor: "divider",
+      backgroundColor: (theme: any) => sharedGridHeaderBackground(theme),
+      borderBottom: "1px solid",
+      borderColor: (theme: any) => sharedGridHeaderBorder(theme),
     },
     "& .MuiDataGrid-columnHeader": {
       padding: compact ? "8px 10px" : "12px 16px",
       minHeight: compact ? 42 : 48,
+      backgroundColor: (theme: any) => sharedGridHeaderBackground(theme),
+      borderBottom: (theme: any) => `1px solid ${sharedGridHeaderBorder(theme)}`,
       "&:focus, &:focus-within": {
         outline: "none",
       },
+    },
+    "& .MuiDataGrid-columnHeaderTitleContainer": {
+      whiteSpace: "normal",
+      lineHeight: 1.15,
+      justifyContent: headerTextAlign === "left" ? "flex-start" : "center",
+      alignItems: headerVerticalAlign === "top" ? "flex-start" : "center",
+      textAlign: headerTextAlign,
+      overflow: "visible",
+      height: "100%",
+      pt: headerVerticalAlign === "top" ? 1 : 0,
+      pb: headerVerticalAlign === "top" ? 0.25 : 0,
+    },
+    "& .MuiDataGrid-columnHeaderTitleContainerContent": {
+      width: "100%",
+      overflow: "visible",
     },
     "& .MuiDataGrid-columnHeaderTitle": {
       fontWeight: 700,
       fontSize: compact ? "0.8rem" : "0.875rem",
       color: "text.secondary",
-      lineHeight: 1.3,
+      lineHeight: 1.15,
+      whiteSpace: "normal",
+      textAlign: headerTextAlign,
       overflow: "visible",
       textOverflow: "clip",
     },
@@ -1250,7 +1294,7 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
           hideFooter
           density={compact ? "compact" : "standard"}
           getRowHeight={() => rowHeight}
-          columnHeaderHeight={50}
+          columnHeaderHeight={62}
           autosizeOnMount
           autosizeOptions={{
             includeHeaders: true,
@@ -1288,11 +1332,30 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
               position: "sticky",
               top: 0,
               zIndex: 3,
-              backgroundColor: "background.default",
+              backgroundColor: (theme: any) => sharedGridHeaderBackground(theme),
+              borderBottom: (theme: any) => `1px solid ${sharedGridHeaderBorder(theme)}`,
+            },
+            "& .MuiDataGrid-columnHeader": {
+              backgroundColor: (theme: any) => sharedGridHeaderBackground(theme),
+              alignItems: headerVerticalAlign === "top" ? "flex-start" : "center",
             },
             "& .MuiDataGrid-virtualScroller": {
               overflowY: "auto !important",
               overflowX: "auto",
+              border: "none",
+            },
+            "& .MuiDataGrid-scrollbar": {
+              border: "none",
+            },
+            "& .MuiDataGrid-scrollbar--horizontal": {
+              borderTop: "none",
+            },
+            "& .MuiDataGrid-scrollbar--vertical": {
+              borderLeft: "none",
+            },
+            "& .MuiDataGrid-scrollbarFiller": {
+              border: "none",
+              backgroundColor: "transparent",
             },
           }}
         />

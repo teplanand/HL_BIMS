@@ -9,6 +9,7 @@ import { companyApi } from "./api/company";
 import { userApi } from "./api/user";
 import { loginApi } from "./api/login";
 import { documentApi } from "./api/document";
+import { evidanceCollectionApi } from "./api/evidancecollection";
 import { orderTrackingApi } from "./api/ordertracking";
 import { warehouseApi } from "./api/warehouse";
 import { components } from "./components";
@@ -24,6 +25,7 @@ export const store = configureStore({
     [loginApi.reducerPath]: loginApi.reducer,
     [companyApi.reducerPath]: companyApi.reducer,
     [documentApi.reducerPath]: documentApi.reducer,
+    [evidanceCollectionApi.reducerPath]: evidanceCollectionApi.reducer,
     [orderTrackingApi.reducerPath]: orderTrackingApi.reducer,
     [warehouseApi.reducerPath]: warehouseApi.reducer,
   },
@@ -34,6 +36,7 @@ export const store = configureStore({
       .concat(userApi.middleware)
       .concat(companyApi.middleware)
       .concat(documentApi.middleware)
+      .concat(evidanceCollectionApi.middleware)
       .concat(orderTrackingApi.middleware)
       .concat(warehouseApi.middleware)
     });

@@ -11,8 +11,12 @@ import {
   Typography,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
+import { useDispatch } from "react-redux";
 
 import { Page } from "../../../components/common/Page";
+import { useLoginMutation } from "../../../redux/api/evidancecollection";
+import { setToken as setReduxToken } from "../../../redux/authSlice";
+import { setToken as persistToken } from "../../../utils/auth";
 import { CategoryTree } from "./components/CategoryTree";
 import { EvidenceCard } from "./components/EvidenceCard";
 import { FilterBar } from "./components/FilterBar";
@@ -88,6 +92,8 @@ const filterCategoriesBySearch = (categories: typeof mockEvidenceCategories, que
 
 const POPage = () => {
   const [categorySearchText, setCategorySearchText] = useState("");
+  const dispatchRedux = useDispatch();
+  const [login] = useLoginMutation();
 
   const initialState = useMemo(
     () =>
@@ -107,6 +113,37 @@ const POPage = () => {
 
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const autoLogin = async () => {
+      try {
+        const response = await login().unwrap();
+        const token =
+          typeof response?.token === "string" && response.token
+            ? response.token
+            : typeof response?.access_token === "string"
+              ? response.access_token
+              : null;
+
+        if (!isActive || !token) {
+          return;
+        }
+
+        persistToken(token);
+        dispatchRedux(setReduxToken(token));
+      } catch (error) {
+        console.error("Evidence auto login failed", error);
+      }
+    };
+
+    void autoLogin();
+
+    return () => {
+      isActive = false;
+    };
+  }, [dispatchRedux, login]);
 
   const categoryPathMap = useMemo(
     () => buildCategoryPathMap(mockEvidenceCategories),

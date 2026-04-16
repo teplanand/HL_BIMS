@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
-import { Box, Button, ButtonBase, Card, CardContent, Grid, TextField, Tooltip, Typography } from "@mui/material";
+import { Box, Button, ButtonBase, Card, CardContent, TextField, Tooltip, Typography } from "@mui/material";
 import {
   GridColDef,
   GridFilterInputValueProps,
@@ -46,7 +46,8 @@ const STATUS_COLORS = {
 const SUMMARY_STATUS_COLORS = {
   "Completed On Time": ORDER_TRACKING_COLORS.statusSuccess,
   "Completed Delayed": ORDER_TRACKING_COLORS.statusDanger,
-  "In Progress": ORDER_TRACKING_COLORS.statusInfo,
+  "In Progress On Time": ORDER_TRACKING_COLORS.statusInfo,
+  "In Progress Delay": "#60A5FA",
   "Not Started": ORDER_TRACKING_COLORS.statusMuted,
 } as const;
 
@@ -110,22 +111,22 @@ const summaryCardClassMap: Record<
 };
 
 const processStageColumns = [
-  { field: "design", headerName: "Design", width: 86, minWidth: 86 },
-  { field: "manufacturing", headerName: "Mfg", width: 86, minWidth: 86 },
-  { field: "assembly", headerName: "Assembly", width: 96, minWidth: 96 },
-  { field: "testing", headerName: "Testing", width: 88, minWidth: 88 },
-  { field: "dispatch", headerName: "Dispatch", width: 92, minWidth: 92 },
+  { field: "design", headerName: "Design" },
+  { field: "manufacturing", headerName: "Mfg"  },
+  { field: "assembly", headerName: "Assembly"  },
+  { field: "testing", headerName: "Testing"  },
+  { field: "dispatch", headerName: "Dispatch"  },
 ] as const;
 
 const planDateColumns = [
-  { field: "amp_actual", headerName: "AMP Dt", width: 98, minWidth: 98 },
-  { field: "bom_actual", headerName: "BOM Dt", width: 98, minWidth: 98 },
-  { field: "gearcase_actual", headerName: "Gearcase Dt", width: 108, minWidth: 108 },
-  { field: "internal_actual", headerName: "Internal Dt", width: 98, minWidth: 98 },
-  { field: "bo_actual", headerName: "BO Dt", width: 88, minWidth: 88 },
-  { field: "assembly_actual", headerName: "Assembly Dt", width: 108, minWidth: 108 },
-  { field: "testing_actual", headerName: "Testing Dt", width: 98, minWidth: 98 },
-  { field: "dispatch_date_actual", headerName: "Dispatch Dt", width: 110, minWidth: 110, filterable: true },
+  { field: "amp_actual", headerName: "AMP Date"  },
+  { field: "bom_actual", headerName: "BOM Date"  },
+  { field: "gearcase_actual", headerName: "Gearcase Date"  },
+  { field: "internal_actual", headerName: "Internal Date"  },
+  { field: "bo_actual", headerName: "BO Date" },
+  { field: "assembly_actual", headerName: "Assembly Date" },
+  { field: "testing_actual", headerName: "Testing Date"  },
+  { field: "dispatch_date_actual", headerName: "Dispatch Date",  filterable: true },
 ] as const;
 
 const actualToPlanFieldMap: Record<string, string> = {
@@ -148,9 +149,10 @@ const summaryCardKeys: Record<(typeof processStageColumns)[number]["field"], str
 };
 
 const summaryStatuses = [
-  { key: "Completed On Time", color: SUMMARY_STATUS_COLORS["Completed On Time"], tooltip: "Completed" },
-  { key: "Completed Delayed", color: SUMMARY_STATUS_COLORS["Completed Delayed"], tooltip: "Completed" },
-  { key: "In Progress", color: SUMMARY_STATUS_COLORS["In Progress"], tooltip: "In Progress" },
+  { key: "Completed On Time", color: SUMMARY_STATUS_COLORS["Completed On Time"], tooltip: "Completed On Time" },
+  { key: "Completed Delayed", color: SUMMARY_STATUS_COLORS["Completed Delayed"], tooltip: "Completed Delayed" },
+  { key: "In Progress On Time", color: SUMMARY_STATUS_COLORS["In Progress On Time"], tooltip: "In Progress On Time" },
+  { key: "In Progress Delay", color: SUMMARY_STATUS_COLORS["In Progress Delay"], tooltip: "In Progress Delay" },
   { key: "Not Started", color: SUMMARY_STATUS_COLORS["Not Started"], tooltip: "Not Started" },
 ] as const;
 
@@ -435,8 +437,66 @@ const getPlanActualDisplayColor = (plan: any, actual: any) => {
   return STATUS_COLORS["In Progress"];
 };
 
+const getTodayDateTimestamp = () => {
+  const today = new Date();
+  return Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+};
+
+const isPlanDateDelayedAgainstToday = (plan: unknown) => {
+  const planTimestamp = getDateOnlyTimestamp(plan);
+
+  if (planTimestamp === null) {
+    return false;
+  }
+
+  const todayTimestamp = getTodayDateTimestamp();
+
+  return todayTimestamp > planTimestamp;
+};
+
+const getPendingPlanDatesForStage = (field: string, row: Record<string, any>) => {
+  switch (field) {
+    case "design":
+      return [
+        [row.ga_dim_drw_submission_design_plan, row.ga_dim_drw_submission_design_actual],
+        [row.final_drg_approval_received_date_plan, row.final_drg_approval_received_date_actual],
+        [row.bom_plan, row.bom_actual],
+      ]
+        .filter(([, actual]) => isNull(actual))
+        .map(([plan]) => plan);
+    case "manufacturing":
+    case "assembly":
+      return [
+        [row.gear_case_plan, row.gearcase_actual],
+        [row.internal_plan, row.internal_actual],
+        [row.bo_plan, row.bo_actual],
+        [row.assembly_plan, row.assembly_actual],
+      ]
+        .filter(([, actual]) => isNull(actual))
+        .map(([plan]) => plan);
+    case "testing":
+      return isNull(row.testing_actual) ? [row.testing_plan] : [];
+    case "dispatch":
+      return isNull(row.dispatch_date_actual) ? [row.dispatch_date_plan] : [];
+    default:
+      return [];
+  }
+};
+
+const getInProgressStatusKey = (field: string, row: Record<string, any>) => {
+  const pendingPlanDates = getPendingPlanDatesForStage(field, row);
+
+  return pendingPlanDates.some((planDate) => isPlanDateDelayedAgainstToday(planDate))
+    ? "In Progress Delay"
+    : "In Progress On Time";
+};
+
 const getSummaryStatusKey = (field: string, row: Record<string, any>) => {
   const status = String(row[field] ?? "Not Started");
+
+  if (status === "In Progress") {
+    return getInProgressStatusKey(field, row);
+  }
 
   if (status !== "Completed") {
     return status;
@@ -486,7 +546,9 @@ const getDesignProcessColor = (row: Record<string, any>) => {
   }
 
   if (colors.includes(STATUS_COLORS["In Progress"])) {
-    return STATUS_COLORS["In Progress"];
+    return getInProgressStatusKey("design", row) === "In Progress Delay"
+      ? SUMMARY_STATUS_COLORS["In Progress Delay"]
+      : SUMMARY_STATUS_COLORS["In Progress On Time"];
   }
 
   if (colors.every((color) => color === STATUS_COLORS["Not Started"])) {
@@ -497,6 +559,18 @@ const getDesignProcessColor = (row: Record<string, any>) => {
 };
 
 const getProcessStatusColor = (field: string, row: Record<string, any>) => {
+  const stageStatus = String(row[field] ?? "Not Started");
+
+  if (stageStatus === "In Progress") {
+    return SUMMARY_STATUS_COLORS[
+      getInProgressStatusKey(field, row) as keyof typeof SUMMARY_STATUS_COLORS
+    ];
+  }
+
+  if (stageStatus === "Not Started") {
+    return STATUS_COLORS["Not Started"];
+  }
+
   switch (field) {
     case "design":
       return getDesignProcessColor(row);
@@ -516,7 +590,7 @@ const getProcessStatusColor = (field: string, row: Record<string, any>) => {
     case "dispatch":
       return getCompletedColor(row.dispatch_date_plan, row.dispatch_date_actual);
     default:
-      return statusColorMap[String(row[field] ?? "Not Started")] || STATUS_COLORS["Not Started"];
+      return statusColorMap[stageStatus] || STATUS_COLORS["Not Started"];
   }
 };
 
@@ -636,11 +710,15 @@ const OrderTrackingDashboard = () => {
   const [selectedField, setSelectedField] = useState("");
   const [selectedRowData, setSelectedRowData] = useState<Record<string, unknown> | null>(null);
 
-  const [getOrders, { isLoading,data }] = useGetOrdersMutation();
+  const [getOrders, { isLoading, data }] = useGetOrdersMutation();
+
+  const refreshOrders = useCallback(() => {
+    void getOrders();
+  }, [getOrders]);
 
   useEffect(() => {
-    getOrders();
-  }, [getOrders]);
+    refreshOrders();
+  }, [refreshOrders]);
 
   const rows = useMemo(() => {
 
@@ -678,7 +756,8 @@ const OrderTrackingDashboard = () => {
           {
             "Completed On Time": 0,
             "Completed Delayed": 0,
-            "In Progress": 0,
+            "In Progress On Time": 0,
+            "In Progress Delay": 0,
             "Not Started": 0,
           }
         );
@@ -829,11 +908,17 @@ const OrderTrackingDashboard = () => {
 const renderProcessCell = useCallback(
   (params: GridRenderCellParams) => {
     const status = params.value as string;
+    const row = params.row as Record<string, any>;
+    const summaryStatus = getSummaryStatusKey(params.field, row);
 
     const bgcolor =
-      status === "Completed"
-        ? getProcessStatusColor(params.field, params.row as Record<string, any>)
+      status === "Completed" || status === "In Progress"
+        ? getProcessStatusColor(params.field, row)
         : statusColorMap[status] || STATUS_COLORS["Not Started"];
+    const tooltipLabel =
+      status === "Completed" || status === "In Progress"
+        ? summaryStatus
+        : status.replace(/_/g, " ");
 
     const title =
       typeof params.colDef.headerName === "string" && params.colDef.headerName.trim()
@@ -841,13 +926,14 @@ const renderProcessCell = useCallback(
         : params.field;
 
     return (
-      <Tooltip title={status.replace(/_/g, " ")} {...ORDER_TRACKING_TOOLTIP_PROPS}>
+      <Tooltip title={tooltipLabel} {...ORDER_TRACKING_TOOLTIP_PROPS}>
         <ButtonBase
           onClick={(event) => {
             event.stopPropagation();
             handleTimelineOpen(title, params.row as Record<string, unknown>);
           }}
-          className="flex h-full w-full cursor-pointer items-center justify-center rounded-none"
+          className="flex h-full w-full cursor-pointer   rounded-none"
+          style={{maxWidth:'50px'}}
         >
           <Box
             className="h-4 min-w-4 w-4 rounded-full"
@@ -880,8 +966,7 @@ const renderProcessCell = useCallback(
       {
         field: "line_id",
         headerName: "Line ID",
-        width: 96,
-        minWidth: 96,
+      sortable:false,
         renderCell: (params: GridRenderCellParams) => (
           <Box
             onClick={(event) => {
@@ -896,107 +981,139 @@ const renderProcessCell = useCallback(
       },
       {
         field: "cust_po_no",
-        headerName: "Cust PO",
+        headerName: "Customer PO",
         filterable: true,
-        width: 110,
-        minWidth: 110,
+        sortable:false,
+      },
+      {
+        field: "division",
+        headerName: "Division",
+        filterable: true,
+       sortable:false,
+      },
+      {
+        field: "sub_division",
+        headerName: "Sub Division",
+        filterable: true,
+       sortable:false,
+      },
+      {
+        field: "order_type",
+        headerName: "Order Type",
+        filterable: true,
+        sortable:false,
+      },
+      {
+        field: "work_order_no",
+        headerName: "Order Number",
+        filterable: true,
+       sortable:false,
+      },
+      {
+        field: "line_no",
+        headerName: "Line No",
+        filterable: true,
+        sortable:false,
+      },
+      {
+        field: "spare_gearbox",
+        headerName: "Spare / Gearbox",
+        filterable: true,
+        sortable:false,
       },
       {
         field: "end_cust_name",
         headerName: "Customer Name",
         filterable: true,
-        width: 180,
-        minWidth: 180,
-        align: "left",
-        headerAlign: "left",
+       sortable:false,
+       minWidth: 150,
+       flex: 1,
+       
+       
       },
        {
         field: "branch_name",
         headerName: "Branch Name",
         sortable:false,
-        width: 150,
-        minWidth: 150,
-        align: "left",
-        headerAlign: "left",
+          filterable: true,
+           flex: 1,
+             minWidth: 150,
       },
        {
         field: "qty",
         headerName: "Qty",
   
-        width: 50,
-        minWidth: 50,
+       
         sortable: false,
-        align: "center",
-        headerAlign: "center",
+         
       },
        {
         field: "uom",
         headerName: "UOM",
         sortable: false,
-        width: 50,
-        minWidth: 50,
+        
       },
        {
         field: "po_value",
         headerName: "PO Value",
        sortable: false,
-       width: 100,
-        minWidth: 100,
+       
+      },
+      {
+        field: "currency",
+        headerName: "Currency",
+        filterable: true,
+         sortable: false,
       },
       {
         field: "cust_po_date",
-        headerName: "Customer PO Date",
+        headerName: "Cust PO Date",
         type: "date" as const,
         sortable: false,
         filterable: true,
         filterOperators: orderTrackingDateFilterOperators,
         valueGetter: (_value: unknown, row: Record<string, unknown>) =>
           getGridDateValue(row, "cust_po_date"),
-        width: 130,
-        minWidth: 130,
+        
         renderCell: renderDateCell,
       },
       {
         field: "delivery_date_po",
-        headerName: "Delivery PO Date",
+        headerName: "Delivery Date",
         type: "date" as const,
         sortable: false,
         filterable: true,
         filterOperators: orderTrackingDateFilterOperators,
         valueGetter: (_value: unknown, row: Record<string, unknown>) =>
           getGridDateValue(row, "delivery_date_po"),
-        width: 130,
-        minWidth: 130,
+        
         renderCell: renderDateCell,
       },
       {
         field: "commited_ex_works_delivery_date",
-        headerName: "Commercial Ex Works Delivery Date",
+        headerName: "Ex Works Date",
         type: "date" as const,
         sortable: false,
         filterable: true,
         filterOperators: orderTrackingDateFilterOperators,
         valueGetter: (_value: unknown, row: Record<string, unknown>) =>
           getGridDateValue(row, "commited_ex_works_delivery_date"),
-        width: 200,
-        minWidth: 200,
+        
         renderCell: renderDateCell,
       },
       {
         field: "perc_time_taken_of_total_po_delivery",
-        headerName: "Final Approval Time",
+        headerName: "Approval %",
         sortable: false,
         filterable: true,
-        width: 130,
-        minWidth: 130,
+       
         renderCell: renderMetricCell,
       },
       ...processStageColumns.map<GridColDef>((column) => ({
         ...column,
         sortable: false,
         filterable: false,
-        width:70, 
-        minWidth:70,
+       
         renderCell: renderProcessCell,
       })),
       ...planDateColumns.map<GridColDef>((column) => {
@@ -1010,8 +1127,7 @@ const renderProcessCell = useCallback(
             getGridDateValue(row, column.field),
           filterValueGetter: (row: Record<string, unknown>) =>
             getOrderTrackingPlanOrActualDateValue(row, column.field),
-          width:90, 
-          minWidth:90,
+           
           renderCell: renderActualDateCell,
         };
 
@@ -1021,21 +1137,7 @@ const renderProcessCell = useCallback(
     [handleLineIdClick, renderActualDateCell, renderDateCell, renderMetricCell, renderProcessCell]
   );
 
-  const alignedColumns = useMemo(
-    () =>
-      columns.map((column) => {
-        if (["line_id", "cust_po_no"].includes(column.field)) {
-          return column;
-        }
-
-        return {
-          ...column,
-          headerAlign: "center" as const,
-          align: "center" as const,
-        };
-      }),
-    [columns]
-  );
+ 
 
   const gridHeaderControls = useMemo(() => {
     if (!activeStageFilter) {
@@ -1058,99 +1160,111 @@ const renderProcessCell = useCallback(
 
   return (
     <Box>
-      <Grid container spacing={2} className="mb-4">
+      <Box
+        className="mb-4 grid gap-3"
+        sx={{
+          gridTemplateColumns: {
+            xs: "1fr",
+            sm: "repeat(2, minmax(0, 1fr))",
+            lg: "repeat(5, minmax(0, 1fr))",
+            xl: "repeat(5, minmax(0, 1fr))",
+          },
+        }}
+      >
         {processStageColumns.map((stage) => {
           const summaryKey = summaryCardKeys[stage.field];
 
           return (
-          <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2 }} key={stage.field}>
-            <Card
-              onClick={() => setActiveTab(summaryKey)}
-              className={clsx(
-                summaryCardClassMap[summaryKey].card,
-                "overflow-hidden",
-                activeTab === summaryKey && summaryCardClassMap[summaryKey].active
-              )}
-            >
-              <CardContent className="grid gap-3 p-3 sm:gap-4 sm:p-4">
-                <Typography
-                  variant="subtitle2"
-                  color="textSecondary"
-                  gutterBottom
-                  className="dashboard-stat-title text-[0.78rem] sm:text-[0.82rem]"
-                >
-                  {stage.headerName}
-                </Typography>
-                <Box
-                  className="grid grid-cols-2 gap-2 sm:grid-cols-4"
-                >
-                  {summaryStatuses.map((status) => (
-                    <Tooltip key={status.key} title={status.tooltip} {...ORDER_TRACKING_TOOLTIP_PROPS}>
-                      <Box
-                        className="min-h-10 overflow-hidden rounded-md sm:min-h-11"
+          <Card
+            key={stage.field}
+            onClick={() => setActiveTab(summaryKey)}
+            className={clsx(
+              summaryCardClassMap[summaryKey].card,
+              "overflow-hidden rounded-xl",
+              activeTab === summaryKey && summaryCardClassMap[summaryKey].active
+            )}
+            sx={{
+              width: "100%",
+              minWidth: 0,
+            }}
+          >
+            <CardContent className="grid gap-2.5  ">
+              <Typography
+                variant="subtitle2"
+                color="textSecondary"
+                className="dashboard-stat-title text-[0.74rem] font-semibold uppercase tracking-[0.04em] sm:text-[0.78rem]"
+              >
+                {stage.headerName}
+              </Typography>
+              <Box
+                className="grid grid-cols-5 gap-1.5 sm:gap-2"
+              >
+                {summaryStatuses.map((status) => (
+                  <Tooltip key={status.key} title={status.tooltip} {...ORDER_TRACKING_TOOLTIP_PROPS}>
+                    <Box
+                      className="overflow-hidden rounded-md"
+                      style={{
+                        backgroundColor: withAlpha(status.color, "12"),
+                        border: `1px solid ${withAlpha(status.color, "33")}`,
+                      }}
+                    >
+                      <ButtonBase
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleSummaryCountClick(
+                            stage.field,
+                            summaryKey,
+                            status.key
+                          );
+                        }}
+                        className="grid h-full min-h-9 w-full place-items-center px-1 py-1.5 sm:min-h-10"
                         style={{
-                          backgroundColor: withAlpha(status.color, "12"),
-                          border: `1px solid ${withAlpha(status.color, "33")}`,
+                          backgroundColor:
+                            activeStageFilter?.field === stage.field &&
+                            activeStageFilter.status === status.key
+                              ? withAlpha(status.color, "24")
+                              : "transparent",
                         }}
                       >
-                        <ButtonBase
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleSummaryCountClick(
-                              stage.field,
-                              summaryKey,
-                              status.key
-                            );
-                          }}
-                          className="grid h-full min-h-10 w-full place-items-center px-2 py-2 sm:min-h-11"
-                          style={{
-                            backgroundColor:
-                              activeStageFilter?.field === stage.field &&
-                              activeStageFilter.status === status.key
-                                ? withAlpha(status.color, "24")
-                                : "transparent",
-                          }}
+                        <Typography
+                          variant="h6"
+                          className={clsx(
+                            "dashboard-stat-value text-[0.95rem] leading-none font-semibold sm:text-[1.05rem]",
+                            summaryCardClassMap[summaryKey].value
+                          )}
+                          style={{ color: status.color }}
                         >
-                          <Typography
-                            variant="h6"
-                            className={clsx(
-                              "dashboard-stat-value text-[1rem] leading-none font-bold sm:text-[1.15rem]",
-                              summaryCardClassMap[summaryKey].value
-                            )}
-                            style={{ color: status.color }}
-                          >
-                            {stageSummaryCounts[stage.field]?.[status.key] ?? 0}
-                          </Typography>
-                        </ButtonBase>
-                      </Box>
-                    </Tooltip>
-                  ))}
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
+                          {stageSummaryCounts[stage.field]?.[status.key] ?? 0}
+                        </Typography>
+                      </ButtonBase>
+                    </Box>
+                  </Tooltip>
+                ))}
+              </Box>
+            </CardContent>
+          </Card>
         )})}
-      </Grid>
+      </Box>
 
       <Box
-        className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg px-2 py-1.5"
+        className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg px-1 py-1"
       >
         <Typography
           variant="subtitle2"
-          className="mr-1 font-bold text-gray-800 dark:text-white/90 sm:mr-3"
+          className="mr-1 whitespace-nowrap font-bold text-gray-800 dark:text-white/90 sm:mr-2"
         >
           Color Legend
         </Typography>
         {summaryStatuses.map((status) => (
           <Box
             key={status.key}
-            className="mr-2 flex items-center gap-1.5 sm:mr-3"
+            className="flex items-center gap-1.5"
           >
             <Box
-              className="h-3.5 min-w-3.5 w-3.5 rounded-full"
+              className="h-3 min-w-3 w-3 rounded-full"
               style={{ backgroundColor: status.color }}
             />
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="caption" color="text.secondary" className="whitespace-nowrap">
               {status.key}
             </Typography>
           </Box>
@@ -1159,7 +1273,7 @@ const renderProcessCell = useCallback(
 
       <ReusableDataGrid
         rows={filteredRows}
-        columns={alignedColumns}
+        columns={columns}
         totalCount={totalCount}
         loading={isLoading}
         rowHeight={52}
@@ -1171,14 +1285,29 @@ const renderProcessCell = useCallback(
         setFilterModel={setFilterModel}
         title="Order Tracking"
         headerControls={gridHeaderControls}
-        refetch={() => undefined}
-        height="calc(100vh - 308px)"
+        refetch={refreshOrders}
+        height="calc(100vh - 290px)"
      
         pageSizeOptions={[5, 10, 15, 20, 50]}
         enableViewToggle={false}
         permissions={{ create: true, edit: false, delete: false, download: true, view: true }}
         uniqueIdField="id"
-        searchableFields={["end_cust_name", "line_id", "cust_po_no", "branch_name", "uom"]}
+        headerTextAlign="left"
+        headerVerticalAlign="top"
+        searchableFields={[
+          "division",
+          "sub_division",
+          "order_type",
+          "work_order_no",
+          "line_no",
+          "spare_gearbox",
+          "currency",
+          "end_cust_name",
+          "line_id",
+          "cust_po_no",
+          "branch_name",
+          "uom",
+        ]}
       />
 
       <OpenEditPlanModal
