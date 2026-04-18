@@ -966,7 +966,7 @@ const renderProcessCell = useCallback(
       {
         field: "line_id",
         headerName: "Line ID",
-      sortable:false,
+      sortable:true,
         renderCell: (params: GridRenderCellParams) => (
           <Box
             onClick={(event) => {
@@ -983,49 +983,49 @@ const renderProcessCell = useCallback(
         field: "cust_po_no",
         headerName: "Customer PO",
         filterable: true,
-        sortable:false,
+        sortable:true,
       },
       {
         field: "division",
         headerName: "Division",
         filterable: true,
-       sortable:false,
+       sortable:true,
       },
       {
         field: "sub_division",
         headerName: "Sub Division",
         filterable: true,
-       sortable:false,
+       sortable:true,
       },
       {
         field: "order_type",
         headerName: "Order Type",
         filterable: true,
-        sortable:false,
+        sortable:true,
       },
       {
         field: "work_order_no",
         headerName: "Order Number",
         filterable: true,
-       sortable:false,
+       sortable:true,
       },
       {
         field: "line_no",
         headerName: "Line No",
         filterable: true,
-        sortable:false,
+        sortable:true,
       },
       {
         field: "spare_gearbox",
-        headerName: "Spare / Gearbox",
+        headerName: "Spare / Products",
         filterable: true,
-        sortable:false,
+        sortable:true,
       },
       {
         field: "end_cust_name",
         headerName: "Customer Name",
         filterable: true,
-       sortable:false,
+       sortable:true,
        minWidth: 150,
        flex: 1,
        
@@ -1034,7 +1034,7 @@ const renderProcessCell = useCallback(
        {
         field: "branch_name",
         headerName: "Branch Name",
-        sortable:false,
+        sortable:true,
           filterable: true,
            flex: 1,
              minWidth: 150,
@@ -1044,32 +1044,32 @@ const renderProcessCell = useCallback(
         headerName: "Qty",
   
        
-        sortable: false,
+        sortable: true,
          
       },
        {
         field: "uom",
         headerName: "UOM",
-        sortable: false,
+        sortable: true,
         
       },
        {
         field: "po_value",
         headerName: "PO Value",
-       sortable: false,
+       sortable: true,
        
       },
       {
         field: "currency",
         headerName: "Currency",
         filterable: true,
-         sortable: false,
+         sortable: true,
       },
       {
         field: "cust_po_date",
         headerName: "Cust PO Date",
         type: "date" as const,
-        sortable: false,
+        sortable: true,
         filterable: true,
         filterOperators: orderTrackingDateFilterOperators,
         valueGetter: (_value: unknown, row: Record<string, unknown>) =>
@@ -1081,7 +1081,7 @@ const renderProcessCell = useCallback(
         field: "delivery_date_po",
         headerName: "Delivery Date",
         type: "date" as const,
-        sortable: false,
+        sortable: true,
         filterable: true,
         filterOperators: orderTrackingDateFilterOperators,
         valueGetter: (_value: unknown, row: Record<string, unknown>) =>
@@ -1093,7 +1093,7 @@ const renderProcessCell = useCallback(
         field: "commited_ex_works_delivery_date",
         headerName: "Ex Works Date",
         type: "date" as const,
-        sortable: false,
+        sortable: true,
         filterable: true,
         filterOperators: orderTrackingDateFilterOperators,
         valueGetter: (_value: unknown, row: Record<string, unknown>) =>
@@ -1104,7 +1104,7 @@ const renderProcessCell = useCallback(
       {
         field: "perc_time_taken_of_total_po_delivery",
         headerName: "Approval %",
-        sortable: false,
+        sortable: true,
         filterable: true,
        
         renderCell: renderMetricCell,
