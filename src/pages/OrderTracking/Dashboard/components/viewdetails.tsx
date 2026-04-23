@@ -75,16 +75,27 @@ const EDITABLE_ORDER_FIELDS = new Set([
   "ga_drawing_submission_to_final_approval_received_days",
 ]);
 const MULTILINE_FIELDS = new Set(["item_desc_cust_po", "ora_item_desc", "remarks"]);
-const DOUBLE_WIDTH_FIELDS = new Set(["item_desc_cust_po", "ora_item_desc"]);
-
 const LABEL_OVERRIDES: Record<string, string> = {
   id: "ID",
   po: "PO",
   ga: "GA",
   uom: "UOM",
+  cust_po_tech_clear_date: "PO Tech Clear Date",
+  delivery_date_po: "PO Delivery Date",
+  item_desc_cust_po: "Customer PO Item Description",
+  ora_item_desc: "Oracle Item Description",
+  commited_ex_works_delivery_date: "Committed Ex Works Date",
+  ga_dim_no: "GA Dim No",
+  ga_dim_drw_submission_design_plan: "GA Submission Plan",
+  ga_dim_drw_submission_design_actual: "GA Submission Actual",
+  final_drg_approval_received_date_plan: "Final Approval Plan",
+  final_drg_approval_received_date_actual: "Final Approval Actual",
+  po_received_date_to_ga_drw_submission_days: "PO to GA Submission Days",
+  ga_drawing_submission_to_final_approval_received_days: "GA to Final Approval Days",
 };
 
 const toFieldLabel = (key: string) =>
+  LABEL_OVERRIDES[key] ??
   key
     .split("_")
     .filter(Boolean)
@@ -179,6 +190,24 @@ const getFieldHighlightSx = (field: string) =>
           fontWeight: 600,
         },
       };
+
+const NON_CALCULATED_ORDER_FIELDS = ORDER_INFORMATION_FIELDS.filter(
+  (field) => !CALCULATED_FIELD_KEYS.has(field)
+);
+const READ_ONLY_ORDER_FIELDS = NON_CALCULATED_ORDER_FIELDS.filter((field) =>
+  isOrderFieldReadOnly(field)
+);
+const EDITABLE_ORDER_INFORMATION_FIELDS = NON_CALCULATED_ORDER_FIELDS.filter(
+  (field) => !isOrderFieldReadOnly(field)
+);
+
+const getFieldGridColumn = (field: string, columns: number) => {
+  if (MULTILINE_FIELDS.has(field)) {
+    return { md: `span ${columns}` };
+  }
+
+  return undefined;
+};
 
 interface ViewDetailsProps {
   defaultValues?: Record<string, any>;
@@ -349,8 +378,60 @@ function Index(
     );
   }
 
+  const renderOrderField = (field: (typeof ORDER_INFORMATION_FIELDS)[number], columns: number) => {
+    const label = toFieldLabel(field);
+
+    return (
+      <Box
+        key={field}
+        sx={{
+          mb: 1,
+          minWidth: 0,
+          gridColumn: getFieldGridColumn(field, columns),
+        }}
+      >
+        {DATE_INPUT_FIELDS.has(field) ? (
+          <Controller
+            name={field}
+            control={control}
+            render={({ field: dateField }) => (
+              <MuiDatePicker
+                label={label}
+                value={dateField.value ? dayjs(dateField.value) : null}
+                onChange={(value) =>
+                  dateField.onChange(
+                    value && dayjs(value).isValid()
+                      ? dayjs(value).format("YYYY-MM-DD")
+                      : ""
+                  )
+                }
+                readOnly={isOrderFieldReadOnly(field)}
+                textFieldSx={getFieldHighlightSx(field)}
+              />
+            )}
+          />
+        ) : (
+          <MuiTextField
+            label={label}
+            {...register(field)}
+            type="text"
+            multiline={MULTILINE_FIELDS.has(field)}
+            rows={field === "remarks" ? 2 : MULTILINE_FIELDS.has(field) ? 3 : undefined}
+            inputProps={
+              isOrderFieldReadOnly(field)
+                ? { readOnly: MULTILINE_FIELDS.has(field) ? false : true }
+                : undefined
+            }
+            sx={getFieldHighlightSx(field)}
+            fullWidth
+          />
+        )}
+      </Box>
+    );
+  };
+
   return (
-    <Box component="form" onSubmit={handleSubmit(onSubmit)}>
+    <Box component="form" onSubmit={handleSubmit(onSubmit)} sx={{ width: "100%", overflowX: "hidden" }}>
       <Stack spacing={1}>
         <Tabs
           value={activeTab}
@@ -370,66 +451,46 @@ function Index(
           >
             <Stack spacing={2}>
               <Box>
-                <FormStackGrid columns={4}>
-                  {ORDER_INFORMATION_FIELDS.filter((field) => !CALCULATED_FIELD_KEYS.has(field)).map((field) => {
-                    const label = toFieldLabel(field);
-
-                    
-
-                    return (
-                      <Box
-                        key={field}
-                        sx={{
-                          mb: 1,
-                          gridColumn:
-                            field === "remarks"
-                              ? { md: "span 4" }
-                              : DOUBLE_WIDTH_FIELDS.has(field)
-                                ? { md: "span 2" }
-                                : undefined,
-                        }}
-                      >
-                        {DATE_INPUT_FIELDS.has(field) ? (
-                          <Controller
-                            name={field}
-                            control={control}
-                            render={({ field: dateField }) => (
-                              <MuiDatePicker
-                                label={label}
-                                value={dateField.value ? dayjs(dateField.value) : null}
-                                onChange={(value) =>
-                                  dateField.onChange(
-                                    value && dayjs(value).isValid()
-                                      ? dayjs(value).format("YYYY-MM-DD")
-                                      : ""
-                                  )
-                                }
-                                readOnly={isOrderFieldReadOnly(field)}
-                                textFieldSx={getFieldHighlightSx(field)}
-                              />
-                            )}
-                          />
-                        ) : (
-                          <MuiTextField
-                            label={label}
-                            {...register(field)}
-                            type="text"
-                            multiline={MULTILINE_FIELDS.has(field)}
-                            rows={field === "remarks" ? 2 : MULTILINE_FIELDS.has(field) ? 3 : undefined}
-                            inputProps={
-                              isOrderFieldReadOnly(field)
-                                ? { readOnly: MULTILINE_FIELDS.has(field) ? false : true }
-                                : undefined
-                            }
-                            sx={getFieldHighlightSx(field)}
-                            fullWidth
-                          />
-                        )}
-                      </Box>
-                    );
-                  })}
+                <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
+                  Order Details
+                </Typography>
+                <FormStackGrid
+                  columns={3}
+                  sx={{
+                    maxWidth: "100%",
+                    alignItems: "start",
+                    gridTemplateColumns: {
+                      xs: "1fr",
+                      md: "repeat(2, minmax(0, 1fr))",
+                      lg: "repeat(3, minmax(0, 1fr))",
+                    },
+                  }}
+                >
+                  {READ_ONLY_ORDER_FIELDS.map((field) => renderOrderField(field, 3))}
                 </FormStackGrid>
               </Box>
+
+              {EDITABLE_ORDER_INFORMATION_FIELDS.length > 0 && (
+                <Box>
+                  <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
+                    Editable Details
+                  </Typography>
+                  <FormStackGrid
+                    columns={3}
+                    sx={{
+                      maxWidth: "100%",
+                      alignItems: "start",
+                      gridTemplateColumns: {
+                        xs: "1fr",
+                        md: "repeat(2, minmax(0, 1fr))",
+                        lg: "repeat(3, minmax(0, 1fr))",
+                      },
+                    }}
+                  >
+                    {EDITABLE_ORDER_INFORMATION_FIELDS.map((field) => renderOrderField(field, 3))}
+                  </FormStackGrid>
+                </Box>
+              )}
 
               <Box>
                 <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
