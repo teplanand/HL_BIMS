@@ -13,7 +13,7 @@ import { useGetOrderByIdMutation, useUpdateOrderMutation } from "../../../../red
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
 const ORDER_INFORMATION_FIELDS = [
-  "line_id",
+ 
   "division",
   "sub_division",
   "cust_po_no",

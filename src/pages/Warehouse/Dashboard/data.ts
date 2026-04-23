@@ -42,6 +42,8 @@ const buildItem = (item: any, index: number): Pallet => ({
   locator: firstString(item.locator, item.locator_code, item.loc_code),
   description: firstString(item.description, item.item_description),
   sub_inventory: firstString(item.sub_inventory, item.subInventory),
+  supplier_id: firstId(item.supplier_id, item.supplierId, item.vendor_id, item.vendorId),
+  supplierId: firstId(item.supplierId, item.supplier_id, item.vendorId, item.vendor_id),
   has_expiry_date: toBoolean(item.has_expiry ?? item.has_expiry_date),
   expiry_date: item.expiry_date ? String(item.expiry_date) : null,
   item_image_document_id: toNumber(item.item_image_document_id ?? item.document_id) || null,
@@ -123,15 +125,43 @@ export const buildWarehouseHierarchy = ({
       firstString(warehouse.warehouse_code, warehouse.code, warehouse.name) ||
       `WH-${firstId(warehouse.id, index + 1)}`,
     recordId: firstId(warehouse.id, warehouse.warehouse_id),
+    orgId: firstString(warehouse.orgId, warehouse.org_id),
     name:
       firstString(warehouse.warehouse_name, warehouse.warehouseName, warehouse.name) ||
       `Warehouse ${firstId(warehouse.id, index + 1)}`,
-    location:
+    managerName: firstString(
+      warehouse.managerName,
+      warehouse.manager_name,
+      warehouse.warehouse_info?.manager_name,
+      warehouse.warehouseInfo?.manager_name
+    ),
+    contact_no: firstString(
+      warehouse.contact_no,
+      warehouse.contact_number,
+      warehouse.contactNumber,
+      warehouse.warehouse_info?.contact_no,
+      warehouse.warehouseInfo?.contact_no
+    ),
+    email: firstString(
+      warehouse.email,
+      warehouse.warehouse_info?.email,
+      warehouse.warehouseInfo?.email
+    ),
+    address:
       firstString(
-        warehouse.location,
+        warehouse.address,
+        warehouse.warehouse_info?.address,
+        warehouse.warehouseInfo?.address,
         warehouse.city,
-        warehouse.address
-      ) || "Location not available",
+        warehouse.warehouse_info?.city,
+        warehouse.warehouseInfo?.city
+      ) || "Address not available",
+    notes: firstString(
+      warehouse.notes,
+      warehouse.warehouse_info?.notes,
+      warehouse.warehouseInfo?.notes
+    ),
+    status: firstString(warehouse.status) as "ACTIVE" | "INACTIVE" | undefined,
     sections: zones
       .filter((zone: any) => String(zone.warehouse_id) === String(warehouse.id))
       .map((zone: any, sectionIndex: number) =>

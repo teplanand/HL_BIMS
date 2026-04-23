@@ -17,6 +17,7 @@ import {
 import { AddEditPallet, AddEditPalletRef, type PalletSubmitPayload } from "./addeditpallet";
 import { openEntityFormModal } from "../shared/openEntityFormModal";
 import { buildGridApiParams, extractApiRows, extractApiTotalCount } from "../shared/gridApiHelpers";
+import { buildPalletCreatePayload, buildPalletUpdatePayload } from "../shared/payloadBuilders";
 
 const PalletlistPage: React.FC = () => {
     const { openModal } = useModal();
@@ -30,22 +31,17 @@ const PalletlistPage: React.FC = () => {
             if (payload.id) {
                 await updatePallet({
                     id: payload.id,
-                    zone_id: payload.zone_id,
-                    rack_id: payload.rack_id,
-                    pallet_name: payload.pallet_name,
-                    max_capacity: payload.max_capacity,
-                    status: payload.status,
+                    ...(buildPalletUpdatePayload({
+                        warehouse_id: payload.warehouse_id,
+                        zone_id: payload.zone_id,
+                        rack_id: payload.rack_id,
+                        pallet_code: payload.pallet_code,
+                        max_capacity: payload.max_capacity,
+                        status: payload.status,
+                    }) as any),
                 }).unwrap();
             } else {
-                await createPallet({
-                    warehouse_id: Number(payload.warehouse_id),
-                    zone_id: payload.zone_id,
-                    rack_id: payload.rack_id,
-                    pallet_name: payload.pallet_name,
-                    max_capacity: payload.max_capacity,
-                    status: payload.status,
-                    created_by: "admin",
-                }).unwrap();
+                await createPallet(buildPalletCreatePayload(payload) as any).unwrap();
             }
         } catch (error: any) {
             showToast(error?.data?.message || error?.message || "Failed to save pallet", "error");
@@ -120,7 +116,7 @@ const PalletlistPage: React.FC = () => {
     const zoneMap = useMemo(() => {
         const entries = extractApiRows(zonesData).map((zone: any) => [
             String(zone.id),
-            zone.zone_title || zone.zone_code || `Zone ${zone.id}`,
+            zone.zone_code || zone.zone_title || `Zone ${zone.id}`,
         ]);
         return new Map(entries);
     }, [zonesData]);
@@ -142,9 +138,17 @@ const PalletlistPage: React.FC = () => {
                 zone_id: pallet.zone_id,
                 rack_id: pallet.rack_id,
                 warehouseName: warehouseMap.get(String(pallet.warehouse_id)) || `Warehouse ${pallet.warehouse_id ?? ""}`,
-                zoneName: zoneMap.get(String(pallet.zone_id)) || `Zone ${pallet.zone_id ?? ""}`,
+                zoneName:
+                    pallet.zone_code ||
+                    zoneMap.get(String(pallet.zone_id)) ||
+                    `Zone ${pallet.zone_id ?? ""}`,
                 rackName: rackMap.get(String(pallet.rack_id)) || `Rack ${pallet.rack_id ?? ""}`,
-                pallet_name: pallet.pallet_name || pallet.palletName || pallet.name || `Pallet ${pallet.id ?? index + 1}`,
+                pallet_code:
+                    pallet.pallet_code ||
+                    pallet.pallet_name ||
+                    pallet.palletName ||
+                    pallet.name ||
+                    `Pallet ${pallet.id ?? index + 1}`,
                 max_capacity: Number(pallet.max_capacity ?? pallet.capacity ?? 0),
                 status: pallet.status || "AVAILABLE",
                 items_count: Number(pallet.items_count ?? pallet.pallets_count ?? 0),
@@ -167,11 +171,11 @@ const PalletlistPage: React.FC = () => {
     }, [error, showToast]);
 
     const columns: GridColDef[] = [
+        { field: "pallet_code", headerName: "Pallet Code", flex: 1, minWidth: 170 },
         { field: "warehouseName", headerName: "Warehouse", flex: 1, minWidth: 150 },
         { field: "zoneName", headerName: "Zone", flex: 1, minWidth: 150 },
         { field: "rackName", headerName: "Rack", flex: 1, minWidth: 150 },
-        { field: "pallet_name", headerName: "Pallet Name", flex: 1, minWidth: 170 },
-        { field: "max_capacity", headerName: "Capacity", flex: 0.9, minWidth: 120, type: "number" },
+        { field: "max_capacity", headerName: "Capacity", flex: 0.9, minWidth: 120, type: "string" },
         {
             field: "status",
             headerName: "Status",
@@ -194,12 +198,16 @@ const PalletlistPage: React.FC = () => {
                 );
             },
         },
-        { field: "items_count", headerName: "Items Count", flex: 0.9, minWidth: 120, type: "number" },
+        // { field: "items_count", headerName: "Items Count", flex: 0.9, minWidth: 120, type: "number" },
     ];
 
     return (
         <Page module="Warehouse">
-            <Box className="p-0">
+            <Box className="p-0"  sx={{
+                    "& .MuiDataGrid-row:hover": {
+                        cursor: "pointer",
+                    },
+                }}>
                 <ReusableDataGrid
                     rows={rows}
                     columns={columns}
@@ -210,6 +218,7 @@ const PalletlistPage: React.FC = () => {
                     sortModel={sortModel}
                     setSortModel={setSortModel}
                     filterModel={filterModel}
+                    height={"calc(100vh - 120px)"}
                     setFilterModel={setFilterModel}
                     title="Pallet List"
                     permissions={{

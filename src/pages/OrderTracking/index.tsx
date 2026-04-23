@@ -965,7 +965,7 @@ const renderProcessCell = useCallback(
   const columns: GridColDef[] = useMemo<GridColDef[]>(() => [
       {
         field: "line_id",
-        headerName: "Line ID",
+        headerName: "Line",
       sortable:true,
         renderCell: (params: GridRenderCellParams) => (
           <Box
@@ -975,7 +975,9 @@ const renderProcessCell = useCallback(
             }}
             className="flex h-full w-full cursor-pointer items-center justify-start whitespace-nowrap font-semibold text-blue-600"
           >
-            {params.value}
+            <Tooltip title={params.value}>
+              <span>View</span>
+            </Tooltip>
           </Box>
         ),
       },

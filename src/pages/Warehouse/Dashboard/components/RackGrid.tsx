@@ -8,12 +8,11 @@ import RackCard from "./RackCard";
 type RackGridProps = {
   section: Section;
   selectedRackId: string | null;
-  itemSearchText: string;
   onSelectRack: (rackId: string) => void;
   onAddRack: () => void;
 };
 
-function RackGridComponent({ section, selectedRackId, itemSearchText, onSelectRack, onAddRack }: RackGridProps) {
+function RackGridComponent({ section, selectedRackId, onSelectRack, onAddRack }: RackGridProps) {
   return (
     <Box>
       {!section.racks.length ? (

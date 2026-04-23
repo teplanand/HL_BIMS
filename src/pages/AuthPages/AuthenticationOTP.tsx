@@ -8,7 +8,12 @@ import {
   useVerifyOtpMutation,
   useSendOtpMutation,
 } from "../../redux/api/login";
-import { setToken as setTokenV2 } from "../../utils/auth";
+import {
+  extractAuthToken,
+  extractAuthUserProfile,
+  setStoredUserProfile,
+  setToken as setTokenV2,
+} from "../../utils/auth";
 import { setToken } from "../../redux/authSlice";
 import { AppDispatch, RootState } from "../../redux/store";
 
@@ -262,8 +267,16 @@ const AuthenticationOTP = () => {
         otp: otpString,
       }).unwrap();
 
-      setTokenV2(response.token);
-      dispatch(setToken(response.token));
+      const token = extractAuthToken(response);
+
+      if (!token) {
+        toast.error("Login failed: No token received");
+        return;
+      }
+
+      setTokenV2(token);
+      setStoredUserProfile(extractAuthUserProfile(response, token));
+      dispatch(setToken(token));
       toast.success("Login successful!");
       navigate("/apps");
       window.location.reload();

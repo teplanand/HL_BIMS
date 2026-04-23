@@ -35,7 +35,7 @@ const MuiSelect: React.FC<MuiSelectProps> = ({
       return <span style={{ color: 'rgba(0, 0, 0, 0.6)' }}>{placeholder}</span>;
     }
 
-    const selectedOption = options.find((opt) => opt.value === selected);
+    const selectedOption = options.find((opt) => String(opt.value) === String(selected));
     if (selectedOption) {
       return selectedOption.label;
     }

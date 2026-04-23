@@ -33,7 +33,7 @@ export const PageHeader = memo(({ title }: { title: string }) => {
     );
 })
 
-export const FormStackGrid = memo(({ children, sx, columns = 3, gap = 1.5 }: { children: React.ReactNode, sx?: SxProps<Theme>, columns?: number, gap?: number }) => {
+export const FormStackGrid = memo(({ children, sx, columns = 3, gap = 2 }: { children: React.ReactNode, sx?: SxProps<Theme>, columns?: number, gap?: number }) => {
     return (
         <Box
             sx={{

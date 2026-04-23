@@ -6,7 +6,6 @@ import ReusableDataGrid from "../../../components/common/ReusableDataGrid";
 import { useModal } from "../../../hooks/useModal";
 import { useToast } from "../../../hooks/useToast";
 import {
-    buildWarehouseItemFormData,
     useCreateWarehouseItemMutation,
     useDeleteWarehouseItemMutation,
     useListPalletsQuery,
@@ -16,6 +15,10 @@ import {
 import { AddEditItem, AddEditItemRef, type ItemSubmitPayload } from "./addedititem";
 import { openEntityFormModal } from "../shared/openEntityFormModal";
 import { buildGridApiParams, extractApiRows, extractApiTotalCount } from "../shared/gridApiHelpers";
+import {
+    buildWarehouseItemCreateFormData,
+    buildWarehouseItemUpdateFormData,
+} from "../shared/payloadBuilders";
 
 const toBoolean = (value: unknown) => value === true || value === 1 || value === "1" || value === "true";
 
@@ -32,12 +35,12 @@ const ItemlistPage: React.FC = () => {
                 const { id, ...updatePayload } = payload;
                 return await updateItem({
                     id,
-                    body: buildWarehouseItemFormData(updatePayload),
+                    body: buildWarehouseItemUpdateFormData(updatePayload),
                 }).unwrap();
             } else {
                 const { id, ...createPayload } = payload;
                 return await createItem(
-                    buildWarehouseItemFormData(createPayload, ["qty", "detail_qty", "file_name"])
+                    buildWarehouseItemCreateFormData(createPayload)
                 ).unwrap();
             }
         } catch (error: any) {
@@ -103,7 +106,7 @@ const ItemlistPage: React.FC = () => {
     const palletMap = useMemo(() => {
         const entries = extractApiRows(palletsData).map((pallet: any) => [
             String(pallet.id),
-            `Pallet ${pallet.id}`,
+            pallet.pallet_code || pallet.pallet_name || pallet.name || `Pallet ${pallet.id}`,
         ]);
         return new Map(entries);
     }, [palletsData]);
@@ -115,7 +118,7 @@ const ItemlistPage: React.FC = () => {
                 id: item.id ?? index + 1,
                 pallet_id: item.pallet_id,
                 rack_id: item.rack_id ?? item.rackId ?? "",
-                palletName: palletMap.get(String(item.pallet_id)) || `Pallet ${item.pallet_id ?? ""}`,
+                palletCode: palletMap.get(String(item.pallet_id)) || `Pallet ${item.pallet_id ?? ""}`,
                 sub_loc_id: item.sub_loc_id ?? "",
                 oracle_code: item.oracle_code || "",
                 qty: Number(item.qty ?? 0),
@@ -150,10 +153,11 @@ const ItemlistPage: React.FC = () => {
     }, [error, showToast]);
 
     const columns: GridColDef[] = [
-        { field: "palletName", headerName: "Pallet", flex: 1, minWidth: 150 },
         { field: "oracle_code", headerName: "Oracle Code", flex: 1.1, minWidth: 160 },
-        { field: "sub_loc_id", headerName: "Sub Location ID", flex: 1, minWidth: 140 },
-        { field: "qty", headerName: "Quantity", flex: 0.9, minWidth: 120, type: "number" },
+        { field: "palletCode", headerName: "Pallet Code", flex: 1, minWidth: 150 },
+        { field: "item_category", headerName: "Item Category", flex: 1, minWidth: 170 },
+         { field: "sub_loc_id", headerName: "Sub Location ID", flex: 1, minWidth: 160,   headerAlign: "left"  },
+        { field: "qty", headerName: "Quantity", flex: 0.9, minWidth: 120, type: "string" },
         {
             field: "has_expiry",
             headerName: "Has Expiry",
@@ -172,7 +176,11 @@ const ItemlistPage: React.FC = () => {
 
     return (
         <Page module="Warehouse">
-            <Box className="p-0">
+            <Box className="p-0" sx={{
+                    "& .MuiDataGrid-row:hover": {
+                        cursor: "pointer",
+                    },
+                }}>
                 <ReusableDataGrid
                     rows={rows}
                     columns={columns}
@@ -181,6 +189,7 @@ const ItemlistPage: React.FC = () => {
                     paginationModel={paginationModel}
                     setPaginationModel={setPaginationModel}
                     sortModel={sortModel}
+                    height={"calc(100vh - 120px)"}
                     setSortModel={setSortModel}
                     filterModel={filterModel}
                     setFilterModel={setFilterModel}

@@ -1,4 +1,5 @@
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { createApi } from "@reduxjs/toolkit/query/react";
+import { createAppBaseQuery } from "../../utils/customBaseQuery";
 
 export interface WarehouseRecord {
   [key: string]: unknown;
@@ -93,7 +94,7 @@ export interface CreatePalletPayload {
   warehouse_id: number;
   zone_id: number;
   rack_id: number;
-  pallet_name: string;
+  pallet_code: string;
   max_capacity?: number;
   status?: "AVAILABLE" | "OCCUPIED";
   created_by?: string;
@@ -103,7 +104,7 @@ export interface UpdatePalletPayload {
   id: number | string;
   zone_id?: number;
   rack_id?: number;
-  pallet_name?: string;
+  pallet_code?: string;
   max_capacity?: number;
   status?: "AVAILABLE" | "OCCUPIED";
 }
@@ -141,14 +142,16 @@ export interface UpdateWarehouseItemRequest {
 }
 
 export interface CreateTransactionPayload {
-  item_id: number;
+  item_id?: number;
   oracle_code: string;
-  rack_id: number;
-  sub_loc_id: number;
-  operation: "IN" | "OUT";
-  qty: number;
-  supplier_id?: number | null;
-  transaction_date: string;
+  rack_id: number | string;
+  sub_loc_id: number | string;
+  pallet_id?: number | string;
+  operation: "1" | "2" | "IN" | "OUT";
+  qty: number | string;
+  supplier_id?: number | string | null;
+  created_by?: string;
+  transaction_date?: string;
 }
 
 const cleanParams = (params?: ListParams | void) => {
@@ -214,7 +217,7 @@ export const buildWarehouseItemFormData = (
 
 export const warehouseApi = createApi({
   reducerPath: "warehouseApi",
-  baseQuery: fetchBaseQuery({
+  baseQuery: createAppBaseQuery({
     baseUrl: "https://wmsapi.techelecon.in/api",
   }),
   tagTypes: ["Warehouse"],

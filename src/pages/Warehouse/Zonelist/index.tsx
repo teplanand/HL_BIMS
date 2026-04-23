@@ -15,6 +15,7 @@ import {
 import { AddEditZone, AddEditZoneRef, type ZoneSubmitPayload } from "./addeditzone";
 import { openEntityFormModal } from "../shared/openEntityFormModal";
 import { buildGridApiParams, extractApiRows, extractApiTotalCount } from "../shared/gridApiHelpers";
+import { buildZoneCreatePayload, buildZoneUpdatePayload } from "../shared/payloadBuilders";
 
 const ZonelistPage: React.FC = () => {
     const { openModal } = useModal();
@@ -28,13 +29,16 @@ const ZonelistPage: React.FC = () => {
             if (payload.id) {
                 await updateZone({
                     id: payload.id,
-                    zone_code: payload.zone_code,
-                    zone_title: payload.zone_title,
-                    zone_description: payload.zone_description,
-                    status: payload.status,
+                    ...(buildZoneUpdatePayload({
+                        warehouse_id: payload.warehouse_id,
+                        zone_code: payload.zone_code,
+                        zone_title: payload.zone_title,
+                        zone_description: payload.zone_description,
+                        status: payload.status,
+                    }) as any),
                 }).unwrap();
             } else {
-                await createZone(payload).unwrap();
+                await createZone(buildZoneCreatePayload(payload) as any).unwrap();
             }
         } catch (error: any) {
             showToast(error?.data?.message || error?.message || "Failed to save zone", "error");
@@ -68,7 +72,7 @@ const ZonelistPage: React.FC = () => {
         openEntityFormModal<AddEditZoneRef>({
             openModal,
             entityLabel: "Zone",
-            width: 720,
+            width: 520,
             FormComponent: AddEditZone,
             defaultValues: row,
             extraProps: {
@@ -139,8 +143,8 @@ const ZonelistPage: React.FC = () => {
     }, [error, showToast]);
 
     const columns: GridColDef[] = [
-        { field: "warehouseName", headerName: "Warehouse", flex: 1.1, minWidth: 180 },
         { field: "zone_code", headerName: "Zone Code", flex: 0.9, minWidth: 140 },
+        { field: "warehouseName", headerName: "Warehouse", flex: 1.1, minWidth: 180 },
         { field: "zone_title", headerName: "Zone Title", flex: 1.2, minWidth: 180 },
         {
             field: "status",
@@ -164,12 +168,16 @@ const ZonelistPage: React.FC = () => {
                 );
             },
         },
-        { field: "rackCount", headerName: "Rack Count", flex: 0.8, minWidth: 130, type: "number" },
+        // { field: "rackCount", headerName: "Rack Count", flex: 0.8, minWidth: 130, type: "string" },
     ];
 
     return (
         <Page module="Warehouse">
-            <Box className="p-0">
+            <Box className="p-0"  sx={{
+                    "& .MuiDataGrid-row:hover": {
+                        cursor: "pointer",
+                    },
+                }}>
                 <ReusableDataGrid
                     rows={rows}
                     columns={columns}
@@ -180,6 +188,7 @@ const ZonelistPage: React.FC = () => {
                     sortModel={sortModel}
                     setSortModel={setSortModel}
                     filterModel={filterModel}
+                    height={"calc(100vh - 120px)"}
                     setFilterModel={setFilterModel}
                     title="Zone List"
                     permissions={{

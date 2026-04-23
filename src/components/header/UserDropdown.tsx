@@ -1,15 +1,119 @@
-import { useState } from "react";
-import { DropdownItem } from "../ui/dropdown/DropdownItem";
+import { useEffect, useMemo, useState } from "react";
 import { Dropdown } from "../ui/dropdown/Dropdown";
-import { Link, useNavigate } from "react-router";
-import { getDecodedToken, removeToken } from "../../utils/auth";
+import { useNavigate } from "react-router";
+import {
+  extractAuthUserProfile,
+  getDecodedToken,
+  getStoredUserProfile,
+  removeToken,
+  setStoredUserProfile,
+} from "../../utils/auth";
 import Loader from "../Loader/loader";
+
+type DecodedUserToken = {
+  id?: number | string;
+  name?: string;
+  email?: string;
+  employee_id?: string;
+  employeeId?: string;
+  role?: string;
+  role_name?: string;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+  data?: {
+    id?: number | string;
+    name?: string;
+    email?: string;
+    employee_id?: string;
+    employeeId?: string;
+    role?: string;
+    role_name?: string;
+    username?: string;
+    first_name?: string;
+    last_name?: string;
+  };
+  profile?: {
+    id?: number | string;
+    name?: string;
+    email?: string;
+    employee_id?: string;
+    employeeId?: string;
+    role?: string;
+    role_name?: string;
+    username?: string;
+    first_name?: string;
+    last_name?: string;
+  };
+  user?: {
+    id?: number | string;
+    name?: string;
+    email?: string;
+    employee_id?: string;
+    employeeId?: string;
+    role?: string;
+    role_name?: string;
+    username?: string;
+    first_name?: string;
+    last_name?: string;
+  };
+};
+
+const getFirstFilledValue = (...values: Array<unknown>) => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return "";
+};
 
 export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const navigate = useNavigate();
-  const token = getDecodedToken();
+  const token = getDecodedToken<DecodedUserToken>();
+  const storedProfile = useMemo(() => getStoredUserProfile(), []);
+  const derivedProfile = useMemo(
+    () => (token ? extractAuthUserProfile({ user: token }) : null),
+    [token]
+  );
+
+  useEffect(() => {
+    if (!storedProfile && derivedProfile) {
+      setStoredUserProfile(derivedProfile);
+    }
+  }, [derivedProfile, storedProfile]);
+
+  const tokenSources = [storedProfile, derivedProfile, token, token?.user, token?.data, token?.profile];
+
+  const userName =
+    getFirstFilledValue(
+      ...tokenSources.map((source) => source?.name),
+      ...tokenSources.map((source) =>
+        getFirstFilledValue(source?.first_name, source?.last_name)
+      ),
+      ...tokenSources.map((source) => source?.username)
+    ) || "User";
+
+  const userEmail =
+    getFirstFilledValue(...tokenSources.map((source) => source?.email)) || "-";
+
+  const employeeId =
+    getFirstFilledValue(
+      ...tokenSources.map((source) => source?.employee_id),
+      ...tokenSources.map((source) => source?.employeeId),
+      localStorage.getItem("loginIdentifier")
+    ) || "-";
+
+  const userRole =
+    getFirstFilledValue(
+      ...tokenSources.map((source) => source?.role),
+      ...tokenSources.map((source) => source?.role_name)
+    ) || "User";
+
+  const avatarLetter = (userName?.charAt(0) || employeeId?.charAt(0) || "U").toUpperCase();
 
   function toggleDropdown() {
     setIsOpen(!isOpen);
@@ -23,7 +127,6 @@ export default function UserDropdown() {
     setIsLoggingOut(true);
     closeDropdown();
 
-    // Simulate a brief delay to show the unique loader
     setTimeout(() => {
       removeToken();
       navigate("/signin");
@@ -33,72 +136,74 @@ export default function UserDropdown() {
 
   return (
     <div className="relative">
-      {/* Show full screen loader if logging out */}
       {isLoggingOut && <Loader />}
 
       <button
         onClick={toggleDropdown}
-        className="flex items-center px-1 py-1 
-             rounded hover:bg-gray-100 dark:hover:bg-gray-700 
-             transition-colors duration-200 dropdown-toggle"
+        className="dropdown-toggle flex items-center gap-3 rounded-2xl border border-gray-200 bg-white px-2.5 py-1.5 shadow-theme-xs transition-all duration-200 hover:border-brand-200 hover:bg-brand-50/60 dark:border-gray-700 dark:bg-gray-800/80 dark:hover:border-brand-500/40 dark:hover:bg-gray-800"
       >
-        {/* Avatar */}
-        <span
-          className="flex items-center justify-center 
-               h-8 w-8 rounded
-             bg-[#F37440] 
-               text-white font-bold text-base shadow-sm"
-        >
-          {token?.name?.charAt(0).toUpperCase()}
+        <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-[#F37440] to-[#C9552B] text-sm font-bold text-white shadow-lg shadow-[#F37440]/20">
+          {avatarLetter}
         </span>
+
+        <span className="hidden min-w-0 sm:flex sm:flex-col sm:items-start">
+          <span className="max-w-[140px] truncate text-sm font-semibold text-gray-900 dark:text-white">
+            {userName}
+          </span>
+          <span className="max-w-[140px] truncate text-xs text-gray-500 dark:text-gray-400">
+            {employeeId}
+          </span>
+        </span>
+
+        <svg
+          className={`hidden h-4 w-4 text-gray-500 transition-transform duration-200 sm:block dark:text-gray-400 ${isOpen ? "rotate-180" : ""}`}
+          viewBox="0 0 20 20"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M5 7.5L10 12.5L15 7.5"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
       </button>
 
       <Dropdown
         isOpen={isOpen}
         onClose={closeDropdown}
-        className="absolute right-0 mt-[10px] flex w-[220px] flex-col rounded border border-gray-200 bg-white p-1 shadow-theme-lg dark:border-gray-800 dark:bg-gray-dark"
+        className="absolute right-0 mt-3 w-[320px] overflow-hidden rounded-[5px] border border-gray-200 bg-white p-0 shadow-xl shadow-gray-200/70 dark:border-gray-700 dark:bg-gray-900 dark:shadow-black/25"
       >
-        <ul className="flex flex-col gap-1 pb-3 border-b border-gray-200 dark:border-gray-800">
-          {/* Token Name Display */}
-          <li>
-            <div className="px-3 py-2 text-sm font-bold text-gray-900 truncate dark:text-white">
-              {token?.name || "User"}
+        <div className="border-b border-gray-200 bg-gradient-to-br from-[#FFF8F4] via-[#FFFFFF] to-[#FFF2EA] px-4 py-4 dark:border-gray-700 dark:from-[#1B2435] dark:via-[#0F172A] dark:to-[#111827]">
+          <div className="flex items-start gap-3">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#F37440] to-[#C9552B] text-base font-bold text-white shadow-lg shadow-[#F37440]/20">
+              {avatarLetter}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-base font-semibold text-gray-900 dark:text-white">
+                {userName}
+              </p>
+              <p className="mt-1 break-all text-sm text-gray-600 dark:text-gray-300">
+                {userEmail}
+              </p>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                {employeeId}
+              </p>
+              <p className="mt-2 inline-flex rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold tracking-[0.14em] text-[#C9552B] shadow-sm dark:bg-white/10 dark:text-[#FFB08E]">
+                {userRole}
+              </p>
             </div>
-          </li>
-
-          <li>
-            <DropdownItem
-              onItemClick={closeDropdown}
-              tag="a"
-              to="/profile"
-              className="flex items-center gap-3 px-3 py-2 font-medium text-gray-700 rounded group text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
-            >
-              <svg
-                className="fill-gray-500 group-hover:fill-gray-700 dark:fill-gray-400 dark:group-hover:fill-gray-300"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  fillRule="evenodd"
-                  clipRule="evenodd"
-                  d="M12 3.5C7.30558 3.5 3.5 7.30558 3.5 12C3.5 14.1526 4.3002 16.1184 5.61936 17.616C6.17279 15.3096 8.24852 13.5955 10.7246 13.5955H13.2746C15.7509 13.5955 17.8268 15.31 18.38 17.6167C19.6996 16.119 20.5 14.153 20.5 12C20.5 7.30558 16.6944 3.5 12 3.5ZM17.0246 18.8566V18.8455C17.0246 16.7744 15.3457 15.0955 13.2746 15.0955H10.7246C8.65354 15.0955 6.97461 16.7744 6.97461 18.8455V18.856C8.38223 19.8895 10.1198 20.5 12 20.5C13.8798 20.5 15.6171 19.8898 17.0246 18.8566ZM2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12ZM11.9991 7.25C10.8847 7.25 9.98126 8.15342 9.98126 9.26784C9.98126 10.3823 10.8847 11.2857 11.9991 11.2857C13.1135 11.2857 14.0169 10.3823 14.0169 9.26784C14.0169 8.15342 13.1135 7.25 11.9991 7.25ZM8.48126 9.26784C8.48126 7.32499 10.0563 5.75 11.9991 5.75C13.9419 5.75 15.5169 7.32499 15.5169 9.26784C15.5169 11.2107 13.9419 12.7857 11.9991 12.7857C10.0563 12.7857 8.48126 11.2107 8.48126 9.26784Z"
-                  fill=""
-                />
-              </svg>
-              {token?.name} ({token?.role || "User"})
-            </DropdownItem>
-          </li>
-        </ul>
+          </div>
+        </div>
 
         <button
           onClick={handleLogout}
-          className="flex items-center gap-3 px-3 py-2 mt-3 font-medium text-gray-700 rounded group text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300 w-full text-left"
+          className="flex w-full items-center gap-3 border-t border-gray-200 bg-white px-4 py-3 text-left text-sm font-semibold text-gray-700 transition-colors hover:bg-red-50 hover:text-red-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-red-500/10 dark:hover:text-red-300"
         >
           <svg
-            className="fill-gray-500 group-hover:fill-gray-700 dark:group-hover:fill-gray-300"
+            className="fill-current"
             width="24"
             height="24"
             viewBox="0 0 24 24"

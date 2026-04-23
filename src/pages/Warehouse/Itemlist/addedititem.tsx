@@ -9,8 +9,7 @@ import {
   useState,
   type Ref,
 } from "react";
-import dayjs, { type Dayjs } from "dayjs";
-import { Controller, useForm } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import {
   Box,
   Button,
@@ -20,21 +19,18 @@ import {
   Typography,
 } from "@mui/material";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
-import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
-import QrCode2OutlinedIcon from "@mui/icons-material/QrCode2Outlined";
 import UploadFileOutlinedIcon from "@mui/icons-material/UploadFileOutlined";
 import LocalPrintshopOutlinedIcon from "@mui/icons-material/LocalPrintshopOutlined";
 import { QRCodeCanvas } from "qrcode.react";
 
 import ConfirmDeleteButton from "../../../components/common/ConfirmDeleteButton";
-import { MuiCheckbox, MuiDatePicker, MuiSelect, MuiTextField } from "../../../components/mui/input";
+import { MuiSelect, MuiTextField } from "../../../components/mui/input";
 import { FormStackGrid } from "../../../components/ui/form/stack";
 import FormSection from "../../../components/ui/form/FormSection";
 import { useModal } from "../../../hooks/useModal";
 import { useToast } from "../../../hooks/useToast";
 import { useLazyListWarehouseItemsQuery, useListPalletsQuery } from "../../../redux/api/warehouse";
 import { extractApiRows } from "../shared/gridApiHelpers";
-import WidgetsOutlinedIcon from "@mui/icons-material/WidgetsOutlined";
 
 type ItemFormValues = {
   oracle_code: string;
@@ -42,14 +38,9 @@ type ItemFormValues = {
   item_category: string;
   locator: string;
   sub_inventory: string;
-  detail_qty: number | string;
   sub_loc_id: number | string;
   pallet_id: string;
   rack_id: number | string;
-  has_expiry: boolean;
-  expiry_date: Dayjs | null;
-  in_qty: number | string;
-  out_qty: number | string;
 };
 
 export type ItemSubmitPayload = {
@@ -58,9 +49,9 @@ export type ItemSubmitPayload = {
   rack_id: number;
   sub_loc_id: number;
   oracle_code: string;
-  qty: number;
-  has_expiry: boolean;
-  expiry_date: string | null;
+  qty?: number;
+  has_expiry?: boolean;
+  expiry_date?: string | null;
   item_desc?: string;
   item_category?: string;
   locator?: string;
@@ -79,9 +70,6 @@ export type ItemSubmitPayload = {
 type AddEditItemProps = {
   defaultValues?: Partial<ItemFormValues> & {
     id?: string | number;
-    has_expiry_date?: boolean;
-    exp_date?: string | Date | Dayjs | null;
-    expiry_date?: string | Date | Dayjs | null;
     description?: string;
     item_description?: string;
     item_desc?: string;
@@ -91,11 +79,6 @@ type AddEditItemProps = {
     rack_id?: number | string;
     sub_inventory?: string;
     subInventory?: string;
-    qty?: number | string;
-    inQty?: number | string;
-    outQty?: number | string;
-    in_qty?: number | string;
-    out_qty?: number | string;
     item_image_document_id?: number | null;
     item_image_name?: string | null;
     item_image_path?: string | null;
@@ -137,18 +120,6 @@ const firstNumber = (...values: unknown[]) => {
 };
 
 const normalizeOracleCode = (value: string) => value.trim().toUpperCase();
-
-const toDayjsValue = (value: string | Date | Dayjs | null | undefined) => {
-  if (!value) {
-    return null;
-  }
-
-  const parsed =
-    typeof value === "string"
-      ? dayjs(value, ["DD-MM-YYYY", "D-M-YYYY", "DD/MM/YYYY", "D/M/YYYY", "YYYY-MM-DD"], true)
-      : dayjs(value);
-  return parsed.isValid() ? parsed : null;
-};
 
 const toPreviewUrl = (path: string | null | undefined) => {
   if (!path) {
@@ -195,18 +166,16 @@ function Index({
     () =>
       extractApiRows(palletsData).map((pallet: any) => ({
         value: String(pallet.id),
-        label: firstString(pallet.pallet_name, pallet.pallet_code, pallet.name) || `Pallet ${pallet.id}`,
+        label: firstString(pallet.pallet_code, pallet.pallet_name, pallet.name) || `Pallet ${pallet.id}`,
       })),
     [palletsData]
   );
 
   const {
-    control,
     register,
     handleSubmit,
     watch,
     setValue,
-    clearErrors,
     formState: { errors, isDirty },
   } = useForm<ItemFormValues>({
     defaultValues: {
@@ -219,19 +188,12 @@ function Index({
       item_category: defaultValues?.item_category || defaultValues?.category || "",
       locator: defaultValues?.locator || "",
       sub_inventory: defaultValues?.sub_inventory || defaultValues?.subInventory || "",
-      detail_qty: defaultValues?.detail_qty || defaultValues?.qty || "",
       sub_loc_id: defaultValues?.sub_loc_id || "",
       pallet_id: String(defaultValues?.pallet_id || ""),
       rack_id: defaultValues?.rack_id || "",
-      has_expiry: Boolean(defaultValues?.has_expiry ?? defaultValues?.has_expiry_date),
-      expiry_date: toDayjsValue(defaultValues?.expiry_date ?? defaultValues?.exp_date),
-      in_qty: defaultValues?.in_qty ?? defaultValues?.inQty ?? "",
-      out_qty: defaultValues?.out_qty ?? defaultValues?.outQty ?? "",
     },
     mode: "onBlur",
   });
-
-  const hasExpiry = watch("has_expiry");
   const watchedOracleCode = watch("oracle_code");
   const watchedItemDesc = watch("item_desc");
   const watchedItemCategory = watch("item_category");
@@ -262,36 +224,36 @@ function Index({
 
     if (!selectedPallet) {
       return {
-        palletName: "",
-        rackName: resolvedRackId ? `Rack ${resolvedRackId}` : "",
+        palletCode: "",
+        rackCode: "",
         palletCapacity: "",
       };
     }
 
-    const palletName =
+    const palletCode =
       firstString(
-        selectedPallet.pallet_name,
         selectedPallet.pallet_code,
+        selectedPallet.pallet_name,
         selectedPallet.name
       ) || `Pallet ${selectedPallet.id}`;
-    const rackName =
+    const rackCode =
       firstString(
-        selectedPallet.rack_name,
-        selectedPallet.rackName,
         selectedPallet.rack_code,
-        selectedPallet.rackCode
-      ) || (resolvedRackId ? `Rack ${resolvedRackId}` : "");
+        selectedPallet.rackCode,
+        selectedPallet.rack_name,
+        selectedPallet.rackName
+      ) || "";
     const palletCapacity = firstNumber(
       selectedPallet.max_capacity,
       selectedPallet.capacity
     );
 
     return {
-      palletName,
-      rackName,
+      palletCode,
+      rackCode,
       palletCapacity: palletCapacity ? String(palletCapacity) : "",
     };
-  }, [palletsData, resolvedRackId, watchedPalletId]);
+  }, [palletsData, watchedPalletId]);
   const qrPayload = useMemo(
     () =>
       [
@@ -300,10 +262,8 @@ function Index({
         ["Item Category", watchedItemCategory?.trim()],
         ["Locator", watchedLocator?.trim()],
         ["Sub Inventory", watchedSubInventory?.trim()],
-        ["Pallet Name", selectedPalletMeta.palletName],
-        ["Pallet", watchedPalletId],
-        ["Rack Name", selectedPalletMeta.rackName],
-        ["Rack", resolvedRackId ? String(resolvedRackId) : ""],
+        ["Pallet Code", selectedPalletMeta.palletCode],
+        ["Rack Code", selectedPalletMeta.rackCode],
         ["Pallet Capacity", selectedPalletMeta.palletCapacity]
       ]
         .filter(([, value]) => value && String(value).trim().length > 0)
@@ -311,22 +271,13 @@ function Index({
         .join("\n"),
     [
       normalizedOracleCode,
-      resolvedRackId,
       watchedItemCategory,
       watchedItemDesc,
       watchedLocator,
-      watchedPalletId,
       selectedPalletMeta,
       watchedSubInventory,
     ]
   );
-
-  useEffect(() => {
-    if (!hasExpiry) {
-      setValue("expiry_date", null, { shouldDirty: false, shouldValidate: true });
-      clearErrors("expiry_date");
-    }
-  }, [clearErrors, hasExpiry, setValue]);
 
   useEffect(() => {
     setDisplayTitle?.(isEditMode ? "Edit Item" : "Add Item");
@@ -366,17 +317,8 @@ function Index({
       setValue("item_category", firstString(match.item_category, match.category, match.item_group) || "", { shouldDirty: true });
       setValue("locator", firstString(match.locator, match.locator_code, match.loc_code) || (resolvedSubLocId ? String(resolvedSubLocId) : ""), { shouldDirty: true });
       setValue("sub_inventory", firstString(match.sub_inventory, match.subInventory) || "", { shouldDirty: true });
-      setValue("detail_qty", firstNumber(match.qty, match.quantity, match.item_qty, match.available_qty) ?? "", { shouldDirty: true });
       setValue("sub_loc_id", resolvedSubLocId ? String(resolvedSubLocId) : "", { shouldDirty: true });
       setValue("rack_id", resolvedRackIdValue ? String(resolvedRackIdValue) : "", { shouldDirty: true });
-
-      if (match.has_expiry !== undefined || match.has_expiry_date !== undefined) {
-        setValue("has_expiry", Boolean(match.has_expiry ?? match.has_expiry_date), { shouldDirty: true });
-      }
-
-      if (match.expiry_date || match.exp_date) {
-        setValue("expiry_date", toDayjsValue(match.expiry_date ?? match.exp_date), { shouldDirty: true });
-      }
 
       const resolvedImagePath = firstString(match.item_image_path, match.image_path, match.path) || null;
       if (resolvedImagePath) {
@@ -542,12 +484,9 @@ function Index({
   }, [qrPayload, showToast]);
 
   const onSubmit = useCallback(async (data: ItemFormValues) => {
-    const inQty = Number(data.in_qty || 0);
-    const outQty = Number(data.out_qty || 0);
     const subLocId = Number(data.sub_loc_id);
     const palletId = Number(data.pallet_id);
     const rackId = Number(data.rack_id || resolvedRackId || 0);
-    const baseQty = Number(data.detail_qty || 0);
 
     if (!palletId) {
       showToast("Pallet is required", "warning");
@@ -593,16 +532,10 @@ function Index({
       rack_id: rackId,
       sub_loc_id: subLocId,
       oracle_code: normalizeOracleCode(data.oracle_code),
-      qty: baseQty + inQty - outQty,
-      has_expiry: Boolean(data.has_expiry),
-      expiry_date: data.has_expiry && data.expiry_date ? data.expiry_date.format("YYYY-MM-DD") : null,
       item_desc: data.item_desc.trim(),
       item_category: data.item_category.trim(),
       locator: data.locator.trim(),
       sub_inventory: data.sub_inventory.trim(),
-      detail_qty: baseQty,
-      in_qty: inQty,
-      out_qty: outQty,
       item_image_document_id: selectedImageFile ? null : uploadedImage.documentId,
       item_image_name: selectedImageName,
       item_image_path: selectedImagePath,
@@ -638,8 +571,7 @@ function Index({
         <FormSection
           title="Item Lookup"
           description="Get item details from Oracle code"
-          icon={<WidgetsOutlinedIcon fontSize="small" />}
-        >
+         >
           <FormStackGrid columns={3}>
             <Box sx={{ gridColumn: { xs: "1 / -1", md: "span 2" } }}>
               <MuiTextField
@@ -676,8 +608,7 @@ function Index({
         <FormSection
           title="Item Details"
           description="Read-only item master fields"
-          icon={<Inventory2OutlinedIcon fontSize="small" />}
-          accentColor="#1D4ED8"
+           accentColor="#1D4ED8"
         >
           <FormStackGrid columns={2}>
             <Box sx={{ gridColumn: "1 / -1" }}>
@@ -708,22 +639,14 @@ function Index({
               {...register("sub_inventory")}
               InputProps={{ readOnly: true }}
             />
-            <MuiTextField
-              id="detail_qty"
-              label="Quantity"
-              {...register("detail_qty")}
-              InputProps={{ readOnly: true }}
-            />
           </FormStackGrid>
         </FormSection>
 
         <FormSection
           title="Warehouse Entry"
-          description="Posting details for pallet, expiry, image and movement"
-          icon={<UploadFileOutlinedIcon fontSize="small" />}
-          accentColor="#059669"
+            accentColor="#059669"
         >
-          <FormStackGrid columns={2}>
+          <FormStackGrid columns={3}>
             <MuiSelect
               id="pallet_id"
               label="Pallet"
@@ -735,78 +658,8 @@ function Index({
               error={!!errors.pallet_id}
               helperText={errors.pallet_id?.message}
             />
-            <Box sx={{ display: "flex", alignItems: "center" }}>
-              <Controller
-                name="has_expiry"
-                control={control}
-                render={({ field }) => (
-                  <MuiCheckbox
-                    label="Item expiry applicable"
-                    checked={Boolean(field.value)}
-                    onChange={(event) => field.onChange(event.target.checked)}
-                  />
-                )}
-              />
-            </Box>
-            <MuiTextField
-              id="in_qty"
-              type="number"
-              label="In Quantity"
-              placeholder="0"
-              {...register("in_qty", {
-                valueAsNumber: true,
-                min: { value: 1, message: "Quantity must be greater than 0" },
-                onChange: (event) => {
-                  if (event.target.value) {
-                    setValue("out_qty", "", { shouldDirty: true, shouldValidate: true });
-                  }
-                },
-              })}
-              error={!!errors.in_qty}
-              helperText={errors.in_qty?.message}
-              inputProps={{ min: 1 }}
-            />
-            <MuiTextField
-              id="out_qty"
-              type="number"
-              label="Out Quantity"
-              placeholder="0"
-              {...register("out_qty", {
-                valueAsNumber: true,
-                min: { value: 1, message: "Quantity must be greater than 0" },
-                onChange: (event) => {
-                  if (event.target.value) {
-                    setValue("in_qty", "", { shouldDirty: true, shouldValidate: true });
-                  }
-                },
-              })}
-              error={!!errors.out_qty}
-              helperText={errors.out_qty?.message}
-              inputProps={{ min: 1 }}
-            />
-            {hasExpiry ? (
-              <Controller
-                name="expiry_date"
-                control={control}
-                defaultValue={toDayjsValue(defaultValues?.expiry_date ?? defaultValues?.exp_date)}
-                rules={{
-                  validate: (value) =>
-                    !hasExpiry || value ? true : "Expiry date is required when checkbox is selected",
-                }}
-                render={({ field }) => (
-                  <MuiDatePicker
-                    label="Expiry Date"
-                    format="DD-MM-YYYY"
-                    value={field.value}
-                    onChange={field.onChange}
-                    onClose={field.onBlur}
-                    error={!!errors.expiry_date}
-                    helperText={errors.expiry_date?.message}
-                    required
-                  />
-                )}
-              />
-            ) : <Box />}
+          </FormStackGrid>
+          <FormStackGrid columns={2}>
             <Box sx={{ gridColumn: "1 / -1" }}>
               <Divider sx={{ my: 0.5 }} />
             </Box>
@@ -873,8 +726,7 @@ function Index({
         <FormSection
           title="QR Code"
           description="Generated from the current item details"
-          icon={<QrCode2OutlinedIcon fontSize="small" />}
-          accentColor="#7C3AED"
+           accentColor="#7C3AED"
         >
           <Stack spacing={1.5}>
             <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", alignItems: "flex-start" }}>
@@ -913,7 +765,7 @@ function Index({
                 </Typography>
               </Box>
             </Box>
-            <Box>
+            <Box sx={{ display: "flex", justifyContent: "flex-end" }}> 
               <Button
                 type="button"
                 variant="contained"
@@ -930,7 +782,7 @@ function Index({
       </Stack>
 
       {isEditMode ? (
-        <Box sx={{ mt: 3 }}>
+        <Box sx={{ mt: 3,textAlign: "right" }}>
           <ConfirmDeleteButton
             entityLabel="Item"
             successMessage="Item deleted successfully"

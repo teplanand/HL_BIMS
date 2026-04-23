@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createRef, memo, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Box,
   Breadcrumbs,
@@ -13,15 +13,15 @@ import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
-import RemoveOutlinedIcon from "@mui/icons-material/RemoveOutlined";
+import SouthWestOutlinedIcon from "@mui/icons-material/SouthWestOutlined";
+import NorthEastOutlinedIcon from "@mui/icons-material/NorthEastOutlined";
 
 import { Pallet, Rack, Section, Shelf, Warehouse } from "../types";
 import { getRackTotals, getShelfUsagePercent, getStatusColor } from "../utils";
 import { useModal } from "../../../../hooks/useModal";
-import { useToast } from "../../../../hooks/useToast";
 import IconActionButton from "../../../../components/common/IconActionButton";
-import QuantityControl from "../../../../components/common/QuantityControl";
 import CompactAccordion from "../../../../components/common/CompactAccordion";
+import ApiActionButton from "../../../../components/common/ApiActionButton";
 import { openEntityFormModal } from "../../shared/openEntityFormModal";
 import {
   AddEditItem,
@@ -48,6 +48,12 @@ import {
   AddEditPalletRef,
   type PalletSubmitPayload,
 } from "../../Palletlist/addeditpallet";
+import {
+  ItemTransactionDrawer,
+  type ItemTransactionDrawerRef,
+  type ItemTransactionPayload,
+} from "./ItemTransactionDrawer";
+import { useCreateTransactionMutation } from "../../../../redux/api/warehouse";
 
 type Props = {
   warehouse: Warehouse;
@@ -78,7 +84,7 @@ type PalletRowProps = {
   onEditPallet: (shelf: Shelf) => void;
   onAddItem: (shelf: Shelf) => void;
   onEditItem: (shelf: Shelf, item: Pallet) => void;
-  onAdjustItemQty: (shelfId: string, itemId: string, direction: "in" | "out") => void;
+  onOpenTransaction: (shelf: Shelf, item: Pallet, operation: "1" | "2") => void;
 };
 
 type DetailFieldProps = {
@@ -97,12 +103,10 @@ type ActionCardProps = {
 type ItemRowProps = {
   item: Pallet;
   name: string;
-  inQty: number;
-  outQty: number;
   totalQty: number;
   onEdit: () => void;
-  onIncrementIn: () => void;
-  onIncrementOut: () => void;
+  onOpenIn: () => void;
+  onOpenOut: () => void;
 };
 
 const getShelfUsed = (shelf: Shelf) => shelf.pallets.reduce((total, item) => total + item.qty, 0);
@@ -162,12 +166,10 @@ function DetailField({ label, value, onEdit, tooltip = "Edit" }: DetailFieldProp
 function ItemRow({
   item,
   name,
-  inQty,
-  outQty,
   totalQty,
   onEdit,
-  onIncrementIn,
-  onIncrementOut,
+  onOpenIn,
+  onOpenOut,
 }: ItemRowProps) {
   return (
     <Box
@@ -190,8 +192,36 @@ function ItemRow({
           {name}
         </Typography>
         <Stack direction="row" spacing={0.75} alignItems="center" useFlexGap flexWrap="wrap">
-           
-           
+          <IconActionButton
+            ariaLabel={`In transaction for ${item.id}`}
+            tooltip="IN Transaction"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenIn();
+            }}
+            sx={{
+              bgcolor: "rgba(22,163,74,0.1)",
+              color: "#15803D",
+              "&:hover": { bgcolor: "rgba(22,163,74,0.18)" },
+            }}
+          >
+            <NorthEastOutlinedIcon fontSize="small" />
+          </IconActionButton>
+          <IconActionButton
+            ariaLabel={`Out transaction for ${item.id}`}
+            tooltip="OUT Transaction"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenOut();
+            }}
+            sx={{
+              bgcolor: "rgba(234,88,12,0.1)",
+              color: "#C2410C",
+              "&:hover": { bgcolor: "rgba(234,88,12,0.18)" },
+            }}
+          >
+            <SouthWestOutlinedIcon fontSize="small" />
+          </IconActionButton>
           <Box
             sx={{
               px: 0.85,
@@ -231,7 +261,7 @@ const PalletRow = memo(function PalletRow({
   onEditPallet,
   onAddItem,
   onEditItem,
-  onAdjustItemQty,
+  onOpenTransaction,
 }: PalletRowProps) {
   const usage = getShelfUsagePercent(shelf.used, shelf.capacity);
   const status = getStatusColor(shelf.used, shelf.capacity);
@@ -325,12 +355,10 @@ const PalletRow = memo(function PalletRow({
                   key={item.id}
                   item={item}
                   name={item.product}
-                  inQty={item.inQty ?? item.qty}
-                  outQty={item.outQty ?? 0}
                   totalQty={item.qty}
                   onEdit={() => onEditItem(shelf, item)}
-                  onIncrementIn={() => onAdjustItemQty(shelf.id, item.id, "in")}
-                  onIncrementOut={() => onAdjustItemQty(shelf.id, item.id, "out")}
+                  onOpenIn={() => onOpenTransaction(shelf, item, "1")}
+                  onOpenOut={() => onOpenTransaction(shelf, item, "2")}
                 />
               ))
             ) : (
@@ -360,10 +388,9 @@ function RackDetailsPanelComponent({
   onDeletePallet,
   onSubmitItem,
   onDeleteItem,
-  onAdjustItemQty,
 }: Props) {
   const { openModal } = useModal();
-  const { showToast } = useToast();
+  const [createTransaction] = useCreateTransactionMutation();
   const [warehouseState, setWarehouseState] = useState(warehouse);
   const [sectionId, setSectionId] = useState<string | null>(section?.id || null);
   const [rackId, setRackId] = useState<string | null>(selectedRack?.id || null);
@@ -445,29 +472,30 @@ function RackDetailsPanelComponent({
       FormComponent: AddEditWarehouse,
       defaultValues: {
         id: warehouseState.recordId,
+        orgId: warehouseState.orgId || "",
         warehouseCode: warehouseState.id,
         warehouseName: warehouseState.name,
-        location: warehouseState.location,
-        address: warehouseState.location,
-        storageCapacity: warehouseState.sections.reduce(
-          (sum, sectionItem) =>
-            sum +
-            sectionItem.racks.reduce(
-              (rackSum, rackItem) => rackSum + rackItem.shelves.reduce((shelfSum, shelf) => shelfSum + shelf.capacity, 0),
-              0
-            ),
-          0
-        ),
-        status: "ACTIVE",
+        managerName: warehouseState.managerName || "",
+        contact_no: warehouseState.contact_no || "",
+        email: warehouseState.email || "",
+        address: warehouseState.address,
+        notes: warehouseState.notes || "",
+        status: warehouseState.status || "ACTIVE",
       },
       extraProps: {
         onSubmitWarehouse: async (payload: WarehouseSubmitPayload) => {
           await onSubmitWarehouse?.(payload);
           setWarehouseState((prev) => ({
             ...prev,
+            orgId: payload.orgId.trim() || prev.orgId,
             id: payload.warehouseCode || prev.id,
             name: payload.warehouseName.trim() || prev.name,
-            location: payload.location.trim() || prev.location,
+            managerName: payload.managerName.trim() || prev.managerName,
+            contact_no: payload.contact_no.trim() || prev.contact_no,
+            email: payload.email.trim() || prev.email,
+            address: payload.address.trim() || prev.address,
+            notes: payload.notes.trim() || prev.notes,
+            status: payload.status || prev.status,
           }));
         },
         onDeleteWarehouse,
@@ -618,7 +646,7 @@ function RackDetailsPanelComponent({
         warehouse_id: warehouseState.recordId,
         zone_id: currentSection.recordId,
         rack_id: currentRack.recordId,
-        pallet_name: `Pallet ${currentRack.shelves.length + 1}`,
+        pallet_code: `${currentRack.id}-PALLET-${currentRack.shelves.length + 1}`,
       },
       extraProps: {
         onSubmitPallet: async (payload: PalletSubmitPayload) => {
@@ -628,7 +656,7 @@ function RackDetailsPanelComponent({
             shelves: [
               ...rackItem.shelves,
               {
-                id: payload.pallet_name,
+                id: payload.pallet_code,
                 capacity: payload.max_capacity,
                 used: 0,
                 pallets: [],
@@ -665,7 +693,7 @@ function RackDetailsPanelComponent({
           warehouse_id: warehouseState.recordId,
           zone_id: currentSection.recordId,
           rack_id: currentRack.recordId,
-          pallet_name: shelf.id,
+          pallet_code: shelf.id,
           max_capacity: shelf.capacity,
         },
         extraProps: {
@@ -677,14 +705,14 @@ function RackDetailsPanelComponent({
                 entry.id === shelf.id
                   ? {
                       ...entry,
-                      id: payload.pallet_name,
+                      id: payload.pallet_code,
                       capacity: payload.max_capacity,
                       used: getShelfUsed(entry),
                     }
                   : entry
               ),
             }));
-            setExpandedShelfId(payload.pallet_name);
+            setExpandedShelfId(payload.pallet_code);
           },
           onDeletePallet,
         },
@@ -851,61 +879,102 @@ function RackDetailsPanelComponent({
     [onDeleteItem, onSubmitItem, openModal, replaceRackLocal]
   );
 
-  const adjustItemQty = useCallback(
-    async (shelfId: string, itemId: string, direction: "in" | "out") => {
-      if (!currentRack) {
-        return;
-      }
+  const openTransactionDrawer = useCallback(
+    (shelf: Shelf, item: Pallet, defaultOperation: "1" | "2") => {
+      const transactionRef = createRef<ItemTransactionDrawerRef>();
 
-      const shelf = currentRack.shelves.find((entry) => entry.id === shelfId);
-      const item = shelf?.pallets.find((entry) => entry.id === itemId);
+      openModal({
+        title: `Item ${defaultOperation === "1" ? "IN" : "OUT"} Transaction`,
+        width: 480,
+        showCloseButton: true,
+        askDataChangeConfirm: false,
+        component: (modalProps: any) => (
+          <ItemTransactionDrawer
+            ref={transactionRef}
+            {...modalProps}
+            shelf={shelf}
+            item={item}
+            rackId={currentRack?.recordId || currentRack?.id || item.rack_id || ""}
+            defaultOperation={defaultOperation}
+          onSubmitTransaction={async (payload: ItemTransactionPayload) => {
+            const resolvedItemId = Number(payload.item_id);
 
-      if (!shelf || !item) {
-        return;
-      }
-
-      try {
-        await onAdjustItemQty?.(shelf, item, direction);
-        replaceRackLocal((rackItem) => ({
-          ...rackItem,
-          shelves: rackItem.shelves.map((entry) => {
-            if (entry.id !== shelfId) {
-              return entry;
-            }
-
-            const pallets = entry.pallets.map((row) => {
-              if (row.id !== itemId) {
-                return row;
+            try {
+              await createTransaction({
+                  item_id:
+                    Number.isFinite(resolvedItemId) && resolvedItemId > 0
+                      ? resolvedItemId
+                      : undefined,
+                  oracle_code: payload.oracle_code,
+                  sub_loc_id: payload.sub_loc_id,
+                  pallet_id: payload.pallet_id,
+                  rack_id: payload.rack_id,
+                  supplier_id: payload.supplier_id || undefined,
+                  operation: payload.operation,
+                  qty: payload.qty,
+                  created_by: payload.created_by,
+                  transaction_date: payload.transaction_date,
+                }).unwrap();
+              } catch (error: any) {
+                throw new Error(
+                  error?.data?.message || error?.message || "Failed to save transaction"
+                );
               }
 
-              if (direction === "in") {
-                return {
-                  ...row,
-                  inQty: (row.inQty ?? row.qty) + 1,
-                  qty: row.qty + 1,
-                };
-              }
+              const transactionQty = Number(payload.qty || 0);
+              const isInOperation = payload.operation === "1";
 
-              if (row.qty <= 0) {
-                return row;
-              }
+              replaceRackLocal((rackItem) => ({
+                ...rackItem,
+                shelves: rackItem.shelves.map((entry) => {
+                  if (entry.id !== shelf.id) {
+                    return entry;
+                  }
 
-              return {
-                ...row,
-                outQty: (row.outQty ?? 0) + 1,
-                qty: Math.max(row.qty - 1, 0),
-              };
-            });
-            const nextShelf = { ...entry, pallets };
+                  const pallets = entry.pallets.map((existingItem) => {
+                    if (existingItem.id !== item.id) {
+                      return existingItem;
+                    }
 
-            return { ...nextShelf, used: getShelfUsed(nextShelf) };
-          }),
-        }));
-      } catch (error: any) {
-        showToast(error?.data?.message || error?.message || "Failed to update item quantity", "error");
-      }
+                    const nextQty = isInOperation
+                      ? existingItem.qty + transactionQty
+                      : Math.max(existingItem.qty - transactionQty, 0);
+
+                    return {
+                      ...existingItem,
+                      qty: nextQty,
+                      inQty: isInOperation
+                        ? (existingItem.inQty ?? 0) + transactionQty
+                        : existingItem.inQty ?? 0,
+                      outQty: isInOperation
+                        ? existingItem.outQty ?? 0
+                        : (existingItem.outQty ?? 0) + transactionQty,
+                      has_expiry_date: payload.has_expiry ?? existingItem.has_expiry_date,
+                      expiry_date:
+                        payload.has_expiry && payload.expiry_date
+                          ? payload.expiry_date
+                          : existingItem.expiry_date,
+                    };
+                  });
+
+                  const nextShelf = { ...entry, pallets };
+                  return { ...nextShelf, used: getShelfUsed(nextShelf) };
+                }),
+              }));
+            }}
+          />
+        ),
+        action: (
+          <ApiActionButton
+            onApiCall={() => transactionRef.current?.submit?.() ?? Promise.resolve()}
+            loadingText="Saving..."
+          >
+            Submit Transaction
+          </ApiActionButton>
+        ),
+      });
     },
-    [currentRack, onAdjustItemQty, replaceRackLocal, showToast]
+    [createTransaction, openModal, replaceRackLocal]
   );
 
   return (
@@ -942,7 +1011,7 @@ function RackDetailsPanelComponent({
             >
               <DetailField label="Warehouse" value={warehouseState.name} onEdit={editWarehouse} />
               <DetailField label="Zone" value={currentSection.name} onEdit={editZone} />
-              <DetailField label="Rack" value={currentRack.name} onEdit={editRack} />
+              <DetailField label="Rack" value={currentRack.id} onEdit={editRack} />
               <ActionCard
                 title="Pallets"
                 value={currentRack.shelves.length}
@@ -995,7 +1064,7 @@ function RackDetailsPanelComponent({
                   onEditPallet={editPallet}
                   onAddItem={openAddItem}
                   onEditItem={openEditItem}
-                  onAdjustItemQty={adjustItemQty}
+                  onOpenTransaction={openTransactionDrawer}
                 />
               ))}
             </Stack>

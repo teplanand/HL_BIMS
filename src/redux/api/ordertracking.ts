@@ -1,4 +1,5 @@
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { createApi } from "@reduxjs/toolkit/query/react";
+import { createAppBaseQuery } from "../../utils/customBaseQuery";
 
 // ─── Payload / Response Types ────────────────────────────────────────────────
 
@@ -188,8 +189,9 @@ export const buildSysConfigurationByIdPayload = (
 
 export const orderTrackingApi = createApi({
   reducerPath: "orderTrackingApi",
-  baseQuery: fetchBaseQuery({
+  baseQuery: createAppBaseQuery({
     baseUrl: "https://ordtrk.techelecon.in/api",
+    includeAuthHeader: false,
     prepareHeaders: (headers) => {
       headers.set("Content-Type", "application/json");
       return headers;

@@ -1,6 +1,6 @@
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, type Ref } from "react";
-import { useForm } from "react-hook-form";
-import { Stack, Box } from "@mui/material";
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, type Ref } from "react";
+import { Controller, useForm } from "react-hook-form";
+import { Stack, Box, FormControlLabel, Radio, RadioGroup, Typography } from "@mui/material";
 
 import ConfirmDeleteButton from "../../../components/common/ConfirmDeleteButton";
 import { MuiSelect, MuiTextField } from "../../../components/mui/input";
@@ -10,12 +10,12 @@ import { useModal } from "../../../hooks/useModal";
 import { useToast } from "../../../hooks/useToast";
 import { useListRacksQuery, useListZonesQuery } from "../../../redux/api/warehouse";
 import { extractApiRows } from "../shared/gridApiHelpers";
-import ViewStreamOutlinedIcon from "@mui/icons-material/ViewStreamOutlined";
+import { buildPalletCode, buildRackCode, buildZoneCode, normalizeCodeValue } from "../shared/codeGeneration";
 
 type PalletFormValues = {
   zone_id: string;
   rack_id: string;
-  pallet_name: string;
+  pallet_code: string;
   max_capacity: number | string;
   status: "AVAILABLE" | "OCCUPIED";
 };
@@ -25,7 +25,7 @@ export type PalletSubmitPayload = {
   warehouse_id?: number;
   zone_id: number;
   rack_id: number;
-  pallet_name: string;
+  pallet_code: string;
   max_capacity: number;
   status: "AVAILABLE" | "OCCUPIED";
 };
@@ -36,6 +36,7 @@ type AddEditPalletProps = {
     zone_id?: string | number;
     rack_id?: string | number;
     warehouse_id?: string | number;
+    pallet_code?: string;
     pallet_name?: string;
     palletName?: string;
     name?: string;
@@ -68,37 +69,70 @@ function Index({
   const isEditMode = Boolean(defaultValues?.id);
   const { data: zonesData } = useListZonesQuery();
   const { data: racksData } = useListRacksQuery();
+  const initialZoneId = String(defaultValues?.zone_id || "");
+  const initialRackId = String(defaultValues?.rack_id || "");
+  const initialPalletCode =
+    defaultValues?.pallet_code ||
+    defaultValues?.pallet_name ||
+    defaultValues?.palletName ||
+    defaultValues?.name ||
+    "";
 
   const zones = useMemo(() => extractApiRows(zonesData), [zonesData]);
   const racks = useMemo(() => extractApiRows(racksData), [racksData]);
-
-  const zoneOptions = useMemo(
-    () =>
-      zones.map((zone: any) => ({
-        value: String(zone.id),
-        label: zone.zone_title || zone.zone_code || `Zone ${zone.id}`,
-      })),
-    [zones]
+  const initialZone = useMemo(
+    () => zones.find((zone: any) => String(zone.id) === initialZoneId),
+    [initialZoneId, zones]
   );
-
-  const rackOptions = useMemo(
+  const initialRack = useMemo(
+    () => racks.find((rack: any) => String(rack.id) === initialRackId),
+    [initialRackId, racks]
+  );
+  const initialZoneCode = useMemo(
     () =>
-      racks.map((rack: any) => ({
-        value: String(rack.id),
-        label: rack.rack_code || rack.name || `Rack ${rack.id}`,
-      })),
-    [racks]
+      normalizeCodeValue(
+        initialZone?.zone_code ||
+        initialZone?.code ||
+        buildZoneCode(undefined, initialZone?.zone_title || initialZone?.name || initialZone?.zone_code)
+      ),
+    [initialZone]
+  );
+  const initialRackCode = useMemo(
+    () =>
+      normalizeCodeValue(
+        initialRack?.rack_code ||
+        initialRack?.code ||
+        buildRackCode(
+          initialZoneCode,
+          initialRack?.rack_description || initialRack?.name || initialRack?.rack_code
+        )
+      ),
+    [initialRack, initialZoneCode]
+  );
+  const initialGeneratedPalletCode = useMemo(
+    () => buildPalletCode(initialRackCode),
+    [initialRackCode]
+  );
+  const palletCodeManuallyEditedRef = useRef(
+    Boolean(
+      initialPalletCode &&
+      normalizeCodeValue(initialPalletCode) !== normalizeCodeValue(initialGeneratedPalletCode)
+    )
   );
 
   const {
+    control,
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors, isDirty },
   } = useForm<PalletFormValues>({
     defaultValues: {
       zone_id: String(defaultValues?.zone_id || ""),
       rack_id: String(defaultValues?.rack_id || ""),
-      pallet_name:
+      pallet_code:
+        defaultValues?.pallet_code ||
         defaultValues?.pallet_name ||
         defaultValues?.palletName ||
         defaultValues?.name ||
@@ -109,6 +143,67 @@ function Index({
     mode: "onBlur",
   });
 
+  const selectedZoneId = watch("zone_id");
+  const selectedRackId = watch("rack_id");
+  const palletCode = watch("pallet_code");
+
+  const zoneOptions = useMemo(
+    () =>
+      zones.map((zone: any) => ({
+        value: String(zone.id),
+        label: zone.zone_code || zone.zone_title || `Zone ${zone.id}`,
+      })),
+    [zones]
+  );
+
+  const rackOptions = useMemo(
+    () =>
+      racks
+        .filter(
+          (rack: any) =>
+            !selectedZoneId || String(rack.zone_id) === String(selectedZoneId)
+        )
+        .map((rack: any) => ({
+          value: String(rack.id),
+          label: rack.rack_code || rack.name || `Rack ${rack.id}`,
+        })),
+    [racks, selectedZoneId]
+  );
+
+  const selectedZone = useMemo(
+    () => zones.find((zone: any) => String(zone.id) === String(selectedZoneId)),
+    [selectedZoneId, zones]
+  );
+  const selectedRack = useMemo(
+    () => racks.find((rack: any) => String(rack.id) === String(selectedRackId)),
+    [racks, selectedRackId]
+  );
+  const selectedZoneCode = useMemo(
+    () =>
+      normalizeCodeValue(
+        selectedZone?.zone_code ||
+        selectedZone?.code ||
+        buildZoneCode(undefined, selectedZone?.zone_title || selectedZone?.name || selectedZone?.zone_code)
+      ),
+    [selectedZone]
+  );
+  const selectedRackCode = useMemo(
+    () =>
+      normalizeCodeValue(
+        selectedRack?.rack_code ||
+        selectedRack?.code ||
+        buildRackCode(
+          selectedZoneCode,
+          selectedRack?.rack_description || selectedRack?.name || selectedRack?.rack_code
+        )
+      ),
+    [selectedRack, selectedZoneCode]
+  );
+  const generatedPalletCode = useMemo(
+    () => buildPalletCode(selectedRackCode),
+    [selectedRackCode]
+  );
+
   useEffect(() => {
     setDisplayTitle?.(isEditMode ? "Edit Pallet" : "Add Pallet");
     setHideFooter?.(false);
@@ -118,6 +213,41 @@ function Index({
   useEffect(() => {
     setDataChanged?.(isDirty);
   }, [isDirty, setDataChanged]);
+
+  useEffect(() => {
+    if (!selectedRackId) {
+      return;
+    }
+
+    const rackStillValid = racks.some(
+      (rack: any) =>
+        String(rack.id) === String(selectedRackId) &&
+        (!selectedZoneId || String(rack.zone_id) === String(selectedZoneId))
+    );
+
+    if (!rackStillValid) {
+      setValue("rack_id", "", {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+  }, [racks, selectedRackId, selectedZoneId, setValue]);
+
+  useEffect(() => {
+    if (palletCodeManuallyEditedRef.current) {
+      return;
+    }
+
+    if (normalizeCodeValue(palletCode) === normalizeCodeValue(generatedPalletCode)) {
+      return;
+    }
+
+    setValue("pallet_code", generatedPalletCode, {
+      shouldDirty:
+        normalizeCodeValue(generatedPalletCode) !== normalizeCodeValue(initialPalletCode),
+      shouldValidate: true,
+    });
+  }, [generatedPalletCode, initialPalletCode, palletCode, setValue]);
 
   const onSubmit = useCallback(async (data: PalletFormValues) => {
     const selectedZone = zones.find((zone: any) => String(zone.id) === data.zone_id);
@@ -132,7 +262,7 @@ function Index({
       ),
       zone_id: Number(data.zone_id),
       rack_id: Number(data.rack_id),
-      pallet_name: data.pallet_name.trim(),
+      pallet_code: data.pallet_code.trim(),
       max_capacity: Number(data.max_capacity),
       status: data.status,
     };
@@ -164,10 +294,9 @@ function Index({
       <Stack spacing={1}>
         <FormSection
           title="Pallet Details"
-          description="Rack mapping and capacity configuration"
-          icon={<ViewStreamOutlinedIcon fontSize="small" />}
+         
         >
-          <FormStackGrid columns={2}>
+          <FormStackGrid columns={1}>
             <MuiSelect
               id="zone_id"
               label="Zone"
@@ -175,7 +304,25 @@ function Index({
               displayEmpty
               defaultValue={String(defaultValues?.zone_id || "")}
               options={zoneOptions}
-              {...register("zone_id", { required: "Zone is required" })}
+              {...register("zone_id", {
+                required: "Zone is required",
+                onChange: (event) => {
+                  const nextZoneId = String(event.target.value || "");
+                  const activeRack = racks.find(
+                    (rack: any) => String(rack.id) === String(selectedRackId)
+                  );
+
+                  if (
+                    activeRack &&
+                    String(activeRack.zone_id) !== nextZoneId
+                  ) {
+                    setValue("rack_id", "", {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    });
+                  }
+                },
+              })}
               error={!!errors.zone_id}
               helperText={errors.zone_id?.message}
             />
@@ -191,14 +338,18 @@ function Index({
               helperText={errors.rack_id?.message}
             />
             <MuiTextField
-              id="pallet_name"
-              label="Pallet Name"
-              placeholder="Pallet A1"
-              {...register("pallet_name", {
-                required: "Pallet name is required",
+              id="pallet_code"
+              label="Pallet Code"
+              placeholder="RACK-A-PALLET"
+              {...register("pallet_code", {
+                required: "Pallet code is required",
+                onChange: (event) => {
+                  palletCodeManuallyEditedRef.current =
+                    normalizeCodeValue(event.target.value) !== normalizeCodeValue(generatedPalletCode);
+                },
               })}
-              error={!!errors.pallet_name}
-              helperText={errors.pallet_name?.message}
+              error={!!errors.pallet_code}
+              helperText={errors.pallet_code?.message}
             />
             <MuiTextField
               id="max_capacity"
@@ -214,18 +365,68 @@ function Index({
               helperText={errors.max_capacity?.message}
               inputProps={{ min: 1 }}
             />
-            <MuiSelect
-              id="status"
-              label="Status"
-              defaultValue={defaultValues?.status || "AVAILABLE"}
-              options={[
-                { value: "AVAILABLE", label: "Available" },
-                { value: "OCCUPIED", label: "Occupied" },
-              ]}
-              {...register("status", { required: "Status is required" })}
-              error={!!errors.status}
-              helperText={errors.status?.message}
-            />
+            <Box sx={{ minWidth: 0 }}>
+              
+              <input
+                type="hidden"
+                {...register("status", { required: "Status is required" })}
+              />
+              <Controller
+                name="status"
+                control={control}
+                rules={{ required: "Status is required" }}
+                render={({ field }) => (
+                  <RadioGroup
+                    row
+                    {...field}
+                    sx={{
+                      display: "flex",
+                      flexDirection: "row",
+                      alignItems: "center",
+                      flexWrap: "nowrap",
+                      px: 1,
+                      py: 0.25,
+                      border: "1px solid rgba(15,23,42,0.12)",
+                      borderRadius: 1.5,
+                      backgroundColor: "rgba(248,250,252,0.9)",
+                      gap: 1.5,
+                    }}
+                  >
+                    <FormControlLabel
+                      value="AVAILABLE"
+                      control={<Radio color="success" />}
+                      label="Available"
+                      sx={{
+                        m: 0,
+                        whiteSpace: "nowrap",
+                        "& .MuiFormControlLabel-label": {
+                          fontWeight: 700,
+                          color: "text.primary",
+                        },
+                      }}
+                    />
+                    <FormControlLabel
+                      value="OCCUPIED"
+                      control={<Radio color="warning" />}
+                      label="Occupied"
+                      sx={{
+                        m: 0,
+                        whiteSpace: "nowrap",
+                        "& .MuiFormControlLabel-label": {
+                          fontWeight: 700,
+                          color: "text.primary",
+                        },
+                      }}
+                    />
+                  </RadioGroup>
+                )}
+              />
+              {errors.status ? (
+                <Typography variant="caption" color="error" sx={{ mt: 0.75, display: "block" }}>
+                  {errors.status.message}
+                </Typography>
+              ) : null}
+            </Box>
           </FormStackGrid>
         </FormSection>
       </Stack>
@@ -234,9 +435,7 @@ function Index({
         <Box
           sx={{
             mt: 3,
-            pt: 2,
-            borderTop: "1px solid",
-            borderColor: "divider",
+           textAlign: "right",
           }}
         >
           <ConfirmDeleteButton

@@ -92,7 +92,7 @@ const RackCard = memo(function RackCard({ rack, isSelected, onSelect }: RackCard
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <Box>
             <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.2 }}>
-              {rack.name}
+              {rack.id}
             </Typography>
             <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 600 }}>
               {totals.used} / {totals.capacity} Units

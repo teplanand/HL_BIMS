@@ -19,6 +19,10 @@ import {
 } from "../../../redux/api/warehouse";
 import { useAppSelector } from "../../../redux/hooks";
 import {
+    buildWarehouseCreatePayload,
+    buildWarehouseUpdatePayload,
+} from "../shared/payloadBuilders";
+import {
     AddEditWarehouse,
     AddEditWarehouseRef,
     type WarehouseSubmitPayload,
@@ -83,33 +87,32 @@ const WarehouselistPage: React.FC = () => {
             if (payload.id) {
                 await updateWarehouse({
                     id: payload.id,
-                    warehouse_code: warehouseCode,
-                    warehouse_name: payload.warehouseName,
-                    manager_name: payload.managerName,
-                    contact_number: payload.contactNumber,
-                    email: payload.email,
-                    location: payload.location,
-                    address: payload.address,
-                    storage_capacity: Number(payload.storageCapacity),
-                    notes: payload.notes,
-                    status: payload.status,
-                    is_active: payload.status === "ACTIVE",
+                    ...(buildWarehouseUpdatePayload({
+                        orgId: payload.orgId || DEFAULT_ORG_ID,
+                        warehouseCode,
+                        warehouseName: payload.warehouseName,
+                        managerName: payload.managerName,
+                        contactNo: payload.contact_no,
+                        email: payload.email,
+                        address: payload.address,
+                        notes: payload.notes,
+                        status: payload.status,
+                    }, authUserId ? String(authUserId) : "admin") as any),
                 }).unwrap();
             } else {
-                await createWarehouse({
-                    org_id: payload.orgId || DEFAULT_ORG_ID,
-                    warehouse_code: warehouseCode,
-                    warehouse_name: payload.warehouseName,
-                    manager_name: payload.managerName,
-                    contact_number: payload.contactNumber,
-                    email: payload.email,
-                    location: payload.location,
-                    address: payload.address,
-                    storage_capacity: Number(payload.storageCapacity),
-                    notes: payload.notes,
-                    status: payload.status,
-                    created_by: authUserId ? String(authUserId) : "admin",
-                }).unwrap();
+                await createWarehouse(
+                    buildWarehouseCreatePayload({
+                        orgId: payload.orgId || DEFAULT_ORG_ID,
+                        warehouseCode,
+                        warehouseName: payload.warehouseName,
+                        managerName: payload.managerName,
+                        contactNo: payload.contact_no,
+                        email: payload.email,
+                        address: payload.address,
+                        notes: payload.notes,
+                        status: payload.status,
+                    }, authUserId ? String(authUserId) : "admin") as any
+                ).unwrap();
             }
         } catch (error: any) {
             showToast(
@@ -218,6 +221,7 @@ const WarehouselistPage: React.FC = () => {
         () =>
             extractWarehouseRows(data).map((warehouse: any, index: number) => ({
                 ...warehouse,
+                warehouse_info: warehouse.warehouse_info ?? {},
                 id: warehouse.id ?? warehouse.warehouse_id ?? warehouse.wh_id ?? index + 1,
                 orgId: warehouse.orgId ?? warehouse.org_id ?? DEFAULT_ORG_ID,
                 warehouseCode:
@@ -242,29 +246,25 @@ const WarehouselistPage: React.FC = () => {
                 managerName:
                     warehouse.managerName ??
                     warehouse.manager_name ??
+                    warehouse.warehouse_info?.manager_name ??
                     "",
                 contactNumber:
                     warehouse.contactNumber ??
+                    warehouse.contact_no ??
                     warehouse.contact_number ??
+                    warehouse.warehouse_info?.contact_no ??
                     "",
                 email:
                     warehouse.email ??
-                    "",
-                location:
-                    warehouse.location ??
-                    warehouse.city ??
-                    warehouse.address ??
+                    warehouse.warehouse_info?.email ??
                     "",
                 address:
                     warehouse.address ??
+                    warehouse.warehouse_info?.address ??
                     "",
-                storageCapacity: Number(
-                    warehouse.storageCapacity ??
-                    warehouse.storage_capacity ??
-                    0
-                ),
                 notes:
                     warehouse.notes ??
+                    warehouse.warehouse_info?.notes ??
                     "",
                 status: warehouse.status ?? (warehouse.is_active === false ? "INACTIVE" : "ACTIVE"),
                 sections_count: Number(
@@ -301,7 +301,9 @@ const WarehouselistPage: React.FC = () => {
         () => [
             { field: "warehouseCode", headerName: "Code", flex: 0.9, minWidth: 140 },
             { field: "name", headerName: "Name", flex: 1, minWidth: 200 },
-            { field: "location", headerName: "Location", flex: 1, minWidth: 150 },
+            { field: "managerName", headerName: "Manager", flex: 1, minWidth: 180 },
+            { field: "contactNumber", headerName: "Contact No", flex: 1, minWidth: 160 },
+            { field: "address", headerName: "Address", flex: 1, minWidth: 180 },
             {
                 field: "status",
                 headerName: "Status",
@@ -324,20 +326,27 @@ const WarehouselistPage: React.FC = () => {
                     );
                 },
             },
-            {
-                field: "sections_count",
-                headerName: "Zones Count",
-                flex: 0.8,
-                minWidth: 150,
-                type: "number",
-            },
+            // {
+            //     field: "sections_count",
+            //     headerName: "Zones Count",
+            //     flex: 0.8,
+            //     minWidth: 150,
+            //     type: "string",
+            // },
         ],
         []
     );
 
     return (
         <Page module="Warehouse">
-            <Box className="p-0">
+            <Box
+                className="p-0"
+                sx={{
+                    "& .MuiDataGrid-row:hover": {
+                        cursor: "pointer",
+                    },
+                }}
+            >
                 <ReusableDataGrid
                     rows={rows}
                     columns={columns}
@@ -350,6 +359,7 @@ const WarehouselistPage: React.FC = () => {
                     filterModel={filterModel}
                     setFilterModel={setFilterModel}
                     title="Warehouse List"
+                    height={"calc(100vh - 120px)"}
                     refetch={refetch}
                     permissions={{
                         create: true,

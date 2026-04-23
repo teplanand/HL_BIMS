@@ -1,34 +1,29 @@
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, type Ref } from "react";
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, type Ref } from "react";
 import { useForm } from "react-hook-form";
-import { Box, Stack } from "@mui/material";
+import { Box, FormControlLabel, Stack, Switch, Typography } from "@mui/material";
 
 import ConfirmDeleteButton from "../../../components/common/ConfirmDeleteButton";
-import { MuiSelect, MuiTextField } from "../../../components/mui/input";
+import { MuiTextField } from "../../../components/mui/input";
 import { FormStackGrid } from "../../../components/ui/form/stack";
 import FormSection from "../../../components/ui/form/FormSection";
 import { useModal } from "../../../hooks/useModal";
 import { useToast } from "../../../hooks/useToast";
-import WarehouseOutlinedIcon from "@mui/icons-material/WarehouseOutlined";
-import PersonOutlinedIcon from "@mui/icons-material/PersonOutlined";
-import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined";
+import { buildWarehouseCode, normalizeCodeValue } from "../shared/codeGeneration";
 
 type WarehouseFormValues = {
   orgId: string;
   warehouseCode: string;
   warehouseName: string;
   managerName: string;
-  contactNumber: string;
+  contact_no: string;
   email: string;
-  location: string;
   address: string;
-  storageCapacity: number | string;
   status: "ACTIVE" | "INACTIVE";
   notes: string;
 };
 
 export type WarehouseSubmitPayload = WarehouseFormValues & {
   id?: string | number;
-  storageCapacity: number;
 };
 
 type AddEditWarehouseProps = {
@@ -39,11 +34,11 @@ type AddEditWarehouseProps = {
     warehouse_code?: string;
     org_id?: string;
     manager_name?: string;
+    contactNumber?: string;
     contact_number?: string;
+    contact_no?: string;
     email?: string;
-    location?: string;
     address?: string;
-    storage_capacity?: number | string;
     notes?: string;
     status?: "ACTIVE" | "INACTIVE";
   };
@@ -73,10 +68,31 @@ function Index({
   const { closeModal } = useModal();
   const { showToast } = useToast();
   const hasExistingWarehouse = Boolean(defaultValues?.id);
+  const initialWarehouseName =
+    defaultValues?.warehouseName ||
+    (defaultValues as any)?.warehouse_name ||
+    (defaultValues as any)?.name ||
+    "";
+  const initialWarehouseCode =
+    defaultValues?.warehouseCode ||
+    (defaultValues as any)?.warehouse_code ||
+    "";
+  const initialGeneratedWarehouseCode = useMemo(
+    () => buildWarehouseCode(initialWarehouseName),
+    [initialWarehouseName]
+  );
+  const warehouseCodeManuallyEditedRef = useRef(
+    Boolean(
+      initialWarehouseCode &&
+      normalizeCodeValue(initialWarehouseCode) !== normalizeCodeValue(initialGeneratedWarehouseCode)
+    )
+  );
 
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors, isDirty },
   } = useForm<WarehouseFormValues>({
     defaultValues: {
@@ -94,25 +110,19 @@ function Index({
         defaultValues?.managerName ||
         (defaultValues as any)?.manager_name ||
         "",
-      contactNumber:
-        defaultValues?.contactNumber ||
+      contact_no:
+        defaultValues?.contact_no ||
+        (defaultValues as any)?.contactNumber ||
         (defaultValues as any)?.contact_number ||
+        (defaultValues as any)?.contact_no ||
         "",
       email:
         defaultValues?.email ||
         (defaultValues as any)?.email ||
         "",
-      location:
-        defaultValues?.location ||
-        (defaultValues as any)?.location ||
-        "",
       address:
         defaultValues?.address ||
         (defaultValues as any)?.address ||
-        "",
-      storageCapacity:
-        defaultValues?.storageCapacity ||
-        (defaultValues as any)?.storage_capacity ||
         "",
       status: defaultValues?.status || "ACTIVE",
       notes:
@@ -133,6 +143,30 @@ function Index({
     setDataChanged?.(isDirty);
   }, [isDirty, setDataChanged]);
 
+  const selectedStatus = watch("status");
+  const warehouseName = watch("warehouseName");
+  const warehouseCode = watch("warehouseCode");
+  const generatedWarehouseCode = useMemo(
+    () => buildWarehouseCode(warehouseName),
+    [warehouseName]
+  );
+
+  useEffect(() => {
+    if (warehouseCodeManuallyEditedRef.current) {
+      return;
+    }
+
+    if (normalizeCodeValue(warehouseCode) === normalizeCodeValue(generatedWarehouseCode)) {
+      return;
+    }
+
+    setValue("warehouseCode", generatedWarehouseCode, {
+      shouldDirty:
+        normalizeCodeValue(generatedWarehouseCode) !== normalizeCodeValue(initialWarehouseCode),
+      shouldValidate: true,
+    });
+  }, [generatedWarehouseCode, initialWarehouseCode, setValue, warehouseCode]);
+
   const onSubmit = useCallback(async (data: WarehouseFormValues) => {
     const payload: WarehouseSubmitPayload = {
       ...(defaultValues?.id ? { id: defaultValues.id } : {}),
@@ -141,12 +175,10 @@ function Index({
       warehouseCode: data.warehouseCode.trim(),
       warehouseName: data.warehouseName.trim(),
       managerName: data.managerName.trim(),
-      contactNumber: data.contactNumber.trim(),
+      contact_no: data.contact_no.trim(),
       email: data.email.trim(),
-      location: data.location.trim(),
       address: data.address.trim(),
       notes: data.notes.trim(),
-      storageCapacity: Number(data.storageCapacity),
     };
 
     if (onSubmitWarehouse) {
@@ -181,8 +213,7 @@ function Index({
         {/* ══════════ Warehouse Identity ══════════ */}
         <FormSection
           title="Warehouse Identity"
-          description="Name, capacity, and operational status"
-          icon={<WarehouseOutlinedIcon fontSize="small" />}
+         
         >
           <FormStackGrid columns={3}>
             <MuiTextField
@@ -195,16 +226,7 @@ function Index({
               error={!!errors.orgId}
               helperText={errors.orgId?.message}
             />
-            <MuiTextField
-              id="warehouseCode"
-              label="Warehouse Code"
-              placeholder="WH-001"
-              {...register("warehouseCode", {
-                required: "Warehouse code is required",
-              })}
-              error={!!errors.warehouseCode}
-              helperText={errors.warehouseCode?.message}
-            />
+
             <MuiTextField
               id="warehouseName"
               label="Warehouse Name"
@@ -215,47 +237,79 @@ function Index({
               error={!!errors.warehouseName}
               helperText={errors.warehouseName?.message}
             />
+
+            
             <MuiTextField
-              id="storageCapacity"
-              type="number"
-              label="Storage Capacity"
-              placeholder="1000"
-              {...register("storageCapacity", {
-                valueAsNumber: true,
-                min: {
-                  value: 1,
-                  message: "Storage capacity must be greater than 0",
+              id="warehouseCode"
+              label="Warehouse Code"
+              placeholder="WH-001"
+              {...register("warehouseCode", {
+                required: "Warehouse code is required",
+                onChange: (event) => {
+                  warehouseCodeManuallyEditedRef.current =
+                    normalizeCodeValue(event.target.value) !==
+                    normalizeCodeValue(generatedWarehouseCode);
                 },
               })}
-              error={!!errors.storageCapacity}
-              helperText={errors.storageCapacity?.message}
-              inputProps={{ min: 1 }}
+              error={!!errors.warehouseCode}
+              helperText={errors.warehouseCode?.message}
             />
-            <MuiSelect
-              id="status"
-              label="Status"
-              defaultValue={defaultValues?.status || "ACTIVE"}
-              options={[
-                { value: "ACTIVE", label: "Active" },
-                { value: "INACTIVE", label: "Inactive" },
-              ]}
-              {...register("status", {
-                required: "Status is required",
-              })}
-              error={!!errors.status}
-              helperText={errors.status?.message}
-            />
+            
+            <Box sx={{ minWidth: 0 }}>
+              
+              <input
+                type="hidden"
+                {...register("status", {
+                  required: "Status is required",
+                })}
+              />
+              <FormControlLabel
+                sx={{
+                  m: 0,
+                  px: 1,
+                  py: 0.4,
+                  width: "100%",
+                  border: "1px solid rgba(15,23,42,0.12)",
+                  borderRadius: 1.5,
+                  justifyContent: "space-between",
+                  backgroundColor:
+                    selectedStatus === "ACTIVE" ? "rgba(34,197,94,0.08)" : "rgba(148,163,184,0.08)",
+                  "& .MuiFormControlLabel-label": {
+                    fontWeight: 700,
+                    color: "text.primary",
+                  },
+                }}
+                control={
+                  <Switch
+                    checked={selectedStatus === "ACTIVE"}
+                    onChange={(event) => {
+                      setValue("status", event.target.checked ? "ACTIVE" : "INACTIVE", {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      });
+                    }}
+                    color="success"
+                  />
+                }
+                label={selectedStatus === "ACTIVE" ? "Active" : "Inactive"}
+                labelPlacement="start"
+              />
+              {errors.status ? (
+                <Typography variant="caption" color="error" sx={{ mt: 0.75, display: "block" }}>
+                  {errors.status.message}
+                </Typography>
+              ) : null}
+            </Box>
           </FormStackGrid>
         </FormSection>
 
         {/* ══════════ Contact Information ══════════ */}
         <FormSection
           title="Contact Information"
-          description="Manager and communication details"
-          icon={<PersonOutlinedIcon fontSize="small" />}
+          
           accentColor="#1D4ED8"
         >
-          <FormStackGrid columns={2}>
+          <FormStackGrid columns={3}>
             <MuiTextField
               id="managerName"
               label="Manager Name"
@@ -267,19 +321,19 @@ function Index({
               helperText={errors.managerName?.message}
             />
             <MuiTextField
-              id="contactNumber"
+              id="contact_no"
               type="tel"
               label="Contact Number"
               placeholder="9876543210"
-              {...register("contactNumber", {
+              {...register("contact_no", {
                 required: "Contact number is required",
                 pattern: {
                   value: /^[0-9+\-\s]{8,15}$/,
                   message: "Enter a valid contact number",
                 },
               })}
-              error={!!errors.contactNumber}
-              helperText={errors.contactNumber?.message}
+              error={!!errors.contact_no}
+              helperText={errors.contact_no?.message}
             />
             <MuiTextField
               id="email"
@@ -302,21 +356,10 @@ function Index({
         {/* ══════════ Location & Notes ══════════ */}
         <FormSection
           title="Location & Notes"
-          description="Physical address and additional remarks"
-          icon={<LocationOnOutlinedIcon fontSize="small" />}
+          
           accentColor="#059669"
         >
-          <FormStackGrid columns={1}>
-            <MuiTextField
-              id="location"
-              label="City / Location"
-              placeholder="Ahmedabad"
-              {...register("location", {
-                required: "Location is required",
-              })}
-              error={!!errors.location}
-              helperText={errors.location?.message}
-            />
+          <FormStackGrid columns={2}>
             <MuiTextField
               id="address"
               label="Address"
@@ -334,7 +377,7 @@ function Index({
               id="notes"
               label="Notes"
               multiline
-              minRows={4}
+              minRows={3}
               placeholder="Optional notes for handling, timing, access rules, etc."
               {...register("notes")}
               fullWidth
@@ -347,9 +390,7 @@ function Index({
         <Box
           sx={{
             mt: 3,
-            pt: 2,
-            borderTop: "1px solid",
-            borderColor: "divider",
+            textAlign: "right",
           }}
         >
           <ConfirmDeleteButton

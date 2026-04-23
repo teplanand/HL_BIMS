@@ -1,77 +1,58 @@
-export type EvidenceViewMode = "grid" | "list";
+export type EvidenceApiRecord = Record<string, unknown>;
 
-export interface EvidenceUser {
+export type EvidenceWorkspaceMode = "upload" | "view";
+
+export type EvidenceMediaKind = "image" | "video" | "audio" | "file";
+
+export interface EvidenceCategoryOption {
   id: string;
-  name: string;
-  role: string;
-  avatarUrl?: string;
+  numericId: number | null;
+  label: string;
+  subtitle: string;
+  raw: EvidenceApiRecord | null;
 }
 
-export interface EvidenceComment {
+export interface EvidenceReferenceOption {
   id: string;
-  userId: string;
-  userName: string;
-  userRole: string;
-  message: string;
-  createdAt: string;
+  refNo: string;
+  label: string;
+  subtitle: string;
+  raw: EvidenceApiRecord | null;
 }
 
-export interface EvidenceCategory {
+export interface EvidenceRemarkOption {
   id: string;
-  name: string;
-  children?: EvidenceCategory[];
+  label: string;
+  value: string;
 }
 
-export interface EvidenceItem {
+export interface EvidenceMediaItem {
   id: string;
+  kind: EvidenceMediaKind;
   title: string;
-  imageUrl: string;
-  description: string;
-  categoryId: string;
+  url: string;
+  previewUrl: string;
+  remark: string;
   createdAt: string;
-  userId: string;
-  likesCount: number;
-  likedByViewer: boolean;
-  comments: EvidenceComment[];
+  sourceLabel: string;
+  raw: EvidenceApiRecord | null;
 }
 
-export interface EvidenceFilters {
-  search: string;
-  userId: string;
-  dateFrom: string;
-  dateTo: string;
+export interface EvidenceViewerProfile {
+  name: string;
+  hrmsId: string;
+  role: string;
+  company: string;
+  division: string;
+  canUpload: boolean;
+  canView: boolean;
 }
 
-export interface EvidenceState {
-  loading: boolean;
-  selectedCategoryId: string | null;
-  expandedCategoryIds: string[];
-  activeEvidenceId: string | null;
-  viewMode: EvidenceViewMode;
-  filters: EvidenceFilters;
-  evidence: EvidenceItem[];
+export interface UploadPreviewItem {
+  id: string;
+  name: string;
+  sizeLabel: string;
+  mimeType: string;
+  isImage: boolean;
+  previewUrl: string;
 }
-
-export type EvidenceAction =
-  | { type: "finishLoading" }
-  | { type: "selectCategory"; payload: string | null }
-  | { type: "toggleCategory"; payload: string }
-  | { type: "setViewMode"; payload: EvidenceViewMode }
-  | {
-      type: "setFilter";
-      payload: {
-        key: keyof EvidenceFilters;
-        value: string;
-      };
-    }
-  | { type: "clearFilters" }
-  | { type: "toggleLike"; payload: string }
-  | {
-      type: "addComment";
-      payload: {
-        evidenceId: string;
-        comment: EvidenceComment;
-      };
-    }
-  | { type: "openModal"; payload: string }
-  | { type: "closeModal" };

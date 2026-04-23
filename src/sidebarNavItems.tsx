@@ -17,6 +17,7 @@ import {
   Verified as VerifiedIcon,
   MonitorHeart as MonitorHeartIcon,
   Assignment as AssignmentIcon,
+  SyncAlt as SyncAltIcon,
 } from "@mui/icons-material";
 import type { Navigation } from "@toolpad/core/AppProvider";
 
@@ -32,6 +33,7 @@ import ZonelistPage from "./pages/Warehouse/Zonelist";
 import RacklistPage from "./pages/Warehouse/Racklist";
 import PalletlistPage from "./pages/Warehouse/Palletlist";
 import ItemlistPage from "./pages/Warehouse/Itemlist";
+import TransactionsPage from "./pages/Warehouse/Transactions";
 import OrderTrackingDashboard from "./pages/OrderTracking/index";
 import OrderTrackingConfiguration from "./pages/OrderTracking/configurationlist";
 import ExampleForm from "./pages/SamplePages/MuiForm";
@@ -206,6 +208,13 @@ export const moduleRoutes: ModuleRouteConfig[] = [
         roles: ["admin"],
         path: "/itemlist",
         element: <ItemlistPage />,
+      },
+      {
+        name: "Transactions",
+        icon: <SyncAltIcon />,
+        roles: ["admin"],
+        path: "/transactions",
+        element: <TransactionsPage />,
       },
     ],
   },

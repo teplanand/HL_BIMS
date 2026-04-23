@@ -1,10 +1,8 @@
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
-import { getToken } from "../../utils/auth";
+import { createApi } from "@reduxjs/toolkit/query/react";
+import { createAppBaseQuery } from "../../utils/customBaseQuery";
 
 export const EVIDANCE_COLLECTION_API_BASE_URL =
   "https://evidenceapi.techelecon.in/api";
-export const EVIDANCE_COLLECTION_STATIC_USERNAME = "TPLST0032";
-export const EVIDANCE_COLLECTION_STATIC_PASSWORD = "elecon";
 
 export interface EvidanceCollectionResponse<TData = unknown> {
   status?: boolean | number;
@@ -52,19 +50,6 @@ export interface ApproveRejectRequestPayload {
   HrmsId: string;
   Status: number;
 }
-
-export interface LoginPayload {
-  username: string;
-  password: string;
-}
-
-export const buildEvidanceCollectionLoginPayload = (
-  overrides: Partial<LoginPayload> = {}
-): LoginPayload => ({
-  username: EVIDANCE_COLLECTION_STATIC_USERNAME,
-  password: EVIDANCE_COLLECTION_STATIC_PASSWORD,
-  ...overrides,
-});
 
 export interface GetViewMediaPayload {
   RefNo: string;
@@ -184,17 +169,8 @@ export const buildSaveImagesFormData = (payload: SaveImagesPayload) => {
 
 export const evidanceCollectionApi = createApi({
   reducerPath: "evidanceCollectionApi",
-  baseQuery: fetchBaseQuery({
+  baseQuery: createAppBaseQuery({
     baseUrl: EVIDANCE_COLLECTION_API_BASE_URL,
-    prepareHeaders: (headers) => {
-      const token = getToken();
-
-      if (token) {
-        headers.set("Authorization", `Bearer ${token}`);
-      }
-
-      return headers;
-    },
   }),
   tagTypes: ["EvidanceCollection"],
   endpoints: (builder) => ({
@@ -282,21 +258,6 @@ export const evidanceCollectionApi = createApi({
         body,
       }),
       invalidatesTags: ["EvidanceCollection"],
-    }),
-    login: builder.mutation<
-      EvidanceCollectionResponse<EvidanceCollectionRecord>,
-      Partial<LoginPayload> | void
-    >({
-      query: (body) => {
-        const safeBody =
-          body && typeof body === "object" ? body : ({} as Partial<LoginPayload>);
-
-        return {
-          url: "/Login/login",
-          method: "POST",
-          body: buildEvidanceCollectionLoginPayload(safeBody),
-        };
-      },
     }),
     getUserData: builder.mutation<
       EvidanceCollectionResponse<EvidanceCollectionRecord>,
@@ -500,7 +461,6 @@ export const {
   useGetRegistrationDataQuery,
   useLazyGetRegistrationDataQuery,
   useApproveRejectRequestMutation,
-  useLoginMutation,
   useGetUserDataMutation,
   useGetUserCategoriesMutation,
   useGetImagesMutation,

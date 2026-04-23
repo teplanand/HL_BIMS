@@ -1,6 +1,6 @@
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, type Ref } from "react";
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, type Ref } from "react";
 import { useForm } from "react-hook-form";
-import { Stack, Box } from "@mui/material";
+import { Stack, Box, FormControlLabel, Switch, Typography } from "@mui/material";
 
 import ConfirmDeleteButton from "../../../components/common/ConfirmDeleteButton";
 import { MuiSelect, MuiTextField } from "../../../components/mui/input";
@@ -10,7 +10,12 @@ import { useModal } from "../../../hooks/useModal";
 import { useToast } from "../../../hooks/useToast";
 import { useListWarehousesQuery, useListZonesQuery } from "../../../redux/api/warehouse";
 import { extractApiRows } from "../shared/gridApiHelpers";
-import ViewModuleOutlinedIcon from "@mui/icons-material/ViewModuleOutlined";
+import {
+  buildRackCode,
+  buildWarehouseCode,
+  buildZoneCode,
+  normalizeCodeValue,
+} from "../shared/codeGeneration";
 
 type RackFormValues = {
   warehouse_id: string;
@@ -66,10 +71,60 @@ function Index({
   const isEditMode = Boolean(defaultValues?.id);
   const { data: warehousesData } = useListWarehousesQuery();
   const { data: zonesData } = useListZonesQuery();
+  const initialWarehouseId = String(defaultValues?.warehouse_id || "");
+  const initialZoneId = String(defaultValues?.zone_id || defaultValues?.section_id || "");
+  const initialRackDescription = defaultValues?.rack_description || "";
+  const initialRackCode = defaultValues?.rack_code || defaultValues?.name || "";
+  const warehouses = useMemo(() => extractApiRows(warehousesData), [warehousesData]);
+  const zones = useMemo(() => extractApiRows(zonesData), [zonesData]);
+  const initialWarehouse = useMemo(
+    () => warehouses.find((warehouse: any) => String(warehouse.id) === initialWarehouseId),
+    [initialWarehouseId, warehouses]
+  );
+  const initialZone = useMemo(
+    () => zones.find((zone: any) => String(zone.id) === initialZoneId),
+    [initialZoneId, zones]
+  );
+  const initialWarehouseCode = useMemo(
+    () =>
+      normalizeCodeValue(
+        initialWarehouse?.warehouse_code ||
+        initialWarehouse?.code ||
+        buildWarehouseCode(
+          initialWarehouse?.warehouse_name ||
+          initialWarehouse?.warehouseName ||
+          initialWarehouse?.name
+        )
+      ),
+    [initialWarehouse]
+  );
+  const initialZoneCode = useMemo(
+    () =>
+      normalizeCodeValue(
+        initialZone?.zone_code ||
+        initialZone?.code ||
+        buildZoneCode(
+          initialWarehouseCode,
+          initialZone?.zone_title || initialZone?.name || initialZone?.zone_code
+        )
+      ),
+    [initialWarehouseCode, initialZone]
+  );
+  const initialGeneratedRackCode = useMemo(
+    () => buildRackCode(initialZoneCode, initialRackDescription),
+    [initialRackDescription, initialZoneCode]
+  );
+  const rackCodeManuallyEditedRef = useRef(
+    Boolean(
+      initialRackCode &&
+      normalizeCodeValue(initialRackCode) !== normalizeCodeValue(initialGeneratedRackCode)
+    )
+  );
 
   const warehouseOptions = useMemo(
-    () =>
-      extractApiRows(warehousesData).map((warehouse: any) => ({
+    () => [
+      { value: "", label: "Select warehouse" },
+      ...warehouses.map((warehouse: any) => ({
         value: String(warehouse.id),
         label:
           warehouse.warehouse_name ||
@@ -77,21 +132,15 @@ function Index({
           warehouse.name ||
           `Warehouse ${warehouse.id}`,
       })),
-    [warehousesData]
-  );
-
-  const zoneOptions = useMemo(
-    () =>
-      extractApiRows(zonesData).map((zone: any) => ({
-        value: String(zone.id),
-        label: zone.zone_title || zone.name || zone.zone_code || `Zone ${zone.id}`,
-      })),
-    [zonesData]
+    ],
+    [warehouses]
   );
 
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors, isDirty },
   } = useForm<RackFormValues>({
     defaultValues: {
@@ -113,6 +162,102 @@ function Index({
   useEffect(() => {
     setDataChanged?.(isDirty);
   }, [isDirty, setDataChanged]);
+
+  const selectedWarehouseId = watch("warehouse_id");
+  const selectedZoneId = watch("zone_id");
+  const selectedStatus = watch("status");
+  const rackDescription = watch("rack_description");
+  const rackCode = watch("rack_code");
+
+  const filteredZones = useMemo(
+    () =>
+      zones.filter(
+        (zone: any) =>
+          !selectedWarehouseId || String(zone.warehouse_id) === String(selectedWarehouseId)
+      ),
+    [selectedWarehouseId, zones]
+  );
+
+  const zoneOptions = useMemo(
+    () => [
+      { value: "", label: "Select zone" },
+      ...filteredZones.map((zone: any) => ({
+        value: String(zone.id),
+        label: zone.zone_code || zone.zone_title || zone.name || `Zone ${zone.id}`,
+      })),
+    ],
+    [filteredZones]
+  );
+
+  const selectedWarehouse = useMemo(
+    () => warehouses.find((warehouse: any) => String(warehouse.id) === String(selectedWarehouseId)),
+    [selectedWarehouseId, warehouses]
+  );
+  const selectedZone = useMemo(
+    () => zones.find((zone: any) => String(zone.id) === String(selectedZoneId)),
+    [selectedZoneId, zones]
+  );
+  const selectedWarehouseCode = useMemo(
+    () =>
+      normalizeCodeValue(
+        selectedWarehouse?.warehouse_code ||
+        selectedWarehouse?.code ||
+        buildWarehouseCode(
+          selectedWarehouse?.warehouse_name ||
+          selectedWarehouse?.warehouseName ||
+          selectedWarehouse?.name
+        )
+      ),
+    [selectedWarehouse]
+  );
+  const selectedZoneCode = useMemo(
+    () =>
+      normalizeCodeValue(
+        selectedZone?.zone_code ||
+        selectedZone?.code ||
+        buildZoneCode(
+          selectedWarehouseCode,
+          selectedZone?.zone_title || selectedZone?.name || selectedZone?.zone_code
+        )
+      ),
+    [selectedWarehouseCode, selectedZone]
+  );
+  const generatedRackCode = useMemo(
+    () => buildRackCode(selectedZoneCode, rackDescription),
+    [rackDescription, selectedZoneCode]
+  );
+
+  useEffect(() => {
+    if (!selectedZoneId) {
+      return;
+    }
+
+    const zoneStillValid = filteredZones.some(
+      (zone: any) => String(zone.id) === String(selectedZoneId)
+    );
+
+    if (!zoneStillValid) {
+      setValue("zone_id", "", {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+  }, [filteredZones, selectedZoneId, setValue]);
+
+  useEffect(() => {
+    if (rackCodeManuallyEditedRef.current) {
+      return;
+    }
+
+    if (normalizeCodeValue(rackCode) === normalizeCodeValue(generatedRackCode)) {
+      return;
+    }
+
+    setValue("rack_code", generatedRackCode, {
+      shouldDirty: normalizeCodeValue(generatedRackCode) !== normalizeCodeValue(initialRackCode),
+      shouldValidate: true,
+    });
+  }, [generatedRackCode, initialRackCode, rackCode, setValue]);
 
   const onSubmit = useCallback(async (data: RackFormValues) => {
     const payload: RackSubmitPayload = {
@@ -151,10 +296,9 @@ function Index({
       <Stack spacing={1}>
         <FormSection
           title="Rack Details"
-          description="Rack identification and zone mapping"
-          icon={<ViewModuleOutlinedIcon fontSize="small" />}
+        
         >
-          <FormStackGrid columns={2}>
+          <FormStackGrid columns={1}>
             <MuiSelect
               id="warehouse_id"
               label="Warehouse"
@@ -162,7 +306,25 @@ function Index({
               displayEmpty
               defaultValue={String(defaultValues?.warehouse_id || "")}
               options={warehouseOptions}
-              {...register("warehouse_id", { required: "Warehouse is required" })}
+              {...register("warehouse_id", {
+                required: "Warehouse is required",
+                onChange: (event) => {
+                  const nextWarehouseId = String(event.target.value || "");
+                  const activeZone = zones.find(
+                    (zone: any) => String(zone.id) === String(selectedZoneId)
+                  );
+
+                  if (
+                    activeZone &&
+                    String(activeZone.warehouse_id) !== nextWarehouseId
+                  ) {
+                    setValue("zone_id", "", {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    });
+                  }
+                },
+              })}
               error={!!errors.warehouse_id}
               helperText={errors.warehouse_id?.message}
             />
@@ -181,33 +343,77 @@ function Index({
               id="rack_code"
               label="Rack Code"
               placeholder="RACK-001"
-              {...register("rack_code", { required: "Rack code is required" })}
+              {...register("rack_code", {
+                required: "Rack code is required",
+                onChange: (event) => {
+                  rackCodeManuallyEditedRef.current =
+                    normalizeCodeValue(event.target.value) !== normalizeCodeValue(generatedRackCode);
+                },
+              })}
               error={!!errors.rack_code}
               helperText={errors.rack_code?.message}
             />
-            <MuiSelect
-              id="status"
-              label="Status"
-              defaultValue={defaultValues?.status || "ACTIVE"}
-              options={[
-                { value: "ACTIVE", label: "Active" },
-                { value: "INACTIVE", label: "Inactive" },
-              ]}
-              {...register("status", { required: "Status is required" })}
-              error={!!errors.status}
-              helperText={errors.status?.message}
-            />
-            <Box sx={{ gridColumn: "1 / -1" }}>
-              <MuiTextField
-                id="rack_description"
-                label="Rack Description"
-                placeholder="Optional description"
-                multiline
-                minRows={3}
-                {...register("rack_description")}
-                fullWidth
+            <Box sx={{ minWidth: 0 }}>
+              
+              <input
+                type="hidden"
+                {...register("status", { required: "Status is required" })}
               />
+              <FormControlLabel
+                sx={{
+                  m: 0,
+                  px: 1,
+                  py: 0.4,
+                  width: "100%",
+                  border: "1px solid rgba(15,23,42,0.12)",
+                  borderRadius: 1.5,
+                  justifyContent: "space-between",
+                  backgroundColor:
+                    selectedStatus === "ACTIVE" ? "rgba(34,197,94,0.08)" : "rgba(148,163,184,0.08)",
+                  "& .MuiFormControlLabel-label": {
+                    fontWeight: 700,
+                    color: "text.primary",
+                  },
+                }}
+                control={
+                  <Switch
+                    checked={selectedStatus === "ACTIVE"}
+                    onChange={(event) => {
+                      setValue("status", event.target.checked ? "ACTIVE" : "INACTIVE", {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      });
+                    }}
+                    color="success"
+                  />
+                }
+                label={selectedStatus === "ACTIVE" ? "Active" : "Inactive"}
+                labelPlacement="start"
+              />
+              {errors.status ? (
+                <Typography variant="caption" color="error" sx={{ mt: 0.75, display: "block" }}>
+                  {errors.status.message}
+                </Typography>
+              ) : null}
             </Box>
+          </FormStackGrid>
+        </FormSection>
+
+        <FormSection
+          title="Description"
+          
+          accentColor="#1D4ED8"
+        >
+          <FormStackGrid columns={1}>
+            <MuiTextField
+              id="rack_description"
+              label="Rack Description"
+              placeholder="Optional description"
+              multiline
+              minRows={4}
+              {...register("rack_description")}
+              fullWidth
+            />
           </FormStackGrid>
         </FormSection>
       </Stack>
@@ -216,9 +422,7 @@ function Index({
         <Box
           sx={{
             mt: 3,
-            pt: 2,
-            borderTop: "1px solid",
-            borderColor: "divider",
+            textAlign: "right",
           }}
         >
           <ConfirmDeleteButton

@@ -1,5 +1,5 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
-import customBaseQuery from "../../utils/rtkHelper";
+import customBaseQuery from "../../utils/customBaseQuery";
 
 export const documentApi = createApi({
     reducerPath: "documentApi",

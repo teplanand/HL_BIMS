@@ -16,6 +16,7 @@ import {
 import { AddEditRack, AddEditRackRef, type RackSubmitPayload } from "./addeditrack";
 import { openEntityFormModal } from "../shared/openEntityFormModal";
 import { buildGridApiParams, extractApiRows, extractApiTotalCount } from "../shared/gridApiHelpers";
+import { buildRackCreatePayload, buildRackUpdatePayload } from "../shared/payloadBuilders";
 
 const RacklistPage: React.FC = () => {
     const { openModal } = useModal();
@@ -29,21 +30,16 @@ const RacklistPage: React.FC = () => {
             if (payload.id) {
                 await updateRack({
                     id: payload.id,
-                    warehouse_id: payload.warehouse_id,
-                    zone_id: payload.zone_id,
-                    rack_code: payload.rack_code,
-                    rack_description: payload.rack_description,
-                    status: payload.status,
+                    ...(buildRackUpdatePayload({
+                        warehouse_id: payload.warehouse_id,
+                        zone_id: payload.zone_id,
+                        rack_code: payload.rack_code,
+                        rack_description: payload.rack_description,
+                        status: payload.status,
+                    }) as any),
                 }).unwrap();
             } else {
-                await createRack({
-                    warehouse_id: Number(payload.warehouse_id),
-                    zone_id: payload.zone_id,
-                    rack_code: payload.rack_code,
-                    rack_description: payload.rack_description,
-                    status: payload.status,
-                    created_by: "admin",
-                }).unwrap();
+                await createRack(buildRackCreatePayload(payload) as any).unwrap();
             }
         } catch (error: any) {
             showToast(error?.data?.message || error?.message || "Failed to save rack", "error");
@@ -77,7 +73,7 @@ const RacklistPage: React.FC = () => {
         openEntityFormModal<AddEditRackRef>({
             openModal,
             entityLabel: "Rack",
-            width: 560,
+            width: 520,
             FormComponent: AddEditRack,
             defaultValues: row,
             extraProps: {
@@ -109,7 +105,7 @@ const RacklistPage: React.FC = () => {
     const zoneMap = useMemo(() => {
         const entries = extractApiRows(zonesData).map((zone: any) => [
             String(zone.id),
-            zone.zone_title || zone.name || zone.zone_code || `Zone ${zone.id}`,
+            zone.zone_code || zone.zone_title || zone.name || `Zone ${zone.id}`,
         ]);
         return new Map(entries);
     }, [zonesData]);
@@ -131,6 +127,7 @@ const RacklistPage: React.FC = () => {
                 zone_id: rack.zone_id,
                 warehouseName: warehouseMap.get(String(rack.warehouse_id)) || `Warehouse ${rack.warehouse_id ?? ""}`,
                 zoneName:
+                    rack.zone_code ||
                     rack.zoneName ||
                     zoneMap.get(String(rack.zone_id)) ||
                     `Zone ${rack.zone_id ?? ""}`,
@@ -158,9 +155,9 @@ const RacklistPage: React.FC = () => {
     }, [error, showToast]);
 
     const columns: GridColDef[] = [
+        { field: "rack_code", headerName: "Rack Code", flex: 1, minWidth: 160 },
         { field: "warehouseName", headerName: "Warehouse", flex: 1, minWidth: 160 },
         { field: "zoneName", headerName: "Zone", flex: 1, minWidth: 160 },
-        { field: "rack_code", headerName: "Rack Code", flex: 1, minWidth: 160 },
         {
             field: "status",
             headerName: "Status",
@@ -183,12 +180,16 @@ const RacklistPage: React.FC = () => {
                 );
             },
         },
-        { field: "pallets_count", headerName: "Pallet Count", flex: 0.9, minWidth: 140, type: "number" },
+        // { field: "pallets_count", headerName: "Pallet Count", flex: 0.9, minWidth: 140, type: "number" },
     ];
 
     return (
         <Page module="Warehouse">
-            <Box className="p-0">
+            <Box className="p-0"  sx={{
+                    "& .MuiDataGrid-row:hover": {
+                        cursor: "pointer",
+                    },
+                }}>
                 <ReusableDataGrid
                     rows={rows}
                     columns={columns}
@@ -200,6 +201,7 @@ const RacklistPage: React.FC = () => {
                     setSortModel={setSortModel}
                     filterModel={filterModel}
                     setFilterModel={setFilterModel}
+                    height={"calc(100vh - 120px)"}
                     title="Rack List"
                     permissions={{
                         create: true,

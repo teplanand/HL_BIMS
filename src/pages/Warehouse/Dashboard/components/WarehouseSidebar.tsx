@@ -126,7 +126,7 @@ function WarehouseSidebarInner({
             >
               <ListItemText
                 primary={warehouse.name}
-                secondary={`${warehouse.location} | ${warehouse.sections.length} zones · ${rackCount} racks`}
+                secondary={`${warehouse.address} | ${warehouse.sections.length} zones · ${rackCount} racks`}
                 primaryTypographyProps={{
                   fontWeight: 700,
                   fontSize: "0.88rem",

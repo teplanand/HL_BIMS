@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { FormEvent, useState } from "react";
 import { useEmailLoginMutation } from "../../redux/api/login";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router";
@@ -16,7 +16,12 @@ import {
   InputAdornment,
   IconButton,
 } from "@mui/material";
-import { setToken as setTokenV2 } from "../../utils/auth";
+import {
+  extractAuthToken,
+  extractAuthUserProfile,
+  setStoredUserProfile,
+  setToken as setTokenV2,
+} from "../../utils/auth";
 import { useDispatch } from "react-redux";
 import { setToken } from "../../redux/authSlice";
 import Visibility from "@mui/icons-material/Visibility";
@@ -39,8 +44,8 @@ const floatReverse = keyframes`
 `;
 
 export default function SignIn() {
-  const [email, setEmail] = useState("admin");
-  const [password, setPassword] = useState("admin@123");
+  const [email, setEmail] = useState("TPLSR0131");
+  const [password, setPassword] = useState("123456");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
@@ -78,30 +83,28 @@ export default function SignIn() {
 
 
 
-      // const response = await emailLogin({
-      //   email: apiEmail,
-      //   password: password,
-      // }).unwrap();
+      const response = await emailLogin({
+        employee_id: apiEmail,
+        password: password,
+      }).unwrap();
 
-      const response = {
-        token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwibmFtZSI6IlN1cGVyIEFkbWluIiwiZW1haWwiOiJhZG1pbkBnbWFpbC5jb20iLCJyb2xlIjoiYWRtaW4iLCJyb2xlX2lkIjoxLCJwZXJtaXNzaW9ucyI6eyJhbGxfbW9kdWxlcyI6WyJhZGQiLCJlZGl0IiwidmlldyIsImRlbGV0ZSJdfSwiZXhwIjoxNzc0MDc5NDQzfQ.s128IA8ixJmHEjrD2emvJrA-VhjanJ3nmwNMEp90yVw",
-        permissions: ["add", "edit", "view", "delete"],
-        access_token:''
-      };
-
-      // Assuming response contains token structure
-      // Adjust based on actual API response type if different,
-      // but generic 'response.token' usage suggests it's standard here.
-      const token = response.token || response?.access_token ;
+      // const response = {
+      //   token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwibmFtZSI6IlN1cGVyIEFkbWluIiwiZW1haWwiOiJhZG1pbkBnbWFpbC5jb20iLCJyb2xlIjoiYWRtaW4iLCJyb2xlX2lkIjoxLCJwZXJtaXNzaW9ucyI6eyJhbGxfbW9kdWxlcyI6WyJhZGQiLCJlZGl0IiwidmlldyIsImRlbGV0ZSJdfSwiZXhwIjoxNzc0MDc5NDQzfQ.s128IA8ixJmHEjrD2emvJrA-VhjanJ3nmwNMEp90yVw",
+      //   permissions: ["add", "edit", "view", "delete"],
+      //   access_token:''
+      // };
+      const token = extractAuthToken(response);
+      const permissions =  ["add", "edit", "view", "delete"]; // This should ideally come from the response, but hardcoding for now as per request
 
       if (token) {
         setTokenV2(token);
+        setStoredUserProfile(extractAuthUserProfile(response, token));
         dispatch(setToken(token));
 
-        if (response.permissions) {
+        if (permissions) {
           localStorage.setItem(
             "permissions",
-            JSON.stringify(response.permissions),
+            JSON.stringify(permissions),
           );
         } else {
           localStorage.removeItem("permissions");
@@ -120,10 +123,9 @@ export default function SignIn() {
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      handleLogin();
-    }
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void handleLogin();
   };
 
   return (
@@ -246,7 +248,7 @@ export default function SignIn() {
             <Fade in={true}>
               <Box
                 component="form"
-                onKeyPress={handleKeyPress}
+                onSubmit={handleSubmit}
                 sx={{ textAlign: "left" }}
               >
                 <Typography
@@ -254,7 +256,7 @@ export default function SignIn() {
                   fontWeight={600}
                   sx={{ mb: 1, ml: 0.5 }}
                 >
-                  Username
+                  Employee ID
                 </Typography>
                 <TextField
                   fullWidth
@@ -303,6 +305,7 @@ export default function SignIn() {
                     endAdornment: (
                       <InputAdornment position="end">
                         <IconButton
+                          type="button"
                           onClick={() => setShowPassword(!showPassword)}
                           edge="end"
                         >
@@ -362,7 +365,7 @@ export default function SignIn() {
                   fullWidth
                   size="large"
                   variant="contained"
-                  onClick={handleLogin}
+                  type="submit"
                   disabled={isEmailLoggingIn}
                   sx={{
                     py: 1.8,

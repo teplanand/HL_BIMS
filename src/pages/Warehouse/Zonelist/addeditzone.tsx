@@ -1,6 +1,6 @@
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, type Ref } from "react";
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, type Ref } from "react";
 import { useForm } from "react-hook-form";
-import { Box, Stack } from "@mui/material";
+import { Box, FormControlLabel, Stack, Switch, Typography } from "@mui/material";
 
 import ConfirmDeleteButton from "../../../components/common/ConfirmDeleteButton";
 import { MuiSelect, MuiTextField } from "../../../components/mui/input";
@@ -10,8 +10,7 @@ import { useModal } from "../../../hooks/useModal";
 import { useToast } from "../../../hooks/useToast";
 import { useListWarehousesQuery } from "../../../redux/api/warehouse";
 import { extractApiRows } from "../shared/gridApiHelpers";
-import ViewInArOutlinedIcon from "@mui/icons-material/ViewInArOutlined";
-import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
+import { buildWarehouseCode, buildZoneCode, normalizeCodeValue } from "../shared/codeGeneration";
 
 type ZoneFormValues = {
   warehouse_id: string;
@@ -65,10 +64,42 @@ function Index({
   const { showToast } = useToast();
   const isEditMode = Boolean(defaultValues?.id);
   const { data: warehousesData } = useListWarehousesQuery();
+  const initialWarehouseId = String(defaultValues?.warehouse_id || "");
+  const initialZoneTitle = defaultValues?.zone_title || defaultValues?.name || "";
+  const initialZoneCode = defaultValues?.zone_code || "";
+  const warehouses = useMemo(() => extractApiRows(warehousesData), [warehousesData]);
+  const initialWarehouse = useMemo(
+    () => warehouses.find((warehouse: any) => String(warehouse.id) === initialWarehouseId),
+    [initialWarehouseId, warehouses]
+  );
+  const initialWarehouseCode = useMemo(
+    () =>
+      normalizeCodeValue(
+        initialWarehouse?.warehouse_code ||
+        initialWarehouse?.code ||
+        buildWarehouseCode(
+          initialWarehouse?.warehouse_name ||
+          initialWarehouse?.warehouseName ||
+          initialWarehouse?.name
+        )
+      ),
+    [initialWarehouse]
+  );
+  const initialGeneratedZoneCode = useMemo(
+    () => buildZoneCode(initialWarehouseCode, initialZoneTitle),
+    [initialWarehouseCode, initialZoneTitle]
+  );
+  const zoneCodeManuallyEditedRef = useRef(
+    Boolean(
+      initialZoneCode &&
+      normalizeCodeValue(initialZoneCode) !== normalizeCodeValue(initialGeneratedZoneCode)
+    )
+  );
 
   const warehouseOptions = useMemo(
-    () =>
-      extractApiRows(warehousesData).map((warehouse: any) => ({
+    () => [
+      { value: "", label: "Select warehouse" },
+      ...warehouses.map((warehouse: any) => ({
         value: String(warehouse.id),
         label:
           warehouse.warehouse_name ||
@@ -76,12 +107,15 @@ function Index({
           warehouse.name ||
           `Warehouse ${warehouse.id}`,
       })),
-    [warehousesData]
+    ],
+    [warehouses]
   );
 
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors, isDirty },
   } = useForm<ZoneFormValues>({
     defaultValues: {
@@ -103,6 +137,47 @@ function Index({
   useEffect(() => {
     setDataChanged?.(isDirty);
   }, [isDirty, setDataChanged]);
+
+  const selectedStatus = watch("status");
+  const selectedWarehouseId = watch("warehouse_id");
+  const zoneTitle = watch("zone_title");
+  const zoneCode = watch("zone_code");
+  const selectedWarehouse = useMemo(
+    () => warehouses.find((warehouse: any) => String(warehouse.id) === String(selectedWarehouseId)),
+    [selectedWarehouseId, warehouses]
+  );
+  const selectedWarehouseCode = useMemo(
+    () =>
+      normalizeCodeValue(
+        selectedWarehouse?.warehouse_code ||
+        selectedWarehouse?.code ||
+        buildWarehouseCode(
+          selectedWarehouse?.warehouse_name ||
+          selectedWarehouse?.warehouseName ||
+          selectedWarehouse?.name
+        )
+      ),
+    [selectedWarehouse]
+  );
+  const generatedZoneCode = useMemo(
+    () => buildZoneCode(selectedWarehouseCode, zoneTitle),
+    [selectedWarehouseCode, zoneTitle]
+  );
+
+  useEffect(() => {
+    if (zoneCodeManuallyEditedRef.current) {
+      return;
+    }
+
+    if (normalizeCodeValue(zoneCode) === normalizeCodeValue(generatedZoneCode)) {
+      return;
+    }
+
+    setValue("zone_code", generatedZoneCode, {
+      shouldDirty: normalizeCodeValue(generatedZoneCode) !== normalizeCodeValue(initialZoneCode),
+      shouldValidate: true,
+    });
+  }, [generatedZoneCode, initialZoneCode, setValue, zoneCode]);
 
   const onSubmit = useCallback(async (data: ZoneFormValues) => {
     const payload: ZoneSubmitPayload = {
@@ -141,10 +216,9 @@ function Index({
       <Stack spacing={1}>
         <FormSection
           title="Zone Identity"
-          description="Warehouse mapping and zone identification"
-          icon={<ViewInArOutlinedIcon fontSize="small" />}
+          
         >
-          <FormStackGrid columns={2}>
+          <FormStackGrid columns={1}>
             <MuiSelect
               id="warehouse_id"
               label="Warehouse"
@@ -164,6 +238,10 @@ function Index({
               placeholder="ZONE-A"
               {...register("zone_code", {
                 required: "Zone code is required",
+                onChange: (event) => {
+                  zoneCodeManuallyEditedRef.current =
+                    normalizeCodeValue(event.target.value) !== normalizeCodeValue(generatedZoneCode);
+                },
               })}
               error={!!errors.zone_code}
               helperText={errors.zone_code?.message}
@@ -178,27 +256,57 @@ function Index({
               error={!!errors.zone_title}
               helperText={errors.zone_title?.message}
             />
-            <MuiSelect
-              id="status"
-              label="Status"
-              defaultValue={defaultValues?.status || "ACTIVE"}
-              options={[
-                { value: "ACTIVE", label: "Active" },
-                { value: "INACTIVE", label: "Inactive" },
-              ]}
-              {...register("status", {
-                required: "Status is required",
-              })}
-              error={!!errors.status}
-              helperText={errors.status?.message}
-            />
+            <Box sx={{ minWidth: 0 }}>
+             
+              <input
+                type="hidden"
+                {...register("status", {
+                  required: "Status is required",
+                })}
+              />
+              <FormControlLabel
+                sx={{
+                  m: 0,
+                  px: 1,
+                  py: 0.4,
+                  width: "100%",
+                  border: "1px solid rgba(15,23,42,0.12)",
+                  borderRadius: 1.5,
+                  justifyContent: "space-between",
+                  backgroundColor:
+                    selectedStatus === "ACTIVE" ? "rgba(34,197,94,0.08)" : "rgba(148,163,184,0.08)",
+                  "& .MuiFormControlLabel-label": {
+                    fontWeight: 700,
+                    color: "text.primary",
+                  },
+                }}
+                control={
+                  <Switch
+                    checked={selectedStatus === "ACTIVE"}
+                    onChange={(event) => {
+                      setValue("status", event.target.checked ? "ACTIVE" : "INACTIVE", {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      });
+                    }}
+                    color="success"
+                  />
+                }
+                label={selectedStatus === "ACTIVE" ? "Active" : "Inactive"}
+                labelPlacement="start"
+              />
+              {errors.status ? (
+                <Typography variant="caption" color="error" sx={{ mt: 0.75, display: "block" }}>
+                  {errors.status.message}
+                </Typography>
+              ) : null}
+            </Box>
           </FormStackGrid>
         </FormSection>
 
         <FormSection
           title="Description"
-          description="Additional zone notes"
-          icon={<SettingsOutlinedIcon fontSize="small" />}
+         
           accentColor="#1D4ED8"
         >
           <FormStackGrid columns={1}>
@@ -219,9 +327,8 @@ function Index({
         <Box
           sx={{
             mt: 3,
-            pt: 2,
-            borderTop: "1px solid",
-            borderColor: "divider",
+            
+            textAlign: "right",
           }}
         >
           <ConfirmDeleteButton

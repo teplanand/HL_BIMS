@@ -9,6 +9,8 @@ export type Pallet = {
   rack_id?: number | string;
   sub_loc_id?: number | string;
   oracle_code?: string;
+  supplier_id?: number | string;
+  supplierId?: number | string;
   item_desc?: string;
   item_category?: string;
   locator?: string;
@@ -49,7 +51,13 @@ export type Section = {
 export type Warehouse = {
   id: string;
   recordId?: string | number;
+  orgId?: string;
   name: string;
-  location: string;
+  managerName?: string;
+  contact_no?: string;
+  email?: string;
+  address: string;
+  notes?: string;
+  status?: "ACTIVE" | "INACTIVE";
   sections: Section[];
 };

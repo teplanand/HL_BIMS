@@ -1,5 +1,17 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Box, Button, Card, Chip, InputAdornment, Stack, TextField, Typography } from "@mui/material";
+import React, { createRef, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Box,
+  Button,
+  Card,
+  Chip,
+  InputAdornment,
+  List,
+  ListItemButton,
+  Paper,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import QrCodeScannerOutlinedIcon from "@mui/icons-material/QrCodeScannerOutlined";
 
@@ -8,14 +20,20 @@ import { RackGrid } from "./components/RackGrid";
 import { SectionTabs } from "./components/SectionTabs";
 import { WarehouseSidebar } from "./components/WarehouseSidebar";
 import { RackDetailsPanel } from "./components/RackDetailsPanel";
+import ApiActionButton from "../../../components/common/ApiActionButton";
+import {
+  ItemTransactionDrawer,
+  type ItemTransactionDrawerRef,
+  type ItemTransactionPayload,
+} from "./components/ItemTransactionDrawer";
 import { Pallet,     Shelf } from "./types";
 import { useModal } from "../../../hooks/useModal";
 import { useToast } from "../../../hooks/useToast";
  import { openEntityFormModal } from "../shared/openEntityFormModal";
 import {
-  buildWarehouseItemFormData,
   useCreatePalletMutation,
   useCreateRackMutation,
+  useCreateTransactionMutation,
   useCreateWarehouseItemMutation,
   useCreateWarehouseMutation,
   useCreateZoneMutation,
@@ -36,6 +54,18 @@ import {
   useUpdateZoneMutation,
 } from "../../../redux/api/warehouse";
 import { useAppSelector } from "../../../redux/hooks";
+import {
+  buildPalletCreatePayload,
+  buildPalletUpdatePayload,
+  buildRackCreatePayload,
+  buildRackUpdatePayload,
+  buildWarehouseCreatePayload,
+  buildWarehouseItemCreateFormData,
+  buildWarehouseItemUpdateFormData,
+  buildWarehouseUpdatePayload,
+  buildZoneCreatePayload,
+  buildZoneUpdatePayload,
+} from "../shared/payloadBuilders";
 import {
   AddEditWarehouse,
   AddEditWarehouseRef,
@@ -59,6 +89,18 @@ import {
 import type { PalletSubmitPayload } from "../Palletlist/addeditpallet";
 
 const DEFAULT_ORG_ID = "";
+
+type SearchResultEntry = {
+  key: string;
+  type: "rack" | "item";
+  warehouse: any;
+  warehouseIndex: number;
+  section: any;
+  sectionIndex: number;
+  rack: any;
+  item?: Pallet;
+  shelf?: Shelf;
+};
 
 const toWarehouseCode = (value: string) => {
   const cleaned = value
@@ -127,6 +169,7 @@ export default function InventoryDashboard() {
   const [createPallet, { isLoading: isCreatingPallet }] = useCreatePalletMutation();
   const [updatePallet, { isLoading: isUpdatingPallet }] = useUpdatePalletMutation();
   const [deletePallet, { isLoading: isDeletingPallet }] = useDeletePalletMutation();
+  const [createTransaction, { isLoading: isCreatingTransaction }] = useCreateTransactionMutation();
 
   const [createItem, { isLoading: isCreatingItem }] = useCreateWarehouseItemMutation();
   const [updateItem, { isLoading: isUpdatingItem }] = useUpdateWarehouseItemMutation();
@@ -152,35 +195,40 @@ export default function InventoryDashboard() {
         if (payload.id) {
           await updateWarehouse({
             id: payload.id,
-            warehouse_code: warehouseCode,
-            warehouse_name: payload.warehouseName,
-            manager_name: payload.managerName,
-            contact_number: payload.contactNumber,
-            email: payload.email,
-            location: payload.location,
-            address: payload.address,
-            storage_capacity: Number(payload.storageCapacity),
-            notes: payload.notes,
-            status: payload.status,
-            is_active: payload.status === "ACTIVE",
+            ...(buildWarehouseUpdatePayload(
+              {
+                orgId: payload.orgId || DEFAULT_ORG_ID,
+                warehouseCode,
+                warehouseName: payload.warehouseName,
+                managerName: payload.managerName,
+                contactNo: payload.contact_no,
+                email: payload.email,
+                address: payload.address,
+                notes: payload.notes,
+                status: payload.status,
+              },
+              authUserId ? String(authUserId) : "admin"
+            ) as any),
           }).unwrap();
           return;
         }
 
-        await createWarehouse({
-          org_id: payload.orgId || DEFAULT_ORG_ID,
-          warehouse_code: warehouseCode,
-          warehouse_name: payload.warehouseName,
-          manager_name: payload.managerName,
-          contact_number: payload.contactNumber,
-          email: payload.email,
-          location: payload.location,
-          address: payload.address,
-          storage_capacity: Number(payload.storageCapacity),
-          notes: payload.notes,
-          status: payload.status,
-          created_by: authUserId ? String(authUserId) : "admin",
-        }).unwrap();
+        await createWarehouse(
+          buildWarehouseCreatePayload(
+            {
+              orgId: payload.orgId || DEFAULT_ORG_ID,
+              warehouseCode,
+              warehouseName: payload.warehouseName,
+              managerName: payload.managerName,
+              contactNo: payload.contact_no,
+              email: payload.email,
+              address: payload.address,
+              notes: payload.notes,
+              status: payload.status,
+            },
+            authUserId ? String(authUserId) : "admin"
+          ) as any
+        ).unwrap();
       } catch (error: any) {
         showToast(
           error?.data?.message || error?.message || "Failed to save warehouse",
@@ -213,22 +261,32 @@ export default function InventoryDashboard() {
         if (payload.id) {
           await updateZone({
             id: payload.id,
-            zone_code: payload.zone_code,
-            zone_title: payload.zone_title,
-            zone_description: payload.zone_description,
-            status: payload.status,
+            ...(buildZoneUpdatePayload(
+              {
+                warehouse_id: payload.warehouse_id,
+                zone_code: payload.zone_code,
+                zone_title: payload.zone_title,
+                zone_description: payload.zone_description,
+                status: payload.status,
+              },
+              authUserId ? String(authUserId) : "admin"
+            ) as any),
           }).unwrap();
           return;
         }
 
-        await createZone({
-          warehouse_id: Number(payload.warehouse_id),
-          zone_code: payload.zone_code,
-          zone_title: payload.zone_title,
-          zone_description: payload.zone_description,
-          status: payload.status,
-          created_by: authUserId ? String(authUserId) : "admin",
-        }).unwrap();
+        await createZone(
+          buildZoneCreatePayload(
+            {
+              warehouse_id: payload.warehouse_id,
+              zone_code: payload.zone_code,
+              zone_title: payload.zone_title,
+              zone_description: payload.zone_description,
+              status: payload.status,
+            },
+            authUserId ? String(authUserId) : "admin"
+          ) as any
+        ).unwrap();
       } catch (error: any) {
         showToast(error?.data?.message || error?.message || "Failed to save zone", "error");
         throw error;
@@ -255,23 +313,32 @@ export default function InventoryDashboard() {
         if (payload.id) {
           await updateRack({
             id: payload.id,
-            warehouse_id: payload.warehouse_id,
-            zone_id: payload.zone_id,
-            rack_code: payload.rack_code,
-            rack_description: payload.rack_description,
-            status: payload.status,
+            ...(buildRackUpdatePayload(
+              {
+                warehouse_id: payload.warehouse_id,
+                zone_id: payload.zone_id,
+                rack_code: payload.rack_code,
+                rack_description: payload.rack_description,
+                status: payload.status,
+              },
+              authUserId ? String(authUserId) : "admin"
+            ) as any),
           }).unwrap();
           return;
         }
 
-        await createRack({
-          warehouse_id: Number(payload.warehouse_id),
-          zone_id: payload.zone_id,
-          rack_code: payload.rack_code,
-          rack_description: payload.rack_description,
-          status: payload.status,
-          created_by: authUserId ? String(authUserId) : "admin",
-        }).unwrap();
+        await createRack(
+          buildRackCreatePayload(
+            {
+              warehouse_id: payload.warehouse_id,
+              zone_id: payload.zone_id,
+              rack_code: payload.rack_code,
+              rack_description: payload.rack_description,
+              status: payload.status,
+            },
+            authUserId ? String(authUserId) : "admin"
+          ) as any
+        ).unwrap();
       } catch (error: any) {
         showToast(error?.data?.message || error?.message || "Failed to save rack", "error");
         throw error;
@@ -298,24 +365,34 @@ export default function InventoryDashboard() {
         if (payload.id) {
           await updatePallet({
             id: payload.id,
-            zone_id: payload.zone_id,
-            rack_id: payload.rack_id,
-            pallet_name: payload.pallet_name,
-            max_capacity: payload.max_capacity,
-            status: payload.status,
+            ...(buildPalletUpdatePayload(
+              {
+                warehouse_id: payload.warehouse_id,
+                zone_id: payload.zone_id,
+                rack_id: payload.rack_id,
+                pallet_code: payload.pallet_code,
+                max_capacity: payload.max_capacity,
+                status: payload.status,
+              },
+              authUserId ? String(authUserId) : "admin"
+            ) as any),
           }).unwrap();
           return;
         }
 
-        await createPallet({
-          warehouse_id: Number(payload.warehouse_id),
-          zone_id: payload.zone_id,
-          rack_id: payload.rack_id,
-          pallet_name: payload.pallet_name,
-          max_capacity: payload.max_capacity,
-          status: payload.status,
-          created_by: authUserId ? String(authUserId) : "admin",
-        }).unwrap();
+        await createPallet(
+          buildPalletCreatePayload(
+            {
+              warehouse_id: payload.warehouse_id,
+              zone_id: payload.zone_id,
+              rack_id: payload.rack_id,
+              pallet_code: payload.pallet_code,
+              max_capacity: payload.max_capacity,
+              status: payload.status,
+            },
+            authUserId ? String(authUserId) : "admin"
+          ) as any
+        ).unwrap();
       } catch (error: any) {
         showToast(error?.data?.message || error?.message || "Failed to save pallet", "error");
         throw error;
@@ -343,14 +420,14 @@ export default function InventoryDashboard() {
           const { id, ...updatePayload } = payload;
           return await updateItem({
             id,
-            body: buildWarehouseItemFormData(updatePayload),
+            body: buildWarehouseItemUpdateFormData(updatePayload),
           }).unwrap();
         }
 
         const createPayload = { ...payload } as Omit<ItemSubmitPayload, "id">;
         delete (createPayload as Partial<ItemSubmitPayload>).id;
         return await createItem(
-          buildWarehouseItemFormData(createPayload, ["qty", "detail_qty", "file_name"])
+          buildWarehouseItemCreateFormData(createPayload)
         ).unwrap();
       } catch (error: any) {
         showToast(error?.data?.message || error?.message || "Failed to save item", "error");
@@ -382,7 +459,7 @@ export default function InventoryDashboard() {
     return warehouseData.filter(
       (warehouse) =>
         warehouse.name.toLowerCase().includes(normalizedWarehouseSearch) ||
-        warehouse.location.toLowerCase().includes(normalizedWarehouseSearch)
+        warehouse.address.toLowerCase().includes(normalizedWarehouseSearch)
     );
   }, [normalizedWarehouseSearch, warehouseData]);
 
@@ -412,29 +489,68 @@ export default function InventoryDashboard() {
     currentWarehouse?.sections[activeSectionIndex] || currentWarehouse?.sections[0] || null;
   const normalizedItemSearch = itemSearchText.trim().toLowerCase();
 
-  const visibleSection = useMemo(() => {
-    if (!currentSection || !normalizedItemSearch) {
-      return currentSection;
+  const globalSearchResults = useMemo<SearchResultEntry[]>(() => {
+    if (!normalizedItemSearch) {
+      return [];
     }
 
-    return {
-      ...currentSection,
-      racks: currentSection.racks.filter((rack) => {
-        const rackMatch =
-          rack.name.toLowerCase().includes(normalizedItemSearch) ||
-          rack.id.toLowerCase().includes(normalizedItemSearch);
-        const itemMatch = rack.shelves.some((shelf) =>
-          shelf.pallets.some(
-            (item) =>
-              item.product.toLowerCase().includes(normalizedItemSearch) ||
-              (item.oracle_code || "").toLowerCase().includes(normalizedItemSearch)
-          )
-        );
+    const results: SearchResultEntry[] = [];
 
-        return rackMatch || itemMatch;
-      }),
-    };
-  }, [currentSection, normalizedItemSearch]);
+    warehouseData.forEach((warehouse, warehouseIndex) => {
+      warehouse.sections.forEach((section, sectionIndex) => {
+        section.racks.forEach((rack) => {
+          const rackMatches =
+            rack.name.toLowerCase().includes(normalizedItemSearch) ||
+            rack.id.toLowerCase().includes(normalizedItemSearch);
+
+          if (rackMatches) {
+            results.push({
+              key: `rack-${warehouseIndex}-${sectionIndex}-${rack.id}`,
+              type: "rack",
+              warehouse,
+              warehouseIndex,
+              section,
+              sectionIndex,
+              rack,
+            });
+          }
+
+          rack.shelves.forEach((shelf) => {
+            shelf.pallets.forEach((item) => {
+              const productName = String(item.product || "").toLowerCase();
+              const oracleCode = String(item.oracle_code || "").toLowerCase();
+              const qrCode = String(item.qr_code || "").toLowerCase();
+              const shelfId = String(shelf.id || "").toLowerCase();
+
+              const itemMatches =
+                productName.includes(normalizedItemSearch) ||
+                oracleCode.includes(normalizedItemSearch) ||
+                qrCode.includes(normalizedItemSearch) ||
+                shelfId.includes(normalizedItemSearch);
+
+              if (!itemMatches) {
+                return;
+              }
+
+              results.push({
+                key: `item-${warehouseIndex}-${sectionIndex}-${rack.id}-${shelf.id}-${item.id}`,
+                type: "item",
+                warehouse,
+                warehouseIndex,
+                section,
+                sectionIndex,
+                rack,
+                item,
+                shelf,
+              });
+            });
+          });
+        });
+      });
+    });
+
+    return results.slice(0, 12);
+  }, [normalizedItemSearch, warehouseData]);
 
   const handleWarehouseSelect = useCallback((index: number) => {
     setActiveWarehouseIndex(index);
@@ -513,23 +629,109 @@ export default function InventoryDashboard() {
       return;
     }
 
-    openEntityFormModal<AddEditItemRef>({
-      openModal,
-      entityLabel: "Item",
-      width: 640,
-      FormComponent: AddEditItem,
-      defaultValues: {
-        pallet_id: "",
-        oracle_code: query,
-        qty: "",
-        sub_loc_id: "",
-      },
-      extraProps: {
-        onSubmitItem: handleSubmitItem,
-        onDeleteItem: handleDeleteItem,
-      },
+    const normalizedQuery = query.toLowerCase();
+    const matchedEntry = warehouseData
+      .flatMap((warehouse, warehouseIndex) =>
+        warehouse.sections.flatMap((section, sectionIndex) =>
+          section.racks.flatMap((rack) =>
+            rack.shelves.flatMap((shelf) =>
+              shelf.pallets.map((item) => ({
+                warehouse,
+                warehouseIndex,
+                section,
+                sectionIndex,
+                rack,
+                shelf,
+                item,
+              }))
+            )
+          )
+        )
+      )
+      .find(({ item }) => {
+        const qrCode = String(item.qr_code || "").trim().toLowerCase();
+        const oracleCode = String(item.oracle_code || "").trim().toLowerCase();
+        const productName = String(item.product || "").trim().toLowerCase();
+        const itemId = String(item.id || "").trim().toLowerCase();
+
+        return (
+          qrCode === normalizedQuery ||
+          oracleCode === normalizedQuery ||
+          productName === normalizedQuery ||
+          itemId === normalizedQuery ||
+          qrCode.includes(normalizedQuery) ||
+          oracleCode.includes(normalizedQuery)
+        );
+      });
+
+    if (!matchedEntry) {
+      showToast("QR item not found", "warning");
+      return;
+    }
+
+    const transactionRef = createRef<ItemTransactionDrawerRef>();
+
+    setWarehouseSearchText("");
+    setItemSearchText("");
+    setActiveWarehouseIndex(matchedEntry.warehouseIndex);
+    setActiveSectionIndex(matchedEntry.sectionIndex);
+    setQrSearchText("");
+
+    openModal({
+      title: "Item IN Transaction",
+      width: 480,
+      showCloseButton: true,
+      askDataChangeConfirm: false,
+      component: (modalProps: any) => (
+        <ItemTransactionDrawer
+          ref={transactionRef}
+          {...modalProps}
+          shelf={matchedEntry.shelf}
+          item={matchedEntry.item}
+          rackId={
+            matchedEntry.rack.recordId ||
+            matchedEntry.rack.id ||
+            matchedEntry.item.rack_id ||
+            ""
+          }
+          defaultOperation="1"
+          onSubmitTransaction={async (payload: ItemTransactionPayload) => {
+            const resolvedItemId = Number(payload.item_id);
+
+            try {
+              await createTransaction({
+                item_id:
+                  Number.isFinite(resolvedItemId) && resolvedItemId > 0
+                    ? resolvedItemId
+                    : undefined,
+                oracle_code: payload.oracle_code,
+                sub_loc_id: payload.sub_loc_id,
+                pallet_id: payload.pallet_id,
+                rack_id: payload.rack_id,
+                supplier_id: payload.supplier_id || undefined,
+                operation: payload.operation,
+                qty: payload.qty,
+                created_by: payload.created_by,
+                transaction_date: payload.transaction_date,
+              }).unwrap();
+            } catch (error: any) {
+              throw new Error(
+                error?.data?.message || error?.message || "Failed to save transaction"
+              );
+            }
+          }}
+        />
+      ),
+      action: (
+        <ApiActionButton
+          onApiCall={() => transactionRef.current?.submit?.() ?? Promise.resolve()}
+          loadingText="Saving..."
+        >
+          Submit Transaction
+        </ApiActionButton>
+      ),
     });
-  }, [handleDeleteItem, handleSubmitItem, openModal, qrSearchText]);
+  }, [createTransaction, openModal, qrSearchText, showToast, warehouseData]);
 
   const handleAdjustItemQty = useCallback(
     async (shelf: Shelf, item: Pallet, direction: "in" | "out") => {
@@ -563,21 +765,16 @@ export default function InventoryDashboard() {
     [handleSubmitItem]
   );
 
-  const handleSelectRack = useCallback(
-    (rackId: string) => {
-      const rack = visibleSection?.racks.find((rackItem) => rackItem.id === rackId) || null;
-      if (!rack || !currentWarehouse || !currentSection) {
-        return;
-      }
-
+  const openRackDetails = useCallback(
+    (warehouse: any, section: any, rack: any) => {
       openModal({
         title: `Rack Details - ${rack.name}`,
         width: 560,
         askDataChangeConfirm: false,
         component: (modalProps: any) => (
           <RackDetailsPanel
-            warehouse={currentWarehouse}
-            section={currentSection}
+            warehouse={warehouse}
+            section={section}
             selectedRack={rack}
             onSubmitWarehouse={handleSubmitWarehouse}
             onDeleteWarehouse={handleDeleteWarehouse}
@@ -596,8 +793,6 @@ export default function InventoryDashboard() {
       });
     },
     [
-      currentSection,
-      currentWarehouse,
       handleAdjustItemQty,
       handleDeleteItem,
       handleDeletePallet,
@@ -610,7 +805,33 @@ export default function InventoryDashboard() {
       handleSubmitWarehouse,
       handleSubmitZone,
       openModal,
-      visibleSection,
+    ]
+  );
+
+  const handleSearchResultSelect = useCallback(
+    (result: SearchResultEntry) => {
+      setWarehouseSearchText("");
+      setItemSearchText("");
+      setActiveWarehouseIndex(result.warehouseIndex);
+      setActiveSectionIndex(result.sectionIndex);
+      openRackDetails(result.warehouse, result.section, result.rack);
+    },
+    [openRackDetails]
+  );
+
+  const handleSelectRack = useCallback(
+    (rackId: string) => {
+      const rack = currentSection?.racks.find((rackItem) => rackItem.id === rackId) || null;
+      if (!rack || !currentWarehouse || !currentSection) {
+        return;
+      }
+
+      openRackDetails(currentWarehouse, currentSection, rack);
+    },
+    [
+      currentSection,
+      currentWarehouse,
+      openRackDetails,
     ]
   );
 
@@ -641,6 +862,7 @@ export default function InventoryDashboard() {
     isCreatingPallet ||
     isUpdatingPallet ||
     isDeletingPallet ||
+    isCreatingTransaction ||
     isCreatingItem ||
     isUpdatingItem ||
     isDeletingItem;
@@ -721,9 +943,15 @@ export default function InventoryDashboard() {
         <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
           <Box>
             <Typography variant="h6" sx={{ fontWeight: 800 }}>
-              {currentWarehouse.name}  
+              {currentWarehouse.name}
             </Typography>
-           
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ mt: 0.5, fontWeight: 500 }}
+            >
+              {currentWarehouse.address || "Address not available"}
+            </Typography>
           </Box>
 
           <Stack direction="row" alignItems="center" spacing={1.25}>
@@ -786,33 +1014,121 @@ export default function InventoryDashboard() {
               </Button>
             </Stack>
 
-            <TextField
-              size="small"
-              placeholder="Search Item / Rack..."
-              value={itemSearchText}
-              onChange={(event) => setItemSearchText(event.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon sx={{ color: "#94A3B8", fontSize: 18 }} />
-                  </InputAdornment>
-                ),
-              }}
-              sx={{
-                width: 240,
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: 2.5,
-                  bgcolor: "#F8FAFC",
-                  "& fieldset": { borderColor: "rgba(15,23,42,0.12)" },
-                  "&.Mui-focused fieldset": { borderColor: "#FF8A3D" },
-                },
-                "& .MuiInputBase-input": {
-                  fontSize: "0.8rem",
-                  fontWeight: 600,
-                  py: 0.8,
-                },
-              }}
-            />
+            <Box sx={{ width: 320, position: "relative" }}>
+              <TextField
+                fullWidth
+                size="small"
+                placeholder="Search Item / Rack..."
+                value={itemSearchText}
+                onChange={(event) => setItemSearchText(event.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon sx={{ color: "#94A3B8", fontSize: 18 }} />
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{
+                  "& .MuiOutlinedInput-root": {
+                    borderRadius: 2.5,
+                    bgcolor: "#F8FAFC",
+                    "& fieldset": { borderColor: "rgba(15,23,42,0.12)" },
+                    "&.Mui-focused fieldset": { borderColor: "#FF8A3D" },
+                  },
+                  "& .MuiInputBase-input": {
+                    fontSize: "0.8rem",
+                    fontWeight: 600,
+                    py: 0.8,
+                  },
+                }}
+              />
+
+              {normalizedItemSearch ? (
+                <Paper
+                  elevation={8}
+                  sx={{
+                    position: "absolute",
+                    top: "calc(100% + 8px)",
+                    left: 0,
+                    right: 0,
+                    zIndex: 20,
+                    borderRadius: 2.5,
+                    overflow: "hidden",
+                    border: "1px solid rgba(15,23,42,0.08)",
+                  }}
+                >
+                  {globalSearchResults.length ? (
+                    <List disablePadding sx={{ maxHeight: 360, overflowY: "auto" }}>
+                      {globalSearchResults.map((result) => (
+                        <ListItemButton
+                          key={result.key}
+                          onClick={() => handleSearchResultSelect(result)}
+                          sx={{
+                            alignItems: "flex-start",
+                            px: 1.5,
+                            py: 1.15,
+                            borderBottom: "1px solid rgba(15,23,42,0.06)",
+                          }}
+                        >
+                          <Box sx={{ minWidth: 0 }}>
+                            <Stack
+                              direction="row"
+                              spacing={0.75}
+                              alignItems="center"
+                              useFlexGap
+                              flexWrap="wrap"
+                            >
+                              <Chip
+                                size="small"
+                                label={result.type === "item" ? "Item" : "Rack"}
+                                sx={{
+                                  height: 22,
+                                  bgcolor:
+                                    result.type === "item"
+                                      ? "rgba(255,138,61,0.14)"
+                                      : "rgba(59,130,246,0.12)",
+                                  color: result.type === "item" ? "#C2410C" : "#1D4ED8",
+                                  fontWeight: 700,
+                                }}
+                              />
+                              <Typography variant="body2" sx={{ fontWeight: 700, color: "#0F172A" }}>
+                                {result.type === "item"
+                                  ? result.item?.product || result.item?.oracle_code || result.item?.id
+                                  : result.rack.name}
+                              </Typography>
+                            </Stack>
+                            <Typography
+                              variant="caption"
+                              sx={{ display: "block", mt: 0.5, color: "#475569", fontWeight: 600 }}
+                            >
+                              {result.warehouse.name} | {result.section.name} | {result.rack.name}
+                              {result.shelf ? ` | ${result.shelf.id}` : ""}
+                            </Typography>
+                            {result.type === "item" ? (
+                              <Typography
+                                variant="caption"
+                                sx={{ display: "block", mt: 0.25, color: "#64748B" }}
+                              >
+                                Oracle: {result.item?.oracle_code || "-"} | Stock: {result.item?.qty ?? 0}
+                              </Typography>
+                            ) : null}
+                          </Box>
+                        </ListItemButton>
+                      ))}
+                    </List>
+                  ) : (
+                    <Box sx={{ px: 1.5, py: 1.25 }}>
+                      <Typography variant="body2" sx={{ color: "#475569", fontWeight: 600 }}>
+                        No item or rack found
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: "#94A3B8" }}>
+                        Search runs across all warehouses and zones.
+                      </Typography>
+                    </Box>
+                  )}
+                </Paper>
+              ) : null}
+            </Box>
 
             <Chip
               label={`${totalRacks} racks · ${currentWarehouse.sections.length} zones`}
@@ -842,9 +1158,8 @@ export default function InventoryDashboard() {
 
             <Box sx={{ pt: 2 }}>
               <RackGrid
-                section={visibleSection || currentSection}
+                section={currentSection}
                 selectedRackId={null}
-                itemSearchText={itemSearchText}
                 onSelectRack={handleSelectRack}
                 onAddRack={handleAddRack}
               />

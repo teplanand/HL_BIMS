@@ -1295,12 +1295,6 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
           density={compact ? "compact" : "standard"}
           getRowHeight={() => rowHeight}
           columnHeaderHeight={62}
-          autosizeOnMount
-          autosizeOptions={{
-            includeHeaders: true,
-            includeOutliers: true,
-            expand: true,
-          }}
           columnVisibilityModel={columnVisibilityModel}
           onColumnVisibilityModelChange={setColumnVisibilityModel}
           slots={{
@@ -1341,7 +1335,7 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
             },
             "& .MuiDataGrid-virtualScroller": {
               overflowY: "auto !important",
-              overflowX: "auto",
+              overflowX: "hidden",
               border: "none",
             },
             "& .MuiDataGrid-scrollbar": {

@@ -1,5 +1,5 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
-import { baseQueryWithReauth } from "../../utils/customBaseQuery";
+import customBaseQuery from "../../utils/customBaseQuery";
 
 interface ResetPasswordBody {
   email: string;
@@ -8,7 +8,7 @@ interface ResetPasswordBody {
 
 export const loginApi = createApi({
   reducerPath: "loginApi",
-  baseQuery: baseQueryWithReauth,
+  baseQuery: customBaseQuery,
   tagTypes: ["login"],
   endpoints: (builder) => ({
     sendOtp: builder.mutation({
@@ -28,7 +28,7 @@ export const loginApi = createApi({
     }),
     emailLogin: builder.mutation({
       query: (credentials) => ({
-        url: "/auth/email-login",
+        url: "/users/login",
         method: "POST",
         body: credentials,
       }),
