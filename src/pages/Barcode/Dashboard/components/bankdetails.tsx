@@ -1,18 +1,27 @@
 import { Box, Stack } from "@mui/material";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { MuiTextField } from "../../../../components/mui/input";
 import { FormStackGrid } from "../../../../components/ui/form/stack";
 import FormSection from "../../../../components/ui/form/FormSection";
 import AccountBalanceOutlinedIcon from "@mui/icons-material/AccountBalanceOutlined";
-import { salesorderslineitems } from "../data";
+import { BarcodeSalesOrderDetailsViewModel } from "../barcodeAdapters";
 
-const orderData = salesorderslineitems.salesOrders[0];
-const defaultValues = orderData?.order_information?.main?.bank_details || {};
+type BankDetailsProps = {
+  orderDetails?: BarcodeSalesOrderDetailsViewModel | null;
+};
 
-export function BankDetails() {
-  const { register, handleSubmit } = useForm<any>({
-    defaultValues,
+const getDefaultValues = (orderDetails?: BarcodeSalesOrderDetailsViewModel | null) =>
+  orderDetails?.order_information?.main?.bank_details || {};
+
+export function BankDetails({ orderDetails }: BankDetailsProps) {
+  const { register, handleSubmit, reset } = useForm<any>({
+    defaultValues: getDefaultValues(orderDetails),
   });
+
+  useEffect(() => {
+    reset(getDefaultValues(orderDetails));
+  }, [orderDetails, reset]);
 
   const onSubmit = (data: any) => {
     console.log("Bank Details Payload:", data);
@@ -34,9 +43,17 @@ export function BankDetails() {
               <MuiTextField label="Bank Address" {...register("bank_address")} fullWidth />
             </Box>
             <MuiTextField label="Contact Name" {...register("contact_name")} fullWidth />
-            <MuiTextField label="Email & Phone" {...register("email_address_and_phone")} fullWidth />
+            <MuiTextField
+              label="Email & Phone"
+              {...register("email_address_and_phone")}
+              fullWidth
+            />
             <MuiTextField label="LC No" {...register("lc_no")} fullWidth />
-            <MuiTextField label="Delivery Condition" {...register("delivery_condition")} fullWidth />
+            <MuiTextField
+              label="Delivery Condition"
+              {...register("delivery_condition")}
+              fullWidth
+            />
             <MuiTextField label="Destination" {...register("destination")} fullWidth />
             <MuiTextField label="Insurance By" {...register("insurance_by")} fullWidth />
             <Box sx={{ gridColumn: { md: "span 2" } }}>

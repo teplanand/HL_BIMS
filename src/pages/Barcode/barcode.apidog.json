@@ -1,0 +1,886 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Default module",
+    "description": "",
+    "version": "1.0.0"
+  },
+  "tags": [],
+  "paths": {
+    "/api/barcode/sales-orders/import": {
+      "post": {
+        "summary": "import",
+        "deprecated": false,
+        "description": "",
+        "tags": [],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ORGANIZATION_ID": {
+                    "type": "integer"
+                  },
+                  "DIVISION_ID": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "ORGANIZATION_ID",
+                  "DIVISION_ID"
+                ]
+              },
+              "example": {
+                "ORGANIZATION_ID": 43,
+                "DIVISION_ID": 374
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/barcode/sales-orders/salseOrderDetails": {
+      "post": {
+        "summary": "salseOrderDetails",
+        "deprecated": false,
+        "description": "",
+        "tags": [],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ORGANIZATION_ID": {
+                    "type": "integer"
+                  },
+                  "DIVISION_ID": {
+                    "type": "integer"
+                  },
+                  "order_number": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "ORGANIZATION_ID",
+                  "DIVISION_ID",
+                  "order_number"
+                ]
+              },
+              "example": {
+                "ORGANIZATION_ID": 43,
+                "DIVISION_ID": 374,
+                "order_number": 15574
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/barcode/sales-orders/workordercreate": {
+      "post": {
+        "summary": "workordercreate",
+        "deprecated": false,
+        "description": "",
+        "tags": [],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "DIVISION_ID": {
+                    "type": "integer"
+                  },
+                  "ORGANIZATION_ID": {
+                    "type": "integer"
+                  },
+                  "LINE_ID": {
+                    "type": "integer"
+                  },
+                  "order_type": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "DIVISION_ID",
+                  "ORGANIZATION_ID",
+                  "LINE_ID",
+                  "order_type"
+                ]
+              },
+              "example": {
+                "DIVISION_ID": 374,
+                "ORGANIZATION_ID": 43,
+                "LINE_ID": 11980868,
+                "order_type": "PBGPRLS"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/barcode/sales-orders/generateSrNO": {
+      "post": {
+        "summary": "generateSrNO",
+        "deprecated": false,
+        "description": "",
+        "tags": [],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "DIVISION_ID": {
+                    "type": "integer"
+                  },
+                  "LINE_ID": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "DIVISION_ID",
+                  "LINE_ID"
+                ]
+              },
+              "example": {
+                "DIVISION_ID": 374,
+                "LINE_ID": 11980868
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/barcode/sales-orders/IssueMaterial": {
+      "post": {
+        "summary": "IssueMaterial",
+        "deprecated": false,
+        "description": "",
+        "tags": [],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "DIVISION_ID": {
+                    "type": "integer"
+                  },
+                  "ORGANIZATION_ID": {
+                    "type": "integer"
+                  },
+                  "LINE_ID": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "DIVISION_ID",
+                  "ORGANIZATION_ID",
+                  "LINE_ID"
+                ]
+              },
+              "example": {
+                "DIVISION_ID": 374,
+                "ORGANIZATION_ID": 43,
+                "LINE_ID": 11980868
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/barcode/sales-orders/printlabel": {
+      "post": {
+        "summary": "printlabel",
+        "deprecated": false,
+        "description": "",
+        "tags": [],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "WONO": {
+                    "type": "string"
+                  },
+                  "Line_Id": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "WONO",
+                  "Line_Id"
+                ]
+              },
+              "example": {
+                "WONO": "10201168",
+                "Line_Id": 11980868,
+                "ORGANIZATION_ID": 123,
+                "ORDER_LINE_NO": 1234
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/barcode/sales-orders/underAssembly": {
+      "post": {
+        "summary": "underAssembly",
+        "deprecated": false,
+        "description": "",
+        "tags": [],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "serial_no": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "serial_no"
+                ]
+              },
+              "example": {
+                "serial_no": "26/1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/barcode/sales-orders/qualityCheck": {
+      "post": {
+        "summary": "qualityCheck",
+        "deprecated": false,
+        "description": "",
+        "tags": [],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "serial_no": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "serial_no"
+                ]
+              },
+              "example": {
+                "serial_no": "26/1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/completionGearboxSerialNumber": {
+      "post": {
+        "summary": "completionGearboxSerialNumber",
+        "deprecated": false,
+        "description": "",
+        "tags": [],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "BarcodeSerialNo": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "BarcodeSerialNo"
+                ]
+              },
+              "example": {
+                "BarcodeSerialNo": "10/108949"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/barcode/order-completion/completion": {
+      "post": {
+        "summary": "completion",
+        "deprecated": false,
+        "description": "",
+        "tags": [],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "DivisionId": {
+                    "type": "string"
+                  },
+                  "dtPrint": {
+                    "type": "object",
+                    "properties": {
+                      "oracle_order_no": {
+                        "type": "integer"
+                      },
+                      "model_type": {
+                        "type": "string"
+                      },
+                      "model": {
+                        "type": "string"
+                      },
+                      "ratio": {
+                        "type": "integer"
+                      },
+                      "qty": {
+                        "type": "integer"
+                      },
+                      "wo_no": {
+                        "type": "string"
+                      },
+                      "order_header_id": {
+                        "type": "integer"
+                      },
+                      "order_line_id": {
+                        "type": "integer"
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "kw": {
+                        "type": "number"
+                      },
+                      "serial_no": {
+                        "type": "string"
+                      },
+                      "rpm": {
+                        "type": "number"
+                      },
+                      "motor_serial_no": {
+                        "type": "string"
+                      },
+                      "input_RPM": {
+                        "type": "integer"
+                      },
+                      "actual_ratio": {
+                        "type": "integer"
+                      },
+                      "pole": {
+                        "type": "integer"
+                      },
+                      "noiseLevel": {
+                        "type": "integer"
+                      },
+                      "paintColor": {
+                        "type": "string"
+                      },
+                      "MotorMake": {
+                        "type": "string"
+                      },
+                      "OracleUserId": {
+                        "type": "integer"
+                      },
+                      "P_AMB_TEMP": {
+                        "type": "string"
+                      },
+                      "P_GREASE_TEMP": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "oracle_order_no",
+                      "model_type",
+                      "model",
+                      "ratio",
+                      "qty",
+                      "wo_no",
+                      "order_header_id",
+                      "order_line_id",
+                      "status",
+                      "kw",
+                      "serial_no",
+                      "rpm",
+                      "motor_serial_no",
+                      "input_RPM",
+                      "actual_ratio",
+                      "pole",
+                      "noiseLevel",
+                      "paintColor",
+                      "MotorMake",
+                      "OracleUserId",
+                      "P_AMB_TEMP",
+                      "P_GREASE_TEMP"
+                    ]
+                  }
+                },
+                "required": [
+                  "DivisionId",
+                  "dtPrint"
+                ]
+              },
+              "example": {
+                "serial_no": "26/1",
+                "status": "PI"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/barcode/order-completion/painting": {
+      "post": {
+        "summary": "Painting",
+        "deprecated": false,
+        "description": "",
+        "tags": [],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "DivisionId": {
+                    "type": "string"
+                  },
+                  "dtPrint": {
+                    "type": "object",
+                    "properties": {
+                      "oracle_order_no": {
+                        "type": "integer"
+                      },
+                      "model_type": {
+                        "type": "string"
+                      },
+                      "model": {
+                        "type": "string"
+                      },
+                      "ratio": {
+                        "type": "integer"
+                      },
+                      "qty": {
+                        "type": "integer"
+                      },
+                      "wo_no": {
+                        "type": "string"
+                      },
+                      "order_header_id": {
+                        "type": "integer"
+                      },
+                      "order_line_id": {
+                        "type": "integer"
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "kw": {
+                        "type": "number"
+                      },
+                      "serial_no": {
+                        "type": "string"
+                      },
+                      "rpm": {
+                        "type": "number"
+                      },
+                      "motor_serial_no": {
+                        "type": "string"
+                      },
+                      "input_RPM": {
+                        "type": "integer"
+                      },
+                      "actual_ratio": {
+                        "type": "integer"
+                      },
+                      "pole": {
+                        "type": "integer"
+                      },
+                      "noiseLevel": {
+                        "type": "integer"
+                      },
+                      "paintColor": {
+                        "type": "string"
+                      },
+                      "MotorMake": {
+                        "type": "string"
+                      },
+                      "OracleUserId": {
+                        "type": "integer"
+                      },
+                      "P_AMB_TEMP": {
+                        "type": "string"
+                      },
+                      "P_GREASE_TEMP": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "oracle_order_no",
+                      "model_type",
+                      "model",
+                      "ratio",
+                      "qty",
+                      "wo_no",
+                      "order_header_id",
+                      "order_line_id",
+                      "status",
+                      "kw",
+                      "serial_no",
+                      "rpm",
+                      "motor_serial_no",
+                      "input_RPM",
+                      "actual_ratio",
+                      "pole",
+                      "noiseLevel",
+                      "paintColor",
+                      "MotorMake",
+                      "OracleUserId",
+                      "P_AMB_TEMP",
+                      "P_GREASE_TEMP"
+                    ]
+                  }
+                },
+                "required": [
+                  "DivisionId",
+                  "dtPrint"
+                ]
+              },
+              "example": {
+                "serial_no": "26/1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/barcode/order-completion/packing": {
+      "post": {
+        "summary": "Packing",
+        "deprecated": false,
+        "description": "",
+        "tags": [],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "DivisionId": {
+                    "type": "string"
+                  },
+                  "dtPrint": {
+                    "type": "object",
+                    "properties": {
+                      "oracle_order_no": {
+                        "type": "integer"
+                      },
+                      "model_type": {
+                        "type": "string"
+                      },
+                      "model": {
+                        "type": "string"
+                      },
+                      "ratio": {
+                        "type": "integer"
+                      },
+                      "qty": {
+                        "type": "integer"
+                      },
+                      "wo_no": {
+                        "type": "string"
+                      },
+                      "order_header_id": {
+                        "type": "integer"
+                      },
+                      "order_line_id": {
+                        "type": "integer"
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "kw": {
+                        "type": "number"
+                      },
+                      "serial_no": {
+                        "type": "string"
+                      },
+                      "rpm": {
+                        "type": "number"
+                      },
+                      "motor_serial_no": {
+                        "type": "string"
+                      },
+                      "input_RPM": {
+                        "type": "integer"
+                      },
+                      "actual_ratio": {
+                        "type": "integer"
+                      },
+                      "pole": {
+                        "type": "integer"
+                      },
+                      "noiseLevel": {
+                        "type": "integer"
+                      },
+                      "paintColor": {
+                        "type": "string"
+                      },
+                      "MotorMake": {
+                        "type": "string"
+                      },
+                      "OracleUserId": {
+                        "type": "integer"
+                      },
+                      "P_AMB_TEMP": {
+                        "type": "string"
+                      },
+                      "P_GREASE_TEMP": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "oracle_order_no",
+                      "model_type",
+                      "model",
+                      "ratio",
+                      "qty",
+                      "wo_no",
+                      "order_header_id",
+                      "order_line_id",
+                      "status",
+                      "kw",
+                      "serial_no",
+                      "rpm",
+                      "motor_serial_no",
+                      "input_RPM",
+                      "actual_ratio",
+                      "pole",
+                      "noiseLevel",
+                      "paintColor",
+                      "MotorMake",
+                      "OracleUserId",
+                      "P_AMB_TEMP",
+                      "P_GREASE_TEMP"
+                    ]
+                  }
+                },
+                "required": [
+                  "DivisionId",
+                  "dtPrint"
+                ]
+              },
+              "example": {
+                "serial_no": "26/1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    }
+  },
+  "components": {
+    "schemas": {},
+    "responses": {},
+    "securitySchemes": {}
+  },
+  "servers": [
+    {
+      "url": "https://barcodeapi.techelecon.in",
+      "description": "Testing Env"
+    }
+  ],
+  "security": []
+}

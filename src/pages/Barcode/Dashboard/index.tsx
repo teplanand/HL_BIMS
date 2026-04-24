@@ -1,30 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Grid,
-  Stack,
-  Typography,
-} from "@mui/material";
+import { Box, Button, Card, CardContent, Grid, Stack, Typography } from "@mui/material";
 
 import SalesOrders from "./components/salesorders";
 import { useDialog } from "../../../hooks/useDialog";
 import Importsalesorders from "./components/importsalesorders";
-import { barcodeSalesOrderRows } from "./data";
-
-type RecentSalesOrder = (typeof barcodeSalesOrderRows)[number];
+import { BarcodeRecentOrderRow } from "./barcodeAdapters";
 
 const STORAGE_KEY = "barcode_recent_sales_orders";
 const MAX_RECENT_ORDERS = 10;
 
-export const defaultRecentOrders: RecentSalesOrder[] = barcodeSalesOrderRows.slice(
-  0,
-  MAX_RECENT_ORDERS
-);
+export const defaultRecentOrders: BarcodeRecentOrderRow[] = [];
 
-const persistRecentOrders = (orders: RecentSalesOrder[]) => {
+const persistRecentOrders = (orders: BarcodeRecentOrderRow[]) => {
   if (typeof window === "undefined") {
     return;
   }
@@ -35,7 +22,7 @@ const persistRecentOrders = (orders: RecentSalesOrder[]) => {
   );
 };
 
-const safeReadRecentOrders = (): RecentSalesOrder[] => {
+const safeReadRecentOrders = (): BarcodeRecentOrderRow[] => {
   if (typeof window === "undefined") {
     return defaultRecentOrders;
   }
@@ -43,13 +30,11 @@ const safeReadRecentOrders = (): RecentSalesOrder[] => {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      persistRecentOrders(defaultRecentOrders);
       return defaultRecentOrders;
     }
 
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed) || !parsed.length) {
-      persistRecentOrders(defaultRecentOrders);
       return defaultRecentOrders;
     }
 
@@ -61,18 +46,18 @@ const safeReadRecentOrders = (): RecentSalesOrder[] => {
 
 const BarcodeDashboard = () => {
   const { openDialog } = useDialog();
-  const [recentOrders, setRecentOrders] = useState<RecentSalesOrder[]>([]);
+  const [recentOrders, setRecentOrders] = useState<BarcodeRecentOrderRow[]>([]);
 
   useEffect(() => {
     setRecentOrders(safeReadRecentOrders());
   }, []);
 
-  const handleOrderView = useCallback((order: RecentSalesOrder) => {
+  const handleOrderView = useCallback((order: BarcodeRecentOrderRow) => {
     setRecentOrders((currentOrders) => {
       const nextOrders = [
         order,
         ...currentOrders.filter(
-          (currentOrder) => currentOrder.orderId !== order.orderId
+          (currentOrder) => currentOrder.orderNumber !== order.orderNumber
         ),
       ].slice(0, MAX_RECENT_ORDERS);
 
@@ -113,7 +98,7 @@ const BarcodeDashboard = () => {
         title: "New Sales Order",
         count: newSalesOrderCount,
         color: "#1D4ED8",
-        showImport: newSalesOrderCount > 0,
+        showImport: true,
       },
       {
         key: "hod",
@@ -180,7 +165,7 @@ const BarcodeDashboard = () => {
                             variant="contained"
                             onClick={() =>
                               openDialog({
-                                title: "Imported Sales Orders",
+                                title: "Import Sales Orders",
                                 width: 520,
                                 showCloseButton: true,
                                 component: (modalProps: any) => (

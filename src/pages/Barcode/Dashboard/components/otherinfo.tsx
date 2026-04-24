@@ -1,4 +1,5 @@
 import { Box, Stack } from "@mui/material";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { MuiTextField } from "../../../../components/mui/input";
 import { FormStackGrid } from "../../../../components/ui/form/stack";
@@ -8,15 +9,23 @@ import LocalShippingOutlinedIcon from "@mui/icons-material/LocalShippingOutlined
 import ReceiptOutlinedIcon from "@mui/icons-material/ReceiptOutlined";
 import CreditCardOutlinedIcon from "@mui/icons-material/CreditCardOutlined";
 import PaymentsOutlinedIcon from "@mui/icons-material/PaymentsOutlined";
-import { salesorderslineitems } from "../data";
+import { BarcodeSalesOrderDetailsViewModel } from "../barcodeAdapters";
 
-const orderData = salesorderslineitems.salesOrders[0];
-const defaultValues = orderData?.order_information?.other_details || {};
+type OtherInfoFormProps = {
+  orderDetails?: BarcodeSalesOrderDetailsViewModel | null;
+};
 
-export default function OtherinfoForm() {
-  const { register, handleSubmit } = useForm<any>({
-    defaultValues,
+const getDefaultValues = (orderDetails?: BarcodeSalesOrderDetailsViewModel | null) =>
+  orderDetails?.order_information?.other_details || {};
+
+export default function OtherinfoForm({ orderDetails }: OtherInfoFormProps) {
+  const { register, handleSubmit, reset } = useForm<any>({
+    defaultValues: getDefaultValues(orderDetails),
   });
+
+  useEffect(() => {
+    reset(getDefaultValues(orderDetails));
+  }, [orderDetails, reset]);
 
   const onSubmit = (data: any) => {
     console.log("Other Info Payload:", data);
@@ -25,7 +34,6 @@ export default function OtherinfoForm() {
   return (
     <Box component="form" onSubmit={handleSubmit(onSubmit)}>
       <Stack spacing={1}>
-        {/* ══════════ General Information ══════════ */}
         <FormSection
           title="General Information"
           description="Order source, warehouse, and channel details"
@@ -39,12 +47,15 @@ export default function OtherinfoForm() {
             <MuiTextField label="Sales Channel" {...register("sales_channel")} fullWidth />
             <MuiTextField label="Order Source" {...register("order_source")} fullWidth />
             <Box sx={{ gridColumn: { md: "span 3" } }}>
-              <MuiTextField label="Order Source Reference" {...register("order_source_reference")} fullWidth />
+              <MuiTextField
+                label="Order Source Reference"
+                {...register("order_source_reference")}
+                fullWidth
+              />
             </Box>
           </FormStackGrid>
         </FormSection>
 
-        {/* ══════════ Shipping & Packing ══════════ */}
         <FormSection
           title="Shipping & Packing"
           description="Freight, shipping method, and packing instructions"
@@ -52,19 +63,38 @@ export default function OtherinfoForm() {
           accentColor="#0891B2"
         >
           <FormStackGrid columns={3}>
-            <MuiTextField label="Shipping Method" {...register("shipping_method")} fullWidth />
+            <MuiTextField
+              label="Shipping Method"
+              {...register("shipping_method")}
+              fullWidth
+            />
             <MuiTextField label="Freight Terms" {...register("freight_terms")} fullWidth />
-            <MuiTextField label="Shipment Priority" {...register("shipment_priority")} fullWidth />
+            <MuiTextField
+              label="Shipment Priority"
+              {...register("shipment_priority")}
+              fullWidth
+            />
             <Box sx={{ gridColumn: { md: "span 3" } }}>
-              <MuiTextField label="Shipping Instructions" multiline rows={2} {...register("shipping_instructions")} fullWidth />
+              <MuiTextField
+                label="Shipping Instructions"
+                multiline
+                rows={2}
+                {...register("shipping_instructions")}
+                fullWidth
+              />
             </Box>
             <Box sx={{ gridColumn: { md: "span 3" } }}>
-              <MuiTextField label="Packing Instruction" multiline rows={2} {...register("packing_instruction")} fullWidth />
+              <MuiTextField
+                label="Packing Instruction"
+                multiline
+                rows={2}
+                {...register("packing_instruction")}
+                fullWidth
+              />
             </Box>
           </FormStackGrid>
         </FormSection>
 
-        {/* ══════════ Tax & Amount ══════════ */}
         <FormSection
           title="Tax & Amount"
           description="Tax handling and exemption details"
@@ -73,7 +103,11 @@ export default function OtherinfoForm() {
         >
           <FormStackGrid columns={3}>
             <MuiTextField label="Tax Handling" {...register("tax_handling")} fullWidth />
-            <MuiTextField label="Tax Exempt Number" {...register("tax_exempt_number")} fullWidth />
+            <MuiTextField
+              label="Tax Exempt Number"
+              {...register("tax_exempt_number")}
+              fullWidth
+            />
             <MuiTextField label="Amount" {...register("amount")} fullWidth />
             <Box sx={{ gridColumn: { md: "span 3" } }}>
               <MuiTextField label="Exempt Reason" {...register("exempt_reason")} fullWidth />
@@ -81,7 +115,6 @@ export default function OtherinfoForm() {
           </FormStackGrid>
         </FormSection>
 
-        {/* ══════════ Credit Card & Payment Side-by-Side ══════════ */}
         <FormStackGrid columns={2} gap={3}>
           <FormSection
             title="Credit Card Details"

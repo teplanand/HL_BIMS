@@ -15,7 +15,11 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
 import NotesOutlinedIcon from "@mui/icons-material/NotesOutlined";
 import { useToast } from "../../../../hooks/useToast";
-import { getGearMotorLookup } from "./gearMotorLookup";
+import {
+  useLazyGetQualityCheckDetailsQuery,
+  useLazyGetUnderAssemblyDetailsQuery,
+} from "../../../../redux/api/barcode";
+import { mapSerialLookup } from "../barcodeAdapters";
 
 const mountTypeOptions = [
   "Foot Mount",
@@ -77,24 +81,14 @@ const mountTypeOptions = [
   "V1 I",
 ].map((value) => ({ value, label: value }));
 
-const poleOptions = [
-  "2",
-  "4",
-  "6",
-  "8",
-].map((value) => ({ value, label: value }));
+const poleOptions = ["2", "4", "6", "8"].map((value) => ({ value, label: value }));
 
-const electricMotorMakeOptions = [
-  "PBL",
-  "BBL",
-  "Megha",
-  "Simens",
-  "Crompton",
-].map((value) => ({ value, label: value }));
+const electricMotorMakeOptions = ["PBL", "BBL", "Megha", "Simens", "Crompton"].map(
+  (value) => ({ value, label: value })
+);
 
-// ─── Default Form Values ─────────────────────────────────────────────
 const defaultValues = {
-  gearedMotorSerialNumber: "M480527",
+  gearedMotorSerialNumber: "",
   mountType: "",
   model: "",
   workOrderNumber: "",
@@ -133,7 +127,6 @@ const defaultValues = {
   boreSize: "",
 };
 
-// ─── Accessory Field Definitions ─────────────────────────────────────
 const accessoryFields: CheckboxField[] = [
   { name: "additionalReq", label: "Additional Req" },
   { name: "breatherPlug", label: "Breather Plug" },
@@ -158,49 +151,57 @@ const accessoryFields: CheckboxField[] = [
   { name: "mountingFeet", label: "Mounting Feet" },
 ];
 
-// ─── Component ───────────────────────────────────────────────────────
 function FinalInspectionForm() {
   const { showToast } = useToast();
+  const [triggerUnderAssembly] = useLazyGetUnderAssemblyDetailsQuery();
+  const [triggerQualityCheck] = useLazyGetQualityCheckDetailsQuery();
   const { register, handleSubmit, getValues, setValue } = useForm({ defaultValues });
 
-  const onSubmit = (data: any) => {
-    console.log("Final Inspection Payload:", data);
+  const onSubmit = () => {
+    showToast(
+      "Final inspection lookup API is integrated. Save endpoint is not present in current Apidog spec.",
+      "info"
+    );
   };
 
-  const handleGetDetails = () => {
-    const serialNumber = getValues("gearedMotorSerialNumber");
-    const lookup = getGearMotorLookup(serialNumber);
+  const handleGetDetails = async () => {
+    const serialNumber = String(getValues("gearedMotorSerialNumber") || "").trim();
 
-    if (!lookup) {
+    if (!serialNumber) {
       showToast("Enter geared motor serial number first", "warning");
       return;
     }
 
-    setValue("gearedMotorSerialNumber", lookup.gearedMotorSerialNumber, { shouldDirty: true });
-    setValue("mountType", lookup.finalInspection.mountType, { shouldDirty: true });
-    setValue("model", lookup.finalInspection.model, { shouldDirty: true });
-    setValue("workOrderNumber", lookup.finalInspection.workOrderNumber, { shouldDirty: true });
-    setValue("rpm", lookup.finalInspection.rpm, { shouldDirty: true });
-    setValue("motorSerialNumber", lookup.finalInspection.motorSerialNumber, { shouldDirty: true });
-    setValue("pole", lookup.finalInspection.pole, { shouldDirty: true });
-    setValue("electricMotorMake", lookup.finalInspection.electricMotorMake, { shouldDirty: true });
-    setValue("boreSize", lookup.finalInspection.boreSize, { shouldDirty: true });
-    setValue("holdBack.type", lookup.finalInspection.holdBackType, { shouldDirty: true });
-    setValue("remarks", lookup.finalInspection.remarks, { shouldDirty: true });
+    try {
+      let response: any;
 
-    Object.entries(lookup.finalInspection.accessories).forEach(([key, value]) => {
-      setValue(`accessories.${key}` as any, value, { shouldDirty: true });
-    });
+      try {
+        response = await triggerQualityCheck({ serial_no: serialNumber }).unwrap();
+      } catch {
+        response = await triggerUnderAssembly({ serial_no: serialNumber }).unwrap();
+      }
 
-    showToast("Final inspection details loaded", "success");
+      const lookup = mapSerialLookup(response?.data, serialNumber);
+
+      setValue("gearedMotorSerialNumber", serialNumber, { shouldDirty: true });
+      setValue("model", lookup.model, { shouldDirty: true });
+      setValue("workOrderNumber", lookup.workOrderNumber, { shouldDirty: true });
+      setValue("rpm", lookup.rpm, { shouldDirty: true });
+      setValue("motorSerialNumber", lookup.motorSerialNumber, { shouldDirty: true });
+
+      showToast("Final inspection details loaded", "success");
+    } catch (error: any) {
+      const message =
+        error?.data?.message || error?.error || "Unable to load final inspection details";
+      showToast(message, "error");
+    }
   };
 
   return (
     <Box component="form" onSubmit={handleSubmit(onSubmit)}>
       <PageHeader title="Final Inspection" />
 
-      <Stack spacing={1}    >
-        {/* ══════════ General Information ══════════ */}
+      <Stack spacing={1}>
         <FormSection
           title="General Information"
           description="Motor and gearbox identification details"
@@ -220,8 +221,12 @@ function FinalInspectionForm() {
               <Typography variant="subtitle2" fontWeight={700} sx={{ color: "#92400E", mb: 0.5 }}>
                 Start Here
               </Typography>
-              <Typography variant="caption" sx={{ color: "#B45309", display: "block", mb: 1.25 }}>
-                Enter geared motor serial number and click Get to load all inspection details.
+              <Typography
+                variant="caption"
+                sx={{ color: "#B45309", display: "block", mb: 1.25 }}
+              >
+                Enter geared motor serial number and click Get to load inspection details
+                from the barcode APIs.
               </Typography>
               <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
                 <MuiTextField
@@ -243,15 +248,9 @@ function FinalInspectionForm() {
               {...register("mountType")}
             />
             <MuiTextField label="Model" {...register("model")} />
-            <MuiTextField
-              label="Work Order Number"
-              {...register("workOrderNumber")}
-            />
+            <MuiTextField label="Work Order Number" {...register("workOrderNumber")} />
             <MuiTextField label="RPM" {...register("rpm")} />
-            <MuiTextField
-              label="Motor Serial Number"
-              {...register("motorSerialNumber")}
-            />
+            <MuiTextField label="Motor Serial Number" {...register("motorSerialNumber")} />
             <MuiSelect
               label="Pole"
               placeholder="Select pole"
@@ -284,7 +283,6 @@ function FinalInspectionForm() {
           />
         </FormSection>
 
-        {/* ══════════ Accessories ══════════ */}
         <FormSection
           title="Accessories"
           description="Select all applicable accessories for this unit"
@@ -298,7 +296,6 @@ function FinalInspectionForm() {
           />
         </FormSection>
 
-        {/* ══════════ Other Details ══════════ */}
         <FormSection
           title="Other Details"
           description="Additional remarks or observations"
@@ -314,14 +311,8 @@ function FinalInspectionForm() {
           />
         </FormSection>
 
-        {/* ══════════ Submit ══════════ */}
-        <Box >
-          <Button
-            type="submit"
-            variant="contained"
-            size="large"
-            
-          >
+        <Box>
+          <Button type="submit" variant="contained" size="large">
             Update Final Inspection
           </Button>
         </Box>

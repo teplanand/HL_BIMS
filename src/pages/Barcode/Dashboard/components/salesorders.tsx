@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Box, Chip } from "@mui/material";
+import { Box, Button, Chip, Stack } from "@mui/material";
 import {
   GridColDef,
   GridFilterModel,
@@ -11,9 +11,16 @@ import {
 import { ViewDetails } from "./viewdetails";
 import ReusableDataGrid from "../../../../components/common/ReusableDataGrid";
 import { useModal } from "../../../../hooks/useModal";
+import { MuiTextField } from "../../../../components/mui/input";
+import {
+  getBarcodeDefaultContext,
+  useLazyGetSalesOrderDetailsQuery,
+} from "../../../../redux/api/barcode";
+import { useToast } from "../../../../hooks/useToast";
+import { BarcodeRecentOrderRow, mapSalesOrderSummaryRow } from "../barcodeAdapters";
 import { defaultRecentOrders } from "..";
 
-type RecentSalesOrder = (typeof defaultRecentOrders)[number];
+type RecentSalesOrder = BarcodeRecentOrderRow;
 
 const getStatusColor = (status: RecentSalesOrder["status"]) => {
   switch (status) {
@@ -45,6 +52,9 @@ const SalesOrders = ({
   onOrderView,
 }: SalesOrdersProps) => {
   const { openModal } = useModal();
+  const { showToast } = useToast();
+  const [triggerGetSalesOrderDetails, { isFetching }] =
+    useLazyGetSalesOrderDetailsQuery();
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
     page: 0,
     pageSize: 5,
@@ -54,6 +64,36 @@ const SalesOrders = ({
     items: [],
     quickFilterValues: [],
   });
+  const [orderNumberInput, setOrderNumberInput] = useState("");
+
+  const loadOrderByNumber = async () => {
+    const trimmedOrderNumber = orderNumberInput.trim();
+    if (!trimmedOrderNumber) {
+      showToast("Enter sales order number first", "warning");
+      return;
+    }
+
+    try {
+      const response = await triggerGetSalesOrderDetails({
+        ...getBarcodeDefaultContext(),
+        order_number: trimmedOrderNumber,
+      }).unwrap();
+      const nextOrder = mapSalesOrderSummaryRow(response.data);
+
+      if (!nextOrder) {
+        showToast("Sales order details not found", "warning");
+        return;
+      }
+
+      onOrderView?.(nextOrder);
+      setOrderNumberInput("");
+      showToast(`Sales order ${nextOrder.orderNumber} loaded`, "success");
+    } catch (error: any) {
+      const message =
+        error?.data?.message || error?.error || "Unable to load sales order";
+      showToast(message, "error");
+    }
+  };
 
   const openQuickView = (order: RecentSalesOrder): void => {
     onOrderView?.(order);
@@ -64,7 +104,7 @@ const SalesOrders = ({
       showCloseButton: true,
       askDataChangeConfirm: false,
       component: (modalProps: any) => (
-        <ViewDetails {...modalProps} order={order} />
+        <ViewDetails {...modalProps} orderNumber={order.orderNumber} />
       ),
     });
   };
@@ -132,6 +172,24 @@ const SalesOrders = ({
         title={title || "Sales Orders"}
         refetch={() => {}}
         enableViewToggle={false}
+        headerControls={
+          <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ width: "100%" }}>
+            <MuiTextField
+              label="Load Sales Order"
+              placeholder="Enter order number"
+              value={orderNumberInput}
+              onChange={(event) => setOrderNumberInput(event.target.value)}
+            />
+            <Button
+              variant="contained"
+              onClick={loadOrderByNumber}
+              disabled={isFetching}
+              sx={{ minWidth: 150 }}
+            >
+              {isFetching ? "Loading..." : "Fetch Order"}
+            </Button>
+          </Stack>
+        }
         permissions={{
           create: false,
           edit: false,
