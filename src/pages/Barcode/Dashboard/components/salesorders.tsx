@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Box, Button, Chip, Stack } from "@mui/material";
+import { Box, Chip } from "@mui/material";
 import {
   GridColDef,
   GridFilterModel,
@@ -11,14 +11,16 @@ import {
 import { ViewDetails } from "./viewdetails";
 import ReusableDataGrid from "../../../../components/common/ReusableDataGrid";
 import { useModal } from "../../../../hooks/useModal";
-import { MuiTextField } from "../../../../components/mui/input";
+import {
+  BarcodeRecentOrderRow,
+  mapSalesOrderDetails,
+} from "../barcodeAdapters";
+import { defaultRecentOrders } from "..";
+import { getMockSalesOrders } from "../mockBarcodeService";
 import {
   getBarcodeDefaultContext,
   useLazyGetSalesOrderDetailsQuery,
 } from "../../../../redux/api/barcode";
-import { useToast } from "../../../../hooks/useToast";
-import { BarcodeRecentOrderRow, mapSalesOrderSummaryRow } from "../barcodeAdapters";
-import { defaultRecentOrders } from "..";
 
 type RecentSalesOrder = BarcodeRecentOrderRow;
 
@@ -37,9 +39,19 @@ const getStatusColor = (status: RecentSalesOrder["status"]) => {
   }
 };
 
+const formatDate = (value?: string) => {
+  if (!value) {
+    return "--";
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("en-GB");
+};
+
 interface SalesOrdersProps {
   recentOrders?: RecentSalesOrder[];
   title?: string;
+  loading?: boolean;
   onOrderView?: (order: RecentSalesOrder) => void;
   setDisplayTitle?: (title: string) => void;
   setHideFooter?: (hidden: boolean) => void;
@@ -49,12 +61,11 @@ interface SalesOrdersProps {
 const SalesOrders = ({
   recentOrders = defaultRecentOrders,
   title,
+  loading = false,
   onOrderView,
 }: SalesOrdersProps) => {
   const { openModal } = useModal();
-  const { showToast } = useToast();
-  const [triggerGetSalesOrderDetails, { isFetching }] =
-    useLazyGetSalesOrderDetailsQuery();
+  const [triggerOrderDetails] = useLazyGetSalesOrderDetailsQuery();
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
     page: 0,
     pageSize: 5,
@@ -64,39 +75,29 @@ const SalesOrders = ({
     items: [],
     quickFilterValues: [],
   });
-  const [orderNumberInput, setOrderNumberInput] = useState("");
-
-  const loadOrderByNumber = async () => {
-    const trimmedOrderNumber = orderNumberInput.trim();
-    if (!trimmedOrderNumber) {
-      showToast("Enter sales order number first", "warning");
-      return;
+  const salesOrderRows = useMemo(() => {
+    if (recentOrders.length > 0) {
+      return recentOrders;
     }
+
+    return getMockSalesOrders();
+  }, [recentOrders]);
+
+  const openQuickView = async (order: RecentSalesOrder): Promise<void> => {
+    onOrderView?.(order);
+
+    let prefetchedDetails = null;
 
     try {
-      const response = await triggerGetSalesOrderDetails({
+      const response = await triggerOrderDetails({
         ...getBarcodeDefaultContext(),
-        order_number: trimmedOrderNumber,
+        order_number: order.orderNumber,
       }).unwrap();
-      const nextOrder = mapSalesOrderSummaryRow(response.data);
 
-      if (!nextOrder) {
-        showToast("Sales order details not found", "warning");
-        return;
-      }
-
-      onOrderView?.(nextOrder);
-      setOrderNumberInput("");
-      showToast(`Sales order ${nextOrder.orderNumber} loaded`, "success");
-    } catch (error: any) {
-      const message =
-        error?.data?.message || error?.error || "Unable to load sales order";
-      showToast(message, "error");
+      prefetchedDetails = mapSalesOrderDetails(response?.data);
+    } catch {
+      prefetchedDetails = null;
     }
-  };
-
-  const openQuickView = (order: RecentSalesOrder): void => {
-    onOrderView?.(order);
 
     openModal({
       title: "Sales Order View",
@@ -104,7 +105,11 @@ const SalesOrders = ({
       showCloseButton: true,
       askDataChangeConfirm: false,
       component: (modalProps: any) => (
-        <ViewDetails {...modalProps} orderNumber={order.orderNumber} />
+        <ViewDetails
+          {...modalProps}
+          orderNumber={order.orderNumber}
+          defaultValues={prefetchedDetails}
+        />
       ),
     });
   };
@@ -112,36 +117,38 @@ const SalesOrders = ({
   const columns: GridColDef[] = useMemo(
     () => [
       {
-        field: "orderId",
-        headerName: "Sales Order Number",
+        field: "orderNumber",
+        headerName: "Oracle Order No",
         flex: 1,
         minWidth: 140,
       },
       {
-        field: "customerName",
-        headerName: "Customer Name",
-        flex: 1.6,
-        minWidth: 220,
-      },
-      {
-        field: "customerId",
-        headerName: "Customer ID",
+        field: "headerId",
+        headerName: "Header ID",
         flex: 1,
         minWidth: 140,
       },
       {
-        field: "status",
-        headerName: "Status",
+        field: "createdAt",
+        headerName: "Booked Date",
+        flex: 1,
+        minWidth: 140,
+        renderCell: (params: GridRenderCellParams<RecentSalesOrder>) =>
+          formatDate(String(params.value || "")),
+      },
+      {
+        field: "rawOrderStatus",
+        headerName: "Order Status",
         flex: 1,
         minWidth: 160,
         renderCell: (params: GridRenderCellParams<RecentSalesOrder>) => {
           const statusStyle = getStatusColor(
-            params.value as RecentSalesOrder["status"]
+            params.row.status as RecentSalesOrder["status"]
           );
 
           return (
             <Chip
-              label={params.value}
+              label={String(params.value || "--")}
               size="small"
               sx={{
                 backgroundColor: statusStyle.bg,
@@ -152,6 +159,34 @@ const SalesOrders = ({
           );
         },
       },
+      {
+        field: "importStatus",
+        headerName: "Imported",
+        flex: 0.8,
+        minWidth: 120,
+        renderCell: (params: GridRenderCellParams<RecentSalesOrder>) => (
+          <Chip
+            label={params.value === true ? "Yes" : params.value === false ? "No" : "--"}
+            size="small"
+            color={params.value === true ? "success" : "default"}
+            variant={params.value === true ? "filled" : "outlined"}
+          />
+        ),
+      },
+      {
+        field: "generateStatus",
+        headerName: "Generated",
+        flex: 0.8,
+        minWidth: 120,
+        renderCell: (params: GridRenderCellParams<RecentSalesOrder>) => (
+          <Chip
+            label={params.value === true ? "Yes" : params.value === false ? "No" : "--"}
+            size="small"
+            color={params.value === true ? "info" : "default"}
+            variant={params.value === true ? "filled" : "outlined"}
+          />
+        ),
+      },
     ],
     []
   );
@@ -159,10 +194,10 @@ const SalesOrders = ({
   return (
     <Box>
       <ReusableDataGrid
-        rows={recentOrders}
+        rows={salesOrderRows}
         columns={columns}
-        totalCount={recentOrders.length}
-        loading={false}
+        totalCount={salesOrderRows.length}
+        loading={loading}
         paginationModel={paginationModel}
         setPaginationModel={setPaginationModel}
         sortModel={sortModel}
@@ -170,26 +205,9 @@ const SalesOrders = ({
         filterModel={filterModel}
         setFilterModel={setFilterModel}
         title={title || "Sales Orders"}
-        refetch={() => {}}
+        refetch={() => undefined}
         enableViewToggle={false}
-        headerControls={
-          <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ width: "100%" }}>
-            <MuiTextField
-              label="Load Sales Order"
-              placeholder="Enter order number"
-              value={orderNumberInput}
-              onChange={(event) => setOrderNumberInput(event.target.value)}
-            />
-            <Button
-              variant="contained"
-              onClick={loadOrderByNumber}
-              disabled={isFetching}
-              sx={{ minWidth: 150 }}
-            >
-              {isFetching ? "Loading..." : "Fetch Order"}
-            </Button>
-          </Stack>
-        }
+     
         permissions={{
           create: false,
           edit: false,

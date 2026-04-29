@@ -1,0 +1,1120 @@
+{
+  "module": "barcode",
+  "generatedFrom": [
+    "src/pages/Barcode/Dashboard/data.ts",
+    "src/pages/Barcode/Dashboard/mockBarcodeService.ts",
+    "src/redux/api/barcode.ts",
+    "src/pages/Barcode/barcode.apidog.json"
+  ],
+  "defaultApiConfig": {
+    "baseUrl": "https://barcodeapi.techelecon.in/api",
+    "organizationId": 43,
+    "divisionId": 374
+  },
+  "notes": [
+    "This file is a backend handoff sample reference for Barcode module.",
+    "Path `salseOrderDetails` is intentionally kept as-is because frontend currently calls that exact API path.",
+    "Frontend request wrapper shape is generally `{ status, message, data }`.",
+    "Some list endpoints can work with either detailed order objects or simplified summary rows, but the samples below prefer stable typed payloads from `src/redux/api/barcode.ts`."
+  ],
+  "uiStaticJsonSamples": {
+    "salesOrderStatusOptions": [
+      "New Sales Order",
+      "HOD Review",
+      "Planning",
+      "Dispatched"
+    ],
+    "lineStatusOptions": [
+      "BOOKED",
+      "PL",
+      "SH",
+      "MI",
+      "PK"
+    ],
+    "statusActionMap": {
+      "BOOKED": {
+        "statusLabel": "Booked",
+        "badgeVariant": "warning",
+        "actions": {
+          "workOrder": {
+            "visible": true,
+            "enabled": true,
+            "mode": "create",
+            "label": "Work Order"
+          },
+          "serialNumber": {
+            "visible": true,
+            "enabled": false,
+            "mode": "manage",
+            "label": "Serial Number"
+          },
+          "issueMaterial": {
+            "visible": true,
+            "enabled": false,
+            "mode": "issue",
+            "label": "Issue Material"
+          },
+          "printLabel": {
+            "visible": true,
+            "enabled": false,
+            "mode": "print",
+            "label": "Print Label"
+          },
+          "edit": {
+            "visible": true,
+            "enabled": true,
+            "mode": "edit",
+            "label": "Edit"
+          }
+        }
+      },
+      "SH": {
+        "statusLabel": "Shop Floor Ready",
+        "badgeVariant": "success",
+        "actions": {
+          "workOrder": {
+            "visible": true,
+            "enabled": true,
+            "mode": "view",
+            "label": "Work Order"
+          },
+          "serialNumber": {
+            "visible": true,
+            "enabled": true,
+            "mode": "manage",
+            "label": "Serial Number"
+          },
+          "issueMaterial": {
+            "visible": true,
+            "enabled": true,
+            "mode": "issue",
+            "label": "Issue Material"
+          },
+          "printLabel": {
+            "visible": true,
+            "enabled": false,
+            "mode": "print",
+            "label": "Print Label"
+          },
+          "edit": {
+            "visible": true,
+            "enabled": true,
+            "mode": "edit",
+            "label": "Edit"
+          }
+        }
+      },
+      "MI": {
+        "statusLabel": "Material Issued",
+        "badgeVariant": "info",
+        "actions": {
+          "workOrder": {
+            "visible": true,
+            "enabled": true,
+            "mode": "view",
+            "label": "Work Order"
+          },
+          "serialNumber": {
+            "visible": true,
+            "enabled": true,
+            "mode": "manage",
+            "label": "Serial Number"
+          },
+          "issueMaterial": {
+            "visible": true,
+            "enabled": true,
+            "mode": "issue",
+            "label": "Issue Material"
+          },
+          "printLabel": {
+            "visible": true,
+            "enabled": true,
+            "mode": "print",
+            "label": "Print Label"
+          },
+          "edit": {
+            "visible": true,
+            "enabled": true,
+            "mode": "edit",
+            "label": "Edit"
+          }
+        }
+      },
+      "PK": {
+        "statusLabel": "Packed",
+        "badgeVariant": "secondary",
+        "actions": {
+          "workOrder": {
+            "visible": true,
+            "enabled": true,
+            "mode": "view",
+            "label": "Work Order"
+          },
+          "serialNumber": {
+            "visible": true,
+            "enabled": true,
+            "mode": "manage",
+            "label": "Serial Number"
+          },
+          "issueMaterial": {
+            "visible": true,
+            "enabled": true,
+            "mode": "issue",
+            "label": "Issue Material"
+          },
+          "printLabel": {
+            "visible": true,
+            "enabled": true,
+            "mode": "print",
+            "label": "Print Label"
+          },
+          "edit": {
+            "visible": true,
+            "enabled": true,
+            "mode": "edit",
+            "label": "Edit"
+          }
+        }
+      }
+    },
+    "salesOrderSummaryRows": [
+      {
+        "id": 1,
+        "orderId": "SO-4879",
+        "customerName": "MA POWER SOLUTIONS",
+        "customerId": "1408566",
+        "status": "HOD Review",
+        "createdAt": "2026-03-09",
+        "orderNumber": "4879"
+      },
+      {
+        "id": 2,
+        "orderId": "SO-4883",
+        "customerName": "ELECON MIDDLE EAST FZCO",
+        "customerId": "CUST-1001",
+        "status": "Dispatched",
+        "createdAt": "2026-03-18",
+        "orderNumber": "4883"
+      }
+    ],
+    "salesOrderDetailStaticShape": {
+      "order": {
+        "order_number": "4879",
+        "order_type": "DBPRLS-PSC",
+        "status": "BOOKED",
+        "order_date": "2026-03-09",
+        "currency": "INR",
+        "tax_category": ""
+      },
+      "order_information": {
+        "main": {
+          "customer": {
+            "name": "MA POWER SOLUTIONS",
+            "customer_number": "1408566",
+            "customer_po": "1992_B_R1",
+            "contact": "procurement@mapowersolutions.in"
+          },
+          "addresses": {
+            "shipping": {
+              "location": "CHENNAI",
+              "address_line_1": "Plot No 57, Aishwarya Nagar Extension",
+              "address_line_2": "Vanagaram Road",
+              "city": "Chennai",
+              "pincode": "600095",
+              "state": "Tamil Nadu"
+            },
+            "billing": {
+              "location": "CHENNAI",
+              "address_line_1": "Plot No 57, Aishwarya Nagar Extension",
+              "address_line_2": "Vanagaram Road",
+              "city": "Chennai",
+              "pincode": "600095",
+              "state": "Tamil Nadu"
+            }
+          },
+          "sales": {
+            "sales_person": "EMTICI-CHENNAI-2 (PBL)",
+            "price_list": "PBL Swift Centre Products Price List-2025"
+          },
+          "amount": {
+            "sub_total": 101032,
+            "tax": 0,
+            "total": 101032
+          },
+          "bank_details": {
+            "context_value": "Bank Details",
+            "bank_address": "Elecon Engineering Co. Ltd., Vallabh Vidyanagar",
+            "lc_no": "",
+            "delivery_condition": "EX-WORKS",
+            "destination": "Chennai",
+            "group_proj_ref": "MAPS-PSC-2026",
+            "proj_title": "South Region Gear Motor Requirement",
+            "insurance_by": "BYCUSTOMER",
+            "bank_name": "HDFC Bank",
+            "contact_name": "Accounts Desk",
+            "email_address_and_phone": "accounts@elecon.com / +91-2692-123456"
+          }
+        },
+        "other_details": {
+          "payment_terms": "100-EX OF DOC",
+          "warehouse": "PSC",
+          "line_set": "",
+          "fob": "EX-WORKS (DOMESTIC)",
+          "shipping_instructions": "Dispatch after packing approval mail.",
+          "tax_handling": "S",
+          "exempt_reason": "",
+          "amount": "",
+          "credit_card_type": "",
+          "card_holder": "",
+          "approval_code": "",
+          "order_source": "Branch Sales",
+          "sales_channel": "BRANCH",
+          "shipping_method": "Any Reliable Transporter",
+          "freight_terms": "TO PAY",
+          "shipment_priority": "Standard",
+          "packing_instruction": "Use wooden crate for gear motors.",
+          "tax_exempt_number": "",
+          "payment_type": "",
+          "cheque_number": "",
+          "credit_card_number": "",
+          "card_expiry_date": "",
+          "prepaid_amount": "",
+          "order_source_reference": "EMTICI-CHN-2026-0309"
+        }
+      },
+      "line_items": [
+        {
+          "line_no": "1.1",
+          "item_code": "DB.09M.022.36_BGCHI_7.5A",
+          "description": "Helical geared motor with compact housing",
+          "quantity": 1,
+          "list_price": 123208,
+          "discount_percent": 59,
+          "selling_price": 50516,
+          "amount": 50516,
+          "ship_to_location": "CHENNAI",
+          "road_permit": false,
+          "wo_no": "10136601",
+          "wo_date": "2026-03-09",
+          "client_delivery_date": "2026-03-28",
+          "delivery_month": "2603",
+          "con_auth": "EMTICI",
+          "status": "PL",
+          "mail_status": "Issue Material",
+          "actions": {
+            "workOrder": {
+              "visible": true,
+              "enabled": true,
+              "mode": "create",
+              "label": "Work Order"
+            },
+            "serialNumber": {
+              "visible": true,
+              "enabled": false,
+              "mode": "manage",
+              "label": "Serial Number"
+            },
+            "issueMaterial": {
+              "visible": true,
+              "enabled": false,
+              "mode": "issue",
+              "label": "Issue Material"
+            },
+            "printLabel": {
+              "visible": true,
+              "enabled": false,
+              "mode": "print",
+              "label": "Print Label"
+            },
+            "edit": {
+              "visible": true,
+              "enabled": true,
+              "mode": "edit",
+              "label": "Edit"
+            }
+          },
+          "quantitys": [
+            {
+              "serial_no": "SC30583",
+              "ass_rel_date": null,
+              "ac_ua_date": null,
+              "ac_comp_date": null,
+              "ac_pk_date": null,
+              "ac_ds_date": null,
+              "tent_rel_date": null,
+              "status": "PL",
+              "sh_type": null,
+              "sh_item": null,
+              "rpm": null,
+              "motor_serial_no": null,
+              "ac_ho_date": null,
+              "ac_ca_date": null
+            }
+          ]
+        }
+      ]
+    },
+    "salesOrderDetailViewModelShape": {
+      "header_id": null,
+      "order": {
+        "order_number": "4879",
+        "order_type": "DBPRLS-PSC",
+        "status": "BOOKED",
+        "order_date": "2026-03-09",
+        "currency": "INR",
+        "tax_category": ""
+      },
+      "order_information": {
+        "main": {
+          "customer": {
+            "name": "MA POWER SOLUTIONS",
+            "customer_number": "1408566",
+            "customer_po": "1992_B_R1",
+            "contact": "procurement@mapowersolutions.in"
+          },
+          "addresses": {
+            "shipping": {
+              "location": "CHENNAI",
+              "address_line_1": "Plot No 57, Aishwarya Nagar Extension",
+              "address_line_2": "Vanagaram Road",
+              "city": "Chennai",
+              "pincode": "600095",
+              "state": "Tamil Nadu"
+            },
+            "billing": {
+              "location": "CHENNAI",
+              "address_line_1": "Plot No 57, Aishwarya Nagar Extension",
+              "address_line_2": "Vanagaram Road",
+              "city": "Chennai",
+              "pincode": "600095",
+              "state": "Tamil Nadu"
+            }
+          },
+          "sales": {
+            "sales_person": "EMTICI-CHENNAI-2 (PBL)",
+            "price_list": "PBL Swift Centre Products Price List-2025"
+          },
+          "amount": {
+            "sub_total": 101032,
+            "tax": 0,
+            "total": 101032
+          },
+          "bank_details": {
+            "context_value": "Bank Details",
+            "bank_address": "Elecon Engineering Co. Ltd., Vallabh Vidyanagar",
+            "lc_no": "",
+            "delivery_condition": "EX-WORKS",
+            "destination": "Chennai",
+            "group_proj_ref": "MAPS-PSC-2026",
+            "proj_title": "South Region Gear Motor Requirement",
+            "insurance_by": "BYCUSTOMER",
+            "bank_name": "HDFC Bank",
+            "contact_name": "Accounts Desk",
+            "email_address_and_phone": "accounts@elecon.com / +91-2692-123456"
+          }
+        },
+        "other_details": {
+          "payment_terms": "100-EX OF DOC",
+          "warehouse": "PSC",
+          "line_set": "",
+          "fob": "EX-WORKS (DOMESTIC)",
+          "shipping_instructions": "Dispatch after packing approval mail.",
+          "tax_handling": "S",
+          "exempt_reason": "",
+          "amount": "",
+          "credit_card_type": "",
+          "card_holder": "",
+          "approval_code": "",
+          "order_source": "Branch Sales",
+          "sales_channel": "BRANCH",
+          "shipping_method": "Any Reliable Transporter",
+          "freight_terms": "TO PAY",
+          "shipment_priority": "Standard",
+          "packing_instruction": "Use wooden crate for gear motors.",
+          "tax_exempt_number": "",
+          "payment_type": "",
+          "cheque_number": "",
+          "credit_card_number": "",
+          "card_expiry_date": "",
+          "prepaid_amount": "",
+          "order_source_reference": "EMTICI-CHN-2026-0309"
+        }
+      },
+      "line_items": [
+        {
+          "id": "1.1-1",
+          "lineId": 1,
+          "headerId": null,
+          "orgId": null,
+          "line_no": "1.1",
+          "item_code": "DB.09M.022.36_BGCHI_7.5A",
+          "description": "Helical geared motor with compact housing",
+          "quantity": 1,
+          "list_price": 123208,
+          "discount_percent": 59,
+          "selling_price": 50516,
+          "amount": 50516,
+          "ship_to_location": "CHENNAI",
+          "road_permit": false,
+          "wo_no": "10136601",
+          "wo_date": "2026-03-09",
+          "client_delivery_date": "2026-03-28",
+          "delivery_month": "2603",
+          "con_auth": "EMTICI",
+          "status": "PL",
+          "mail_status": "Issue Material",
+          "model": "",
+          "model_type": "",
+          "ratio": 0,
+          "kw": 0,
+          "quantitys": [
+            {
+              "serial_no": "SC30583",
+              "ass_rel_date": null,
+              "ac_ua_date": null,
+              "ac_comp_date": null,
+              "ac_pk_date": null,
+              "ac_ds_date": null,
+              "tent_rel_date": null,
+              "status": "PL",
+              "sh_type": null,
+              "sh_item": null,
+              "rpm": null,
+              "motor_serial_no": null,
+              "ac_ho_date": null,
+              "ac_ca_date": null
+            }
+          ]
+        }
+      ]
+    },
+    "orderTrackingSample": [
+      {
+        "id": 904,
+        "line_id": 921903,
+        "division": "CP",
+        "sub_division": "GCP",
+        "cust_po_no": "EME 2526146",
+        "end_cust_name": "ELECON MIDDLE EAST FZCO",
+        "branch_name": "DUBAI-GEAR",
+        "ora_item_desc": "Geared Coup. Multi Crowned ED 17400 NB",
+        "qty": 1,
+        "uom": "NOS",
+        "po_value": 1234,
+        "work_order_no": 43,
+        "work_order_date": "2026-03-31",
+        "commited_ex_works_delivery_date": "2026-03-31",
+        "order_registration": "Completed",
+        "design": "Completed",
+        "material_procurement": "Completed",
+        "manufacturing": "In Progress",
+        "assembly": "Pending",
+        "testing": "Pending",
+        "painting": "Pending",
+        "dispatch": "Pending"
+      }
+    ],
+    "gearMotorLookupBySerialSample": {
+      "M480527": {
+        "gearedMotorSerialNumber": "M480527",
+        "finalInspection": {
+          "mountType": "Foot Mount",
+          "model": "EDR-FM-90L",
+          "workOrderNumber": "WO-240527",
+          "rpm": "1440",
+          "motorSerialNumber": "MS-480527",
+          "pole": "4",
+          "electricMotorMake": "PBL",
+          "boreSize": "40",
+          "holdBackType": "CW",
+          "remarks": "Inspected and ready for dispatch.",
+          "accessories": {
+            "additionalReq": false,
+            "breatherPlug": true,
+            "oilLevelIndicator": true,
+            "stickerOilLevel": true,
+            "stickerCaution": true,
+            "namePlate": true,
+            "shaftProtector": true,
+            "adaptorCover": false,
+            "eyeBolt": true,
+            "torqueBrush": false,
+            "endCover": true,
+            "springWasher": true,
+            "circlip": true,
+            "hexBolt": true,
+            "washer": true,
+            "outputFlange": false,
+            "singleExeShaft": true,
+            "doubleExeShaft": false,
+            "torqueArm": false,
+            "motorMountingRing": false,
+            "mountingFeet": true
+          }
+        },
+        "orderCompletion": {
+          "mountType": "Foot Mount",
+          "model": "EDR-FM-90L",
+          "workOrderNumber": "WO-240527",
+          "rpm": "1440",
+          "motorSerialNumber": "MS-480527",
+          "pole": "4",
+          "electricMotorMake": "PBL",
+          "inputRpm": "1440",
+          "actualRatio": "20",
+          "noiseLevelDb": "64",
+          "paint": "GOOD",
+          "status": "PK"
+        }
+      }
+    },
+    "serialLookupViewModelSample": {
+      "rpm": "1440",
+      "motorSerialNumber": "MS-480527",
+      "model": "EDR-FM-90L",
+      "workOrderNumber": "WO-240527"
+    },
+    "reportCategoriesSample": {
+      "downloadableFormats": [
+        "xls",
+        "pdf"
+      ],
+      "categories": [
+        {
+          "id": "order-booking",
+          "title": "Order Booking",
+          "reports": [
+            {
+              "id": "branch-wise-order-booking",
+              "name": "Branch Wise Order Booking",
+              "apiKey": "branchWiseOrderBooking",
+              "formats": [
+                "xls",
+                "pdf"
+              ]
+            },
+            {
+              "id": "customer-wise-order-booking",
+              "name": "Customer Wise Order Booking",
+              "apiKey": "customerWiseOrderBooking",
+              "formats": [
+                "xls",
+                "pdf"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "importedSalesOrdersSample": [
+      {
+        "id": 1,
+        "soNumber": "SO-2026-001",
+        "customer": "Reliance Industries",
+        "date": "2026-03-15",
+        "amount": "INR 125000",
+        "status": "Imported"
+      }
+    ],
+    "editSalesOrderConfigSample": {
+      "statusOptions": [
+        {
+          "value": "Hold",
+          "label": "Hold"
+        },
+        {
+          "value": "Planning",
+          "label": "Planning"
+        },
+        {
+          "value": "Sortage",
+          "label": "Sortage"
+        },
+        {
+          "value": "Actual Release",
+          "label": "Actual Release"
+        },
+        {
+          "value": "Cancel",
+          "label": "Cancel"
+        }
+      ],
+      "editableFields": [
+        "road_permit",
+        "delivery_month",
+        "status",
+        "shipping_instructions",
+        "packing_instruction"
+      ],
+      "lineItemDraftSample": {
+        "order_number": "4879",
+        "line_no": "1.1",
+        "road_permit": false,
+        "delivery_month": "2603",
+        "status": "PL"
+      }
+    }
+  },
+  "apiSamples": [
+    {
+      "key": "getSalesOrders",
+      "usedIn": [
+        "Barcode Dashboard > Sales Orders grid"
+      ],
+      "method": "POST",
+      "path": "/barcode/sales-orders/",
+      "fullUrl": "https://barcodeapi.techelecon.in/api/barcode/sales-orders/",
+      "requestSample": {
+        "DIVISION_ID": 374
+      },
+      "responseSample": {
+        "status": true,
+        "message": "Sales orders fetched successfully",
+        "data": [
+          {
+            "id": "4879",
+            "orderId": "SO-4879",
+            "customerName": "MA POWER SOLUTIONS",
+            "customerId": "1408566",
+            "status": "HOD Review",
+            "createdAt": "2026-03-09",
+            "orderNumber": "4879"
+          },
+          {
+            "id": "4883",
+            "orderId": "SO-4883",
+            "customerName": "ELECON MIDDLE EAST FZCO",
+            "customerId": "CUST-1001",
+            "status": "Dispatched",
+            "createdAt": "2026-03-18",
+            "orderNumber": "4883"
+          }
+        ]
+      }
+    },
+    {
+      "key": "importSalesOrders",
+      "usedIn": [
+        "Barcode Dashboard > Import Sales Orders popup"
+      ],
+      "method": "POST",
+      "path": "/barcode/sales-orders/import",
+      "fullUrl": "https://barcodeapi.techelecon.in/api/barcode/sales-orders/import",
+      "requestSample": {
+        "ORGANIZATION_ID": 43,
+        "DIVISION_ID": 374
+      },
+      "responseSample": {
+        "status": true,
+        "message": "Sales orders import completed",
+        "data": {
+          "order_booked_date": "2026-03-15",
+          "order_type_id": 101,
+          "header_id": 500001,
+          "ordernumber": "4879"
+        }
+      }
+    },
+    {
+      "key": "getSalesOrderDetails",
+      "usedIn": [
+        "Barcode Dashboard > Sales Order View modal"
+      ],
+      "method": "POST",
+      "path": "/barcode/sales-orders/salseOrderDetails",
+      "fullUrl": "https://barcodeapi.techelecon.in/api/barcode/sales-orders/salseOrderDetails",
+      "requestSample": {
+        "ORGANIZATION_ID": 43,
+        "DIVISION_ID": 374,
+        "order_number": "4879"
+      },
+      "responseSample": {
+        "status": true,
+        "message": "Sales order details fetched successfully",
+        "data": {
+          "header_id": 500001,
+          "order": {
+            "order_number": "4879",
+            "order_type": "DBPRLS-PSC",
+            "status": "BOOKED",
+            "order_date": "2026-03-09",
+            "currency": "INR",
+            "tax_category": ""
+          },
+          "customer": {
+            "customer_name": "MA POWER SOLUTIONS",
+            "customer_number": "1408566",
+            "customer_po": "1992_B_R1",
+            "contact": "procurement@mapowersolutions.in"
+          },
+          "billing_address": {
+            "location": "CHENNAI",
+            "address_line_1": "Plot No 57, Aishwarya Nagar Extension",
+            "address_line_2": "Vanagaram Road",
+            "city": "Chennai",
+            "pincode": "600095",
+            "state": "Tamil Nadu"
+          },
+          "shipping_address": {
+            "location": "CHENNAI",
+            "address_line_1": "Plot No 57, Aishwarya Nagar Extension",
+            "address_line_2": "Vanagaram Road",
+            "city": "Chennai",
+            "pincode": "600095",
+            "state": "Tamil Nadu"
+          },
+          "sales": {
+            "sales_person": "EMTICI-CHENNAI-2 (PBL)",
+            "price_list": "PBL Swift Centre Products Price List-2025",
+            "sales_channel": "BRANCH"
+          },
+          "amounts": {
+            "sub_total": 101032,
+            "tax": 0,
+            "total": 101032
+          },
+          "shipping": {
+            "shipping_method": "Any Reliable Transporter",
+            "freight_terms": "TO PAY"
+          },
+          "payment": {
+            "payment_terms": "100-EX OF DOC"
+          },
+          "bank_details": {
+            "bank_name": "HDFC Bank",
+            "account_number": "XXXXXX1234",
+            "ifsc_code": "HDFC0001234",
+            "branch": "Vallabh Vidyanagar"
+          },
+          "line_items": [
+            {
+              "LINE_ID": 11980868,
+              "HEADER_ID": 500001,
+              "ORG_ID": 374,
+              "ORDERED_ITEM": "DB.09M.022.36_BGCHI_7.5A",
+              "ORDERED_QUANTITY": 1,
+              "UNIT_LIST_PRICE": 123208,
+              "UNIT_SELLING_PRICE": 50516,
+              "SHIP_FROM_ORG_ID": 374,
+              "SHIP_TO_ORG_ID": "CHENNAI",
+              "AMOUNT": 50516,
+              "DISCOUNT": 59,
+              "DESCRIPTION": "Helical geared motor with compact housing",
+              "MODEL": "EDR-FM-90L",
+              "MODEL_TYPE": "GM",
+              "KW": 7.5,
+              "RATIO": 20,
+              "WIP_ENTITY_NAME": "10136601",
+              "CREATION_DATE": "2026-03-09",
+              "serial_line_items": [
+                {
+                  "serial_no": "SC30583",
+                  "ass_rel_date": null,
+                  "ac_ua_date": null,
+                  "ac_comp_date": null,
+                  "ac_pk_date": null,
+                  "ac_ds_date": null,
+                  "tent_rel_date": null,
+                  "ac_ho_date": null,
+                  "ac_ca_date": null,
+                  "status": "PL",
+                  "sh_type": null,
+                  "sh_item": null,
+                  "rpm": null,
+                  "motor_serial_no": null
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "createWorkOrder",
+      "usedIn": [
+        "Barcode Dashboard > Line Items > Work Order button"
+      ],
+      "method": "POST",
+      "path": "/barcode/sales-orders/workordercreate",
+      "fullUrl": "https://barcodeapi.techelecon.in/api/barcode/sales-orders/workordercreate",
+      "requestSample": {
+        "DIVISION_ID": 374,
+        "ORGANIZATION_ID": 43,
+        "LINE_ID": 11980868,
+        "order_type": "DBPRLS-PSC"
+      },
+      "responseSample": {
+        "status": true,
+        "message": "Work order processed successfully",
+        "data": {
+          "LINE_ID": 11980868,
+          "wo_no": "10136601",
+          "wo_date": "2026-03-09",
+          "status": "SH"
+        }
+      }
+    },
+    {
+      "key": "generateSerialNumbers",
+      "usedIn": [
+        "Barcode Dashboard > Line Items > Serial Number button"
+      ],
+      "method": "POST",
+      "path": "/barcode/sales-orders/generateSrNO",
+      "fullUrl": "https://barcodeapi.techelecon.in/api/barcode/sales-orders/generateSrNO",
+      "requestSample": {
+        "DIVISION_ID": 374,
+        "LINE_ID": 11980868
+      },
+      "responseSample": {
+        "status": true,
+        "message": "Serial numbers generated successfully",
+        "data": {
+          "LINE_ID": 11980868,
+          "serial_line_items": [
+            {
+              "serial_no": "SC30583",
+              "status": "SH",
+              "ass_rel_date": "2026-03-12"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "issueMaterial",
+      "usedIn": [
+        "Barcode Dashboard > Line Items > Issue Material button"
+      ],
+      "method": "POST",
+      "path": "/barcode/sales-orders/IssueMaterial",
+      "fullUrl": "https://barcodeapi.techelecon.in/api/barcode/sales-orders/IssueMaterial",
+      "requestSample": {
+        "DIVISION_ID": 374,
+        "ORGANIZATION_ID": 43,
+        "LINE_ID": 11980868
+      },
+      "responseSample": {
+        "status": true,
+        "message": "Material issue processed successfully",
+        "data": {
+          "LINE_ID": 11980868,
+          "status": "MI",
+          "material_issue_date": "2026-03-14"
+        }
+      }
+    },
+    {
+      "key": "printLabel",
+      "usedIn": [
+        "Barcode Dashboard > Line Items > Print Label button"
+      ],
+      "method": "POST",
+      "path": "/barcode/sales-orders/printlabel",
+      "fullUrl": "https://barcodeapi.techelecon.in/api/barcode/sales-orders/printlabel",
+      "requestSample": {
+        "WONO": "10136601",
+        "Line_Id": 11980868
+      },
+      "responseSample": {
+        "status": true,
+        "message": "Print label request submitted successfully",
+        "data": {
+          "WONO": "10136601",
+          "Line_Id": 11980868,
+          "status": "PK"
+        }
+      }
+    },
+    {
+      "key": "getUnderAssemblyDetails",
+      "usedIn": [
+        "Final Inspection serial lookup fallback"
+      ],
+      "method": "POST",
+      "path": "/barcode/sales-orders/underAssembly",
+      "fullUrl": "https://barcodeapi.techelecon.in/api/barcode/sales-orders/underAssembly",
+      "requestSample": {
+        "serial_no": "M480527"
+      },
+      "responseSample": {
+        "status": true,
+        "message": "Under assembly details fetched successfully",
+        "data": {
+          "rpm": "1440",
+          "motor_serial_no": "MS-480527",
+          "Model": "EDR-FM-90L",
+          "wo_no": "WO-240527"
+        }
+      }
+    },
+    {
+      "key": "getQualityCheckDetails",
+      "usedIn": [
+        "Final Inspection primary lookup",
+        "Order Completion fallback lookup"
+      ],
+      "method": "POST",
+      "path": "/barcode/sales-orders/qualityCheck",
+      "fullUrl": "https://barcodeapi.techelecon.in/api/barcode/sales-orders/qualityCheck",
+      "requestSample": {
+        "serial_no": "M480527"
+      },
+      "responseSample": {
+        "status": true,
+        "message": "Quality check details fetched successfully",
+        "data": {
+          "rpm": "1440",
+          "motor_serial_no": "MS-480527",
+          "Model": "EDR-FM-90L",
+          "wo_no": "WO-240527"
+        }
+      }
+    },
+    {
+      "key": "getCompletionGearboxDetails",
+      "usedIn": [
+        "Order Completion primary lookup"
+      ],
+      "method": "POST",
+      "path": "/completionGearboxSerialNumber",
+      "fullUrl": "https://barcodeapi.techelecon.in/api/completionGearboxSerialNumber",
+      "requestSample": {
+        "BarcodeSerialNo": "M480527"
+      },
+      "responseSample": {
+        "status": true,
+        "message": "Completion gearbox details fetched successfully",
+        "data": {
+          "rpm": "1440",
+          "motor_serial_no": "MS-480527",
+          "Model": "EDR-FM-90L",
+          "wo_no": "WO-240527"
+        }
+      }
+    },
+    {
+      "key": "updateOrderCompletionCompletion",
+      "usedIn": [
+        "Order Completion submit when stage resolves to `completion`"
+      ],
+      "method": "POST",
+      "path": "/barcode/order-completion/completion",
+      "fullUrl": "https://barcodeapi.techelecon.in/api/barcode/order-completion/completion",
+      "requestSample": {
+        "DivisionId": "374",
+        "dtPrint": {
+          "oracle_order_no": 500001,
+          "model_type": "GM",
+          "model": "EDR-FM-90L",
+          "ratio": 20,
+          "qty": 1,
+          "wo_no": "WO-240527",
+          "order_header_id": 500001,
+          "order_line_id": 11980868,
+          "status": "CP",
+          "kw": 7.5,
+          "serial_no": "M480527",
+          "rpm": 1440,
+          "motor_serial_no": "MS-480527",
+          "input_RPM": 1440,
+          "actual_ratio": 20,
+          "pole": 4,
+          "noiseLevel": 64,
+          "paintColor": "GOOD",
+          "MotorMake": "PBL",
+          "OracleUserId": 1,
+          "P_AMB_TEMP": "",
+          "P_GREASE_TEMP": ""
+        }
+      },
+      "responseSample": {
+        "status": true,
+        "message": "Order completion updated successfully",
+        "data": null
+      }
+    },
+    {
+      "key": "updateOrderCompletionPainting",
+      "usedIn": [
+        "Order Completion submit when status resolves to `PI`"
+      ],
+      "method": "POST",
+      "path": "/barcode/order-completion/painting",
+      "fullUrl": "https://barcodeapi.techelecon.in/api/barcode/order-completion/painting",
+      "requestSample": {
+        "DivisionId": "374",
+        "dtPrint": {
+          "oracle_order_no": 500001,
+          "model_type": "GM",
+          "model": "EDF-FM-112M",
+          "ratio": 30,
+          "qty": 1,
+          "wo_no": "WO-240528",
+          "order_header_id": 500002,
+          "order_line_id": 11980869,
+          "status": "PI",
+          "kw": 5.5,
+          "serial_no": "M480528",
+          "rpm": 960,
+          "motor_serial_no": "MS-480528",
+          "input_RPM": 1440,
+          "actual_ratio": 30,
+          "pole": 6,
+          "noiseLevel": 67,
+          "paintColor": "Accreylated Alkyd Gear Blue Semi Glossy",
+          "MotorMake": "BBL",
+          "OracleUserId": 1,
+          "P_AMB_TEMP": "",
+          "P_GREASE_TEMP": ""
+        }
+      },
+      "responseSample": {
+        "status": true,
+        "message": "Painting stage updated successfully",
+        "data": null
+      }
+    },
+    {
+      "key": "updateOrderCompletionPacking",
+      "usedIn": [
+        "Order Completion submit when status resolves to `PK`"
+      ],
+      "method": "POST",
+      "path": "/barcode/order-completion/packing",
+      "fullUrl": "https://barcodeapi.techelecon.in/api/barcode/order-completion/packing",
+      "requestSample": {
+        "DivisionId": "374",
+        "dtPrint": {
+          "oracle_order_no": 500001,
+          "model_type": "GM",
+          "model": "EDR-FM-90L",
+          "ratio": 20,
+          "qty": 1,
+          "wo_no": "WO-240527",
+          "order_header_id": 500001,
+          "order_line_id": 11980868,
+          "status": "PK",
+          "kw": 7.5,
+          "serial_no": "M480527",
+          "rpm": 1440,
+          "motor_serial_no": "MS-480527",
+          "input_RPM": 1440,
+          "actual_ratio": 20,
+          "pole": 4,
+          "noiseLevel": 64,
+          "paintColor": "GOOD",
+          "MotorMake": "PBL",
+          "OracleUserId": 1,
+          "P_AMB_TEMP": "",
+          "P_GREASE_TEMP": ""
+        }
+      },
+      "responseSample": {
+        "status": true,
+        "message": "Packing stage updated successfully",
+        "data": null
+      }
+    }
+  ]
+}

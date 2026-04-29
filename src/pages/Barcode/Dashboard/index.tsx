@@ -4,12 +4,17 @@ import { Box, Button, Card, CardContent, Grid, Stack, Typography } from "@mui/ma
 import SalesOrders from "./components/salesorders";
 import { useDialog } from "../../../hooks/useDialog";
 import Importsalesorders from "./components/importsalesorders";
-import { BarcodeRecentOrderRow } from "./barcodeAdapters";
+import { BarcodeRecentOrderRow, mapSalesOrdersList } from "./barcodeAdapters";
+import { getMockSalesOrders } from "./mockBarcodeService";
+import { useGetSalesOrdersQuery } from "../../../redux/api/barcode";
 
 const STORAGE_KEY = "barcode_recent_sales_orders";
 const MAX_RECENT_ORDERS = 10;
 
-export const defaultRecentOrders: BarcodeRecentOrderRow[] = [];
+export const defaultRecentOrders: BarcodeRecentOrderRow[] = getMockSalesOrders().slice(
+  0,
+  MAX_RECENT_ORDERS
+);
 
 const persistRecentOrders = (orders: BarcodeRecentOrderRow[]) => {
   if (typeof window === "undefined") {
@@ -47,10 +52,19 @@ const safeReadRecentOrders = (): BarcodeRecentOrderRow[] => {
 const BarcodeDashboard = () => {
   const { openDialog } = useDialog();
   const [recentOrders, setRecentOrders] = useState<BarcodeRecentOrderRow[]>([]);
+  const { data: salesOrdersResponse, isLoading } = useGetSalesOrdersQuery();
 
   useEffect(() => {
+    const mappedOrders = mapSalesOrdersList(salesOrdersResponse?.data ?? salesOrdersResponse);
+
+    if (mappedOrders.length) {
+      setRecentOrders(mappedOrders);
+      persistRecentOrders(mappedOrders);
+      return;
+    }
+
     setRecentOrders(safeReadRecentOrders());
-  }, []);
+  }, [salesOrdersResponse]);
 
   const handleOrderView = useCallback((order: BarcodeRecentOrderRow) => {
     setRecentOrders((currentOrders) => {
@@ -67,55 +81,37 @@ const BarcodeDashboard = () => {
   }, []);
 
   const dashboardStats = useMemo(() => {
-    const today = new Date();
-    const currentMonth = today.getMonth();
-    const currentYear = today.getFullYear();
-
-    const newSalesOrderCount = recentOrders.filter(
-      (order) => order.status === "New Sales Order"
+    const totalOrders = recentOrders.length;
+    const importedCount = recentOrders.filter((order) => order.importStatus === true).length;
+    const generatedCount = recentOrders.filter((order) => order.generateStatus === true).length;
+    const openOrderCount = recentOrders.filter(
+      (order) => String(order.rawOrderStatus || "").toUpperCase() === "OPEN"
     ).length;
-    const hodCount = recentOrders.filter(
-      (order) => order.status === "HOD Review"
-    ).length;
-    const planningCount = recentOrders.filter(
-      (order) => order.status === "Planning"
-    ).length;
-    const dispatchThisMonthCount = recentOrders.filter((order) => {
-      if (order.status !== "Dispatched") {
-        return false;
-      }
-
-      const orderDate = new Date(order.createdAt);
-      return (
-        orderDate.getMonth() === currentMonth &&
-        orderDate.getFullYear() === currentYear
-      );
-    }).length;
 
     return [
       {
-        key: "new-sales-order",
-        title: "New Sales Order",
-        count: newSalesOrderCount,
+        key: "total-sales-order",
+        title: "Total Sales Orders",
+        count: totalOrders,
         color: "#1D4ED8",
         showImport: true,
       },
       {
-        key: "hod",
-        title: "HOD",
-        count: hodCount,
+        key: "imported",
+        title: "Imported",
+        count: importedCount,
         color: "#D97706",
       },
       {
-        key: "planning",
-        title: "Planning",
-        count: planningCount,
+        key: "generated",
+        title: "Generated",
+        count: generatedCount,
         color: "#0891B2",
       },
       {
-        key: "dispatch",
-        title: "Dispatch This Month",
-        count: dispatchThisMonthCount,
+        key: "open-orders",
+        title: "Open Orders",
+        count: openOrderCount,
         color: "#059669",
       },
     ];
@@ -189,8 +185,9 @@ const BarcodeDashboard = () => {
 
       <SalesOrders
         recentOrders={recentOrders}
+        loading={isLoading}
         onOrderView={handleOrderView}
-        title="Recently Viewed Sales Orders"
+        title="Sales Orders"
       />
     </Box>
   );

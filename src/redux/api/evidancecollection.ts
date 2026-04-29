@@ -68,6 +68,11 @@ export interface RefreshTokenPayload {
   RefreshToken: string;
 }
 
+export interface EvidenceLoginPayload {
+  username: string;
+  password: string;
+}
+
 export interface ReferenceNumberListPayload {
   CategoryId: number;
   PageNo?: number;
@@ -174,6 +179,16 @@ export const evidanceCollectionApi = createApi({
   }),
   tagTypes: ["EvidanceCollection"],
   endpoints: (builder) => ({
+    login: builder.mutation<
+      EvidanceCollectionResponse<EvidanceCollectionRecord>,
+      EvidenceLoginPayload
+    >({
+      query: (body) => ({
+        url: "/Login/login",
+        method: "POST",
+        body,
+      }),
+    }),
     assingUserCategory: builder.mutation<
       EvidanceCollectionResponse<EvidanceCollectionRecord>,
       AssingUserCategoryPayload
@@ -451,6 +466,7 @@ export const evidanceCollectionApi = createApi({
 });
 
 export const {
+  useLoginMutation,
   useAssingUserCategoryMutation,
   useCreateCategoryMutation,
   useAddUserMutation,

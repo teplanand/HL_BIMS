@@ -1,0 +1,333 @@
+1. Import API : /api/barcode/sales-orders/import
+ Output if there is New Records :{
+    "status": true,
+    "message": "Success",
+    "data": [
+        {
+            "order_booked_date": "2026-04-24 12:15:36",
+            "order_type_id": 4046,
+            "header_id": 10554758,
+            "ordernumber": 16371,
+            "customer_name": "TRANSTECH EQUIPMENTS PVT LTD",
+            "customer_number": "396559"
+        },
+        {
+            "order_booked_date": "2026-04-24 12:14:20",
+            "order_type_id": 4046,
+            "header_id": 10554757,
+            "ordernumber": 16370,
+            "customer_name": "AMMANN INDIA PVT LTD",
+            "customer_number": "118800"
+        }
+    ],
+    "records": 2
+}
+
+Output if there is no new Records : {
+    "status": false,
+    "message": "No new data found",
+    "data": null,
+    "records": 0
+}
+
+2. Get all Sales Order : /api/barcode/sales-orders 
+ output :{
+    "status": true,
+    "message": "Success",
+    "data": [
+        {
+            "header_id": 10554759,
+            "oracle_order_no": 16372,
+            "order_booked_date": "2026-04-24T06:49:14.000Z",
+            "import_status": true,
+            "generate_status": false,
+            "organization_id": 43,
+            "division_id": 374,
+            "order_status": "OPEN"
+        },
+        {
+            "header_id": 10554758,
+            "oracle_order_no": 16371,
+            "order_booked_date": "2026-04-24T06:45:36.000Z",
+            "import_status": true,
+            "generate_status": false,
+            "organization_id": 43,
+            "division_id": 374,
+            "order_status": "OPEN"
+        },
+        {
+            "header_id": 10554757,
+            "oracle_order_no": 16370,
+            "order_booked_date": "2026-04-24T06:44:20.000Z",
+            "import_status": true,
+            "generate_status": false,
+            "organization_id": 43,
+            "division_id": 374,
+            "order_status": "OPEN"
+        }
+    ],
+    "records": 3
+}
+
+3. Get Sales Order Details : api/barcode/sales-orders/salseOrderDetails
+
+output : {
+    "status": true,
+    "message": "Success",
+    "data": {
+        "header_id": 10550750,
+        "order": {
+            "order_number": 16363,
+            "order_type": "PBGPRLS",
+            "status": "BOOKED",
+            "order_date": "2026-04-20T04:00:24.000Z",
+            "currency": "INR",
+            "tax_category": null
+        },
+        "customer": {
+            "name": "NOBLE INDUSTRIAL EQUIPMENTS PVT LTD",
+            "customer_number": "77509",
+            "customer_po": "NIEPL/PO/25-26/271 DTD-12.03.2026",
+            "contact": null
+        },
+        "billing_address": {
+            "location": null,
+            "address_line_1": "S/F- 2, 2ND FLOOR,",
+            "address_line_2": "NARAYAN PLAZA",
+            "city": "BHUBANESHWAR",
+            "pincode": "751009",
+            "state": "ORISSA"
+        },
+        "shipping_address": {
+            "location": null,
+            "address_line_1": "S/F- 2, 2ND FLOOR,",
+            "address_line_2": "NARAYAN PLAZA",
+            "city": "BHUBANESHWAR",
+            "pincode": "751009",
+            "state": "ORISSA"
+        },
+        "sales": {
+            "sales_person": "EMTICI-KOLKATA(PBL)",
+            "price_list": "PBL PBG Products Price List-2025-26"
+        },
+        "amounts": {
+            "sub_total": "33428.00",
+            "tax": "0.00",
+            "total": "33428.00"
+        },
+        "bank_details": {
+            "context_value": "Bank Details",
+            "bank_address": ".",
+            "bank_name": "Axis Bank",
+            "delivery_condition": "EX-WORKS",
+            "destination": "AS PER PO",
+            "group_proj_ref": null,
+            "proj_title": null,
+            "insurance_by": "BYUS",
+            "contact_name": "S.K.KHADANGA",
+            "email_address_and_phone": "-"
+        },
+        "other_details": {
+            "payment_terms": "100-10days-CD",
+            "warehouse": "PBG",
+            "fob": null,
+            "shipping_method": "ANY RELIABLE TRANSPORTER",
+            "freight_terms": "TOPAY",
+            "shipment_priority": "Standard",
+            "packing_instruction": "VERY WELL PACKED AND ROAD WORTHY",
+            "order_source": null,
+            "order_source_reference": null
+        },
+        "line_items": [
+            {
+                "id": null,
+                "line_no": null,
+                "lineId": 11984867,
+                "headerId": 10550750,
+                "orgId": 43,
+                "item_code": "SK.AM1.020.AMH020S7_5",
+                "description": "Foot Mounted Motor Mount Reducer AMH020S7.5",
+                "quantity": 1,
+                "list_price": 79590,
+                "discount_percent": 58,
+                "selling_price": 33428,
+                "amount": 33428,
+                "ship_to_location": 115821,
+                "road_permit": false,
+                "wo_no": 10205160,
+                "wo_date": "2026-04-21T04:09:03.000Z",
+                "client_delivery_date": null,
+                "delivery_month": null,
+                "con_auth": null,
+                "status": null,
+                "mail_status": null,
+                "model": "SK.AM1.020.AMH020S7_5",
+                "model_type": "AM1",
+                "ratio": 0,
+                "kw": 0,
+                "quantitys": [
+                    {
+                        "id": 45,
+                        "serial_no": "26/4",
+                        "LINE_ID": 11984867,
+                        "ORACLE_LINE_NO": "1.1.115821",
+                        "status": "PL",
+                        "FULLSTATUS": "IN PLANNING",
+                        "rpm": null,
+                        "motor_serial_no": null,
+                        "ass_rel_date": "2026-04-28T11:51:33.627Z",
+                        "ac_ua_date": null,
+                        "ac_comp_date": null,
+                        "ac_pi_date": null,
+                        "ac_pk_date": null,
+                        "ac_ds_date": null,
+                        "tent_rel_date": null,
+                        "sh_type": null,
+                        "sh_item": null,
+                        "REASON_FOR_STATUS": null,
+                        "ac_ho_date": null,
+                        "ac_ca_date": null,
+                        "WF_INSTANCE_ID": 2470
+                    }
+                ]
+            }
+        ]
+    },
+    "records": 0
+}
+
+4. Create Workorder : api/barcode/sales-orders/workordercreate
+
+Output if the workorder is already Created :
+{
+    "status": true,
+    "message": "Success",
+    "data": {
+        "header_id": null,
+        "Massage": "Your Order Line Is Already Reserved",
+        "ORACLE_ORDER_NUMBER": null,
+        "ORDER_TYPE": null,
+        "WONO": null,
+        "WONODATE": null
+    }
+}
+
+
+// If there would be data this information will be filled 
+
+5. Create Serail Number : api/barcode/sales-orders/generateSrNO
+
+Output : {
+    "status": true,
+    "message": "Success",
+    "data": {
+        "Massage": "✅ Serial numbers generated",
+        "serialData": [
+            {
+                "serial_no": "26/4",
+                "order_header_id": "10550750",
+                "order_line_id": "11984867",
+                "oracle_line_no": "1",
+                "wf_instance_id": "2470"
+            }
+        ]
+    },
+    "records": 0
+}
+
+6. Matrial Issue : api/barcode/sales-orders/IssueMaterial
+
+output : {
+    "status": true,
+    "message": "Success",
+    "data": {
+        "Massage": "Success :issue material"
+    },
+    "records": 0
+}
+
+7. PrintLable : api/barcode/sales-orders/printlabel
+
+Output will be a PDF 
+
+
+8. Under Assembly : api/barcode/sales-orders/underAssembly 
+
+output : {
+    "status": true,
+    "message": "Success",
+    "data": {
+        "Massage": "Success : Under Assembly"
+    },
+    "records": 0
+}
+
+// there will be no as such output here bgut in get sales order detail UA date and status will be Updated 
+
+9. Quality check :/api/barcode/sales-orders/qualityCheck
+
+output : {
+    "status": true,
+    "message": "Success",
+    "data": {
+        "rpm": null,
+        "motor_serial_no": null,
+        "Model": "SK.AM1.020.AMD020S1_5",
+        "wo_no": "10205160"
+    },
+    "records": 0
+}
+
+10. Get completion detail by serail no. :    api/barcode/order-completion/completionGearboxSerialNumber
+
+output :{
+    "status": true,
+    "message": "Success",
+    "data": {
+        "oracle_order_no": 16363,
+        "model_type": "AM1",
+        "model": "SK.AM1.020.AMD020S1_5",
+        "ratio": null,
+        "qty": 1,
+        "wo_no": 10205160,
+        "status": "UA",
+        "kw": 1.5,
+        "serial_no": "26/4",
+        "rpm": null,
+        "motor_serial_no": "null",
+        "actual_ratio": null,
+        "input_RPM": null,
+        "message": "ProductCode Not Found"
+    },
+    "records": 0
+}
+
+11. order completion : api/barcode/order-completion/completion
+
+output : 
+
+// this will complete the order and decied wether to do in pi or pk basically update date in sales order details.
+
+12. complete painting : api/barcode/order-completion/painting
+
+output: {
+    "status": true,
+    "message": "Success",
+    "data": {
+        "massage": "Success : Painting"
+    },
+    "records": 0
+}
+// there should be a button telling complete paiting which call this api whihc complete it in workflow no effect in sales order 
+
+13. complete packing :  api/barcode/order-completion/packing
+
+output: {
+    "status": true,
+    "message": "Success",
+    "data": {
+        "massage": "Success : Packing"
+    },
+    "records": 0
+}
+// sinmarl a complete packing button which complete the workflow 

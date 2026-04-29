@@ -17,6 +17,7 @@ import {
   Dialog,
   DialogContent,
   DialogTitle,
+  Drawer,
   Grid,
   IconButton,
   InputAdornment,
@@ -42,11 +43,13 @@ import DescriptionRoundedIcon from "@mui/icons-material/DescriptionRounded";
 import CloudUploadRoundedIcon from "@mui/icons-material/CloudUploadRounded";
 import VerifiedRoundedIcon from "@mui/icons-material/VerifiedRounded";
 import LockOpenRoundedIcon from "@mui/icons-material/LockOpenRounded";
+import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import { toast } from "react-toastify";
 
 import { Page } from "../../../components/common/Page";
 import {
   useCheckTransactionMutation,
+  useCreateCategoryMutation,
   useFilterReferenceNoMutation,
   useGetAudioMutation,
   useGetImagesMutation,
@@ -55,11 +58,13 @@ import {
   useGetUserDataMutation,
   useGetVideosMutation,
   useLazyGetRemarksListQuery,
+  useLoginMutation,
   useSaveImagesMutation,
 } from "../../../redux/api/evidancecollection";
 import {
+  extractAuthToken,
   getDecodedToken,
-  getToken,
+  setToken as setAuthToken,
 } from "../../../utils/auth";
 import {
   buildUploadRemarksPayload,
@@ -84,8 +89,9 @@ import type {
 } from "./types";
 
 const workspaceTabs: { value: EvidenceWorkspaceMode; label: string }[] = [
-  { value: "upload", label: "Collector workspace" },
+  // { value: "upload", label: "Collector workspace" },
   { value: "view", label: "Client viewer" },
+  { value: "admin", label: "Admin Viewer" },
 ];
 
 const mediaTabs: { value: EvidenceMediaKind; label: string; icon: ReactElement }[] = [
@@ -106,10 +112,26 @@ const emptyViewerProfile: EvidenceViewerProfile = {
   hrmsId: "",
   role: "Authorized User",
   company: "",
+  companyId: null,
   division: "",
   canUpload: true,
   canView: true,
 };
+
+const EVIDENCE_AUTO_LOGIN_CREDENTIALS = {
+  username: "TPLST0032",
+  password: "elecon",
+};
+
+const workspaceTitleMap: Record<EvidenceWorkspaceMode, string> = {
+  upload: "Evidence Intake",
+  view: "Evidence Dashboard",
+  admin: "Admin Viewer",
+};
+
+const warehouseAccent = "#FF8A3D";
+const warehouseAccentDark = "#C2410C";
+const warehouseSlate = "#0F172A";
 
 const pickPreviewKind = (file: File): EvidenceMediaKind => {
   if (file.type.startsWith("image/")) {
@@ -342,6 +364,8 @@ const EvidenceDashboard = () => {
 
   const [getUserData] = useGetUserDataMutation();
   const [getUserCategories] = useGetUserCategoriesMutation();
+  const [login] = useLoginMutation();
+  const [createCategory, { isLoading: isCreatingCategory }] = useCreateCategoryMutation();
   const [getReferenceNumbers] = useGetRefreneceNumbersListMutation();
   const [filterReferenceNumbers] = useFilterReferenceNoMutation();
   const [getImages] = useGetImagesMutation();
@@ -354,11 +378,13 @@ const EvidenceDashboard = () => {
   const [sessionReady, setSessionReady] = useState(false);
   const [bootstrapping, setBootstrapping] = useState(true);
   const [workspaceMode, setWorkspaceMode] =
-    useState<EvidenceWorkspaceMode>("upload");
+    useState<EvidenceWorkspaceMode>("view");
   const [viewerProfile, setViewerProfile] =
     useState<EvidenceViewerProfile>(emptyViewerProfile);
   const [categories, setCategories] = useState<EvidenceCategoryOption[]>([]);
   const [categorySearch, setCategorySearch] = useState("");
+  const [categoryDrawerOpen, setCategoryDrawerOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
 
   const [uploadCategoryId, setUploadCategoryId] = useState("");
   const [uploadReferenceNo, setUploadReferenceNo] = useState("");
@@ -388,6 +414,24 @@ const EvidenceDashboard = () => {
     valid: false,
     message: "",
   });
+  const isUploadWorkspace = workspaceMode === "upload";
+  const activeWorkspaceTitle = workspaceTitleMap[workspaceMode];
+  const warehouseFieldSx = useMemo(
+    () => ({
+      "& .MuiOutlinedInput-root": {
+        borderRadius: 2.5,
+        bgcolor: "#F8FAFC",
+        "& fieldset": { borderColor: "rgba(15,23,42,0.12)" },
+        "&:hover fieldset": { borderColor: "rgba(15,23,42,0.2)" },
+        "&.Mui-focused fieldset": { borderColor: warehouseAccent, borderWidth: "1.5px" },
+      },
+      "& .MuiInputBase-input": {
+        fontSize: "0.84rem",
+        fontWeight: 600,
+      },
+    }),
+    [],
+  );
 
   const filteredCategories = useMemo(() => {
     const normalizedQuery = categorySearch.trim().toLowerCase();
@@ -413,14 +457,7 @@ const EvidenceDashboard = () => {
       referenceOptions.find((reference) => reference.refNo === selectedReferenceNo) ?? null,
     [referenceOptions, selectedReferenceNo],
   );
-  const selectedHeroItem = useMemo(
-    () =>
-      selectedMediaItem ??
-      mediaItems.find((item) => item.kind === "image") ??
-      mediaItems[0] ??
-      null,
-    [mediaItems, selectedMediaItem],
-  );
+ 
   const uploadSummary = useMemo(
     () => ({
       files: uploadFiles.length,
@@ -463,79 +500,43 @@ const EvidenceDashboard = () => {
     transactionStatus.checked,
     transactionStatus.valid,
   ]);
-  const metricsCards = useMemo(
-    () => [
-      {
-        title: "MEDIA LOAD",
-        value: `${mediaItems.length} ${activeMediaTab}${mediaItems.length === 1 ? "" : "s"}`,
-        subtitle: selectedReferenceNo || "No reference",
-        series: buildTrendSeries(mediaItems.length || 1, selectedRemark ? 2 : 1),
-      },
-      {
-        title: "REFERENCE COVERAGE",
-        value: `${referenceOptions.length} refs`,
-        subtitle: viewCategory?.label || "No category",
-        series: buildTrendSeries(referenceOptions.length || 1, categories.length || 1),
-      },
-    ],
-    [
-      activeMediaTab,
-      categories.length,
-      mediaItems.length,
-      referenceOptions.length,
-      selectedReferenceNo,
-      selectedRemark,
-      viewCategory?.label,
-    ],
-  );
-  const evidenceHighlights = useMemo(
-    () =>
-      [
-        transactionStatus.message || "Reference validation updates will appear here.",
-        selectedRemark
-          ? `Remark filter active: ${selectedRemark}`
-          : "Showing all remarks for the selected reference.",
-        mediaItems.length
-          ? `${mediaItems.length} ${activeMediaTab} item(s) loaded for preview.`
-          : `No ${activeMediaTab} evidence has been returned yet.`,
-      ].filter(Boolean),
-    [activeMediaTab, mediaItems.length, selectedRemark, transactionStatus.message],
-  );
+ 
+ 
   const ui = useMemo(
     () => ({
-      shell: theme.palette.background.paper,
-      panel: theme.palette.background.paper,
+      shell: isDark ? theme.palette.background.paper : "#FFFFFF",
+      panel: isDark ? theme.palette.background.paper : "#FFFFFF",
       panelAlt: isDark ? alpha(theme.palette.background.default, 0.5) : "#F8FAFC",
-      workspace: isDark ? alpha(theme.palette.primary.main, 0.08) : "#F8FBFF",
-      selectedWarm: isDark ? alpha("#FB923C", 0.14) : "#FFF7F0",
+      workspace: isDark ? alpha(warehouseAccent, 0.1) : "#FFF7F1",
+      selectedWarm: isDark ? alpha(warehouseAccent, 0.14) : "#FFF4ED",
       selectedSuccess: isDark ? alpha("#10B981", 0.14) : "#F2FBF7",
       softDanger: isDark ? alpha("#FB7185", 0.12) : "#FFF7F8",
       chipDanger: isDark ? alpha("#FB7185", 0.16) : "#FFF1F2",
       verified: isDark ? alpha("#10B981", 0.16) : "#ECFDF5",
       invalid: isDark ? alpha("#EF4444", 0.14) : "#FEF2F2",
-      textStrong: theme.palette.text.primary,
-      textMuted: theme.palette.text.secondary,
+      textStrong: isDark ? theme.palette.text.primary : warehouseSlate,
+      textMuted: isDark ? theme.palette.text.secondary : "#64748B",
       textSoft: isDark ? alpha(theme.palette.text.secondary, 0.82) : "#334155",
-      border: theme.palette.divider,
+      border: isDark ? theme.palette.divider : "rgba(15,23,42,0.08)",
       searchBg: isDark ? alpha(theme.palette.background.default, 0.78) : "#F8FAFC",
       heroFallback: isDark
         ? "linear-gradient(135deg, rgba(30,41,59,0.98) 0%, rgba(15,23,42,1) 100%)"
-        : "linear-gradient(135deg, rgba(226,232,240,0.95) 0%, rgba(248,250,252,1) 100%)",
+        : "linear-gradient(135deg, rgba(255,244,237,1) 0%, rgba(248,250,252,1) 52%, rgba(255,255,255,1) 100%)",
       heroOverlay: isDark
         ? "linear-gradient(180deg, rgba(2,6,23,0.08) 0%, rgba(2,6,23,0.88) 100%)"
-        : "linear-gradient(180deg, rgba(15,23,42,0.02) 0%, rgba(15,23,42,0.74) 100%)",
+        : "linear-gradient(180deg, rgba(15,23,42,0.04) 0%, rgba(15,23,42,0.78) 100%)",
       mediaFallback: isDark
         ? "linear-gradient(135deg, rgba(2,6,23,0.98) 0%, rgba(30,41,59,0.92) 100%)"
-        : "linear-gradient(135deg, rgba(15,23,42,0.98) 0%, rgba(30,58,138,0.82) 100%)",
+        : "linear-gradient(135deg, rgba(15,23,42,0.98) 0%, rgba(194,65,12,0.92) 100%)",
       shadowWarm: isDark
-        ? "0 18px 32px -28px rgba(251,146,60,0.45)"
-        : "0 14px 28px -24px rgba(251,146,60,0.55)",
+        ? "0 18px 32px -28px rgba(255,138,61,0.45)"
+        : "0 12px 24px -22px rgba(255,138,61,0.3)",
       shadowSuccess: isDark
         ? "0 18px 32px -28px rgba(16,185,129,0.35)"
         : "0 14px 28px -24px rgba(16,185,129,0.45)",
       shadowSoft: isDark
         ? "0 18px 36px -30px rgba(2,6,23,0.7)"
-        : "0 10px 24px -28px rgba(15,23,42,0.22)",
+        : "0 10px 24px -28px rgba(15,23,42,0.16)",
     }),
     [isDark, theme],
   );
@@ -549,11 +550,18 @@ const EvidenceDashboard = () => {
           return;
         }
 
-        const token = getToken();
+        const loginResponse = await login(EVIDENCE_AUTO_LOGIN_CREDENTIALS).unwrap();
+        const token = extractAuthToken(loginResponse);
 
         if (!token) {
-          throw new Error("Authentication token not found.");
+          throw new Error("Evidence collection auto-login token not found.");
         }
+
+        localStorage.setItem(
+          "loginIdentifier",
+          EVIDENCE_AUTO_LOGIN_CREDENTIALS.username,
+        );
+        setAuthToken(token);
 
         const tokenPayload = getDecodedToken<Record<string, unknown>>();
         const [userResponse, categoryResponse] = await Promise.all([
@@ -583,7 +591,7 @@ const EvidenceDashboard = () => {
         setSessionReady(true);
       } catch (error) {
         console.error("Failed to initialize evidence collection", error);
-        toast.error("Evidence collection token missing or category loading failed.");
+        toast.error("Evidence collection auto-login or category loading failed.");
       } finally {
         if (isMounted) {
           setBootstrapping(false);
@@ -596,7 +604,7 @@ const EvidenceDashboard = () => {
     return () => {
       isMounted = false;
     };
-  }, [getUserCategories, getUserData]);
+  }, [getUserCategories, getUserData, login]);
 
   useEffect(() => {
     const previewEntries = uploadFiles.map((file, index) => ({
@@ -826,6 +834,49 @@ const EvidenceDashboard = () => {
     }
   };
 
+  const handleCreateCategory = async () => {
+    const categoryName = newCategoryName.trim();
+
+    if (!categoryName) {
+      toast.error("Category name is required.");
+      return;
+    }
+
+    if (!viewerProfile.companyId) {
+      toast.error("Company information is not available for category creation.");
+      return;
+    }
+
+    try {
+      const response = await createCategory({
+        CategoryName: categoryName,
+        CompanyId: viewerProfile.companyId,
+      }).unwrap();
+
+      const refreshedCategoryResponse = await getUserCategories({}).unwrap().catch(() => []);
+      const nextCategories = normalizeCategories(refreshedCategoryResponse);
+      setCategories(nextCategories);
+
+      const matchedCategory =
+        nextCategories.find(
+          (category) => category.label.trim().toLowerCase() === categoryName.toLowerCase(),
+        ) ?? nextCategories[0] ?? null;
+
+      if (matchedCategory) {
+        setUploadCategoryId(matchedCategory.id);
+        setViewCategoryId(matchedCategory.id);
+      }
+
+      setCategorySearch("");
+      setNewCategoryName("");
+      setCategoryDrawerOpen(false);
+      toast.success(extractMessage(response) || "Category created successfully.");
+    } catch (error) {
+      console.error("Failed to create category", error);
+      toast.error("Category creation failed. Please verify the category details.");
+    }
+  };
+
   return (
     <Page module="evidance">
       <Card
@@ -850,33 +901,43 @@ const EvidenceDashboard = () => {
           }}
         >
           <Stack spacing={2} sx={{ px: 2, pt: 2, pb: 1.5, borderBottom: `1px solid ${ui.border}` }}>
-            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-              {["Apps", "Evidence Collection", "Dashboard"].map((crumb) => (
-                <Typography key={crumb} variant="caption" sx={{ color: ui.textMuted, fontWeight: 700 }}>
-                  {crumb}
-                </Typography>
-              ))}
-            </Stack>
-
-            <TextField
-              size="small"
-              placeholder="Search location..."
-              value={categorySearch}
-              onChange={(event) => setCategorySearch(event.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchRoundedIcon fontSize="small" sx={{ color: "#94A3B8" }} />
-                  </InputAdornment>
-                ),
-              }}
-              sx={{
-                "& .MuiOutlinedInput-root": {
+            <Stack direction="row" spacing={1.25} alignItems="center">
+              <TextField
+                size="small"
+                placeholder="Search category..."
+                value={categorySearch}
+                onChange={(event) => setCategorySearch(event.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchRoundedIcon fontSize="small" sx={{ color: "#94A3B8" }} />
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{ flex: 1, ...warehouseFieldSx }}
+              />
+              <Button
+                variant="outlined"
+                onClick={() => setCategoryDrawerOpen(true)}
+                sx={{
+                  minWidth: "fit-content",
                   borderRadius: 2,
-                  bgcolor: ui.searchBg,
-                },
-              }}
-            />
+                  minHeight: 40,
+                  px: 1.25,
+                  boxShadow: "none",
+                  textTransform: "none",
+                  color: warehouseAccent,
+                  borderColor: "rgba(255,138,61,0.22)",
+                  backgroundColor: "rgba(255,138,61,0.08)",
+                  "&:hover": {
+                    borderColor: "rgba(255,138,61,0.32)",
+                    backgroundColor: "rgba(255,138,61,0.16)",
+                  },
+                }}
+              >
+                <AddRoundedIcon />
+              </Button>
+            </Stack>
           </Stack>
 
           {bootstrapping ? <LinearProgress /> : null}
@@ -898,10 +959,10 @@ const EvidenceDashboard = () => {
                     p: 1.75,
                     borderRadius: 2.5,
                     cursor: "pointer",
-                    borderColor: selected ? "rgba(251,146,60,0.42)" : "rgba(15,23,42,0.06)",
+                    borderColor: selected ? "rgba(255,138,61,0.36)" : "rgba(15,23,42,0.06)",
                     borderLeftWidth: 3,
                     borderLeftStyle: "solid",
-                    borderLeftColor: selected ? "#FB923C" : "transparent",
+                    borderLeftColor: selected ? warehouseAccent : "transparent",
                     bgcolor: selected ? ui.selectedWarm : ui.panel,
                     boxShadow: selected ? ui.shadowWarm : ui.shadowSoft,
                   }}
@@ -909,12 +970,7 @@ const EvidenceDashboard = () => {
                   <Typography variant="body1" sx={{ fontWeight: 800, color: ui.textSoft }} noWrap>
                     {category.label}
                   </Typography>
-                  <Typography variant="body2" sx={{ mt: 0.5, color: ui.textMuted }}>
-                    {category.subtitle}
-                  </Typography>
-                  <Typography variant="caption" sx={{ mt: 0.75, display: "block", color: alpha(ui.textMuted, 0.8) }}>
-                    {referenceOptions.length} references available
-                  </Typography>
+                  
                 </Paper>
               );
             })}
@@ -938,20 +994,23 @@ const EvidenceDashboard = () => {
           }}
         >
           <Box sx={{ px: 2.5, pt: 2.5, pb: 1.5, borderBottom: `1px solid ${ui.border}` }}>
-            <Typography variant="h5" sx={{ fontWeight: 800, color: "#1E3A8A" }}>
+            <Typography variant="h5" sx={{ fontWeight: 800, color: warehouseSlate }}>
               {viewCategory?.label || "Evidence Hub"}
             </Typography>
-            <Typography variant="body2" sx={{ color: ui.textMuted, mt: 0.5, mb: 1.75 }}>
-              {viewCategory?.subtitle || viewerProfile.company || "Assigned evidence categories"}
-            </Typography>
+            
 
-            <TextField
+           
+          </Box>
+
+          <Box sx={{ px: 1.25, py: 1.25, overflowY: "auto", flex: 1 }}>
+
+             <TextField
               fullWidth
               size="small"
-              placeholder={workspaceMode === "upload" ? "Reference for upload..." : "Search reference..."}
-              value={workspaceMode === "upload" ? uploadReferenceNo : referenceSearch}
+              placeholder={isUploadWorkspace ? "Reference for upload..." : "Search reference..."}
+              value={isUploadWorkspace ? uploadReferenceNo : referenceSearch}
               onChange={(event) =>
-                workspaceMode === "upload"
+                isUploadWorkspace
                   ? setUploadReferenceNo(event.target.value)
                   : setReferenceSearch(event.target.value)
               }
@@ -962,23 +1021,17 @@ const EvidenceDashboard = () => {
                   </InputAdornment>
                 ),
               }}
-              sx={{
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: 2,
-                  bgcolor: ui.searchBg,
-                },
-              }}
+              sx={{ mb: 1.5, ...warehouseFieldSx }}
             />
-          </Box>
 
-          <Box sx={{ px: 1.25, py: 1.25, overflowY: "auto", flex: 1 }}>
-            {workspaceMode === "upload" ? (
+
+            {isUploadWorkspace ? (
               <Stack spacing={1.5}>
                 <Paper
                   variant="outlined"
                   sx={{
                     borderRadius: 2.5,
-                    borderColor: "rgba(59,130,246,0.18)",
+                    borderColor: "rgba(255,138,61,0.2)",
                     bgcolor: ui.workspace,
                     p: 1.75,
                   }}
@@ -991,8 +1044,8 @@ const EvidenceDashboard = () => {
                         width: 42,
                         height: 42,
                         borderRadius: 2,
-                        bgcolor: alpha("#2563EB", 0.12),
-                        color: "#2563EB",
+                        bgcolor: "rgba(255,138,61,0.12)",
+                        color: warehouseAccentDark,
                       }}
                     >
                       <UploadFileRoundedIcon fontSize="small" />
@@ -1068,7 +1121,7 @@ const EvidenceDashboard = () => {
                       textAlign: "center",
                       color: ui.textMuted,
                       borderStyle: "dashed",
-                      borderColor: "rgba(59,130,246,0.25)",
+                      borderColor: "rgba(255,138,61,0.25)",
                     }}
                   >
                     Queue is empty. Add files from the workspace panel.
@@ -1092,10 +1145,10 @@ const EvidenceDashboard = () => {
                         borderRadius: 2.5,
                         cursor: "pointer",
                         borderColor: isSelected
-                          ? "rgba(16,185,129,0.3)"
+                          ? "rgba(255,138,61,0.3)"
                           : ui.border,
-                        bgcolor: isSelected ? ui.selectedSuccess : ui.panel,
-                        boxShadow: isSelected ? ui.shadowSuccess : ui.shadowSoft,
+                        bgcolor: isSelected ? ui.selectedWarm : ui.panel,
+                        boxShadow: isSelected ? ui.shadowWarm : ui.shadowSoft,
                       }}
                     >
                       <Stack direction="row" justifyContent="space-between" spacing={1} alignItems="flex-start">
@@ -1103,7 +1156,7 @@ const EvidenceDashboard = () => {
                           <Typography variant="body1" sx={{ fontWeight: 800, color: ui.textStrong }} noWrap>
                             {reference.label}
                           </Typography>
-                          <Typography variant="body2" sx={{ mt: 0.35, color: "#2563EB", fontWeight: 700 }}>
+                          <Typography variant="body2" sx={{ mt: 0.35, color: warehouseAccentDark, fontWeight: 700 }}>
                             {reference.refNo}
                           </Typography>
                         </Box>
@@ -1166,32 +1219,20 @@ const EvidenceDashboard = () => {
                     {">"}
                   </Typography>
                   <Typography variant="body2" sx={{ color: ui.textSoft, fontWeight: 800 }}>
-                    {selectedReferenceNo || (workspaceMode === "upload" ? "Collector workspace" : "Dashboard")}
+                    {selectedReferenceNo || (isUploadWorkspace ? "Collector workspace" : activeWorkspaceTitle)}
                   </Typography>
                 </Stack>
 
-                <Typography variant="h4" sx={{ mt: 1, fontWeight: 800, color: "#1E3A8A" }}>
-                  {workspaceMode === "upload"
-                    ? "Evidence Intake"
-                    : selectedReferenceOption?.label || "Evidence Dashboard"}
+                <Typography variant="h4" sx={{ mt: 1, fontWeight: 800, color: warehouseSlate }}>
+                  {isUploadWorkspace
+                    ? activeWorkspaceTitle
+                    : selectedReferenceOption?.label || activeWorkspaceTitle}
                 </Typography>
 
-                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
-                  <Chip
-                    label={dashboardStatus.label}
-                    sx={{
-                      bgcolor: dashboardStatus.background,
-                      color: dashboardStatus.color,
-                      fontWeight: 800,
-                    }}
-                  />
-                  <Typography variant="body2" sx={{ color: ui.textMuted, alignSelf: "center" }}>
-                    Managed by {viewerProfile.company || viewerProfile.name || "Evidence Team"}
-                  </Typography>
-                </Stack>
+                 
               </Box>
 
-              <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+              {/* <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
                 {workspaceTabs.map((tab) => (
                   <Button
                     key={tab.value}
@@ -1216,12 +1257,12 @@ const EvidenceDashboard = () => {
                     {tab.label}
                   </Button>
                 ))}
-              </Stack>
+              </Stack> */}
             </Stack>
           </Box>
 
           <Box sx={{ p: { xs: 2, lg: 2.5 }, overflowY: "auto", flex: 1, bgcolor: ui.panelAlt }}>
-            {workspaceMode === "upload" ? (
+            {isUploadWorkspace ? (
               <Grid container spacing={2.5}>
                 <Grid size={{ xs: 12, xl: 7 }}>
                   <Stack spacing={2.5}>
@@ -1242,6 +1283,7 @@ const EvidenceDashboard = () => {
                             label="Category"
                             value={uploadCategoryId}
                             onChange={(event) => setUploadCategoryId(event.target.value)}
+                            sx={warehouseFieldSx}
                           >
                             {categories.map((category) => (
                               <MenuItem key={category.id} value={category.id}>
@@ -1257,6 +1299,7 @@ const EvidenceDashboard = () => {
                             placeholder="Ex. TRF-00045"
                             value={uploadReferenceNo}
                             onChange={(event) => setUploadReferenceNo(event.target.value)}
+                            sx={warehouseFieldSx}
                           />
                         </Grid>
                         <Grid size={{ xs: 12 }}>
@@ -1268,6 +1311,7 @@ const EvidenceDashboard = () => {
                             placeholder="Upload note, shift remark, issue summary..."
                             value={uploadRemarks}
                             onChange={(event) => setUploadRemarks(event.target.value)}
+                            sx={warehouseFieldSx}
                           />
                         </Grid>
                       </Grid>
@@ -1280,16 +1324,16 @@ const EvidenceDashboard = () => {
                         borderRadius: 3,
                         borderStyle: "dashed",
                         borderWidth: 2,
-                        borderColor: alpha("#0A84FF", 0.26),
+                        borderColor: "rgba(255,138,61,0.26)",
                         background: isDark
-                          ? "linear-gradient(180deg, rgba(10,132,255,0.12) 0%, rgba(15,23,42,0.92) 100%)"
-                          : "linear-gradient(180deg, rgba(10,132,255,0.06) 0%, rgba(255,255,255,1) 100%)",
+                          ? "linear-gradient(180deg, rgba(255,138,61,0.12) 0%, rgba(15,23,42,0.92) 100%)"
+                          : "linear-gradient(180deg, rgba(255,138,61,0.06) 0%, rgba(255,255,255,1) 100%)",
                         p: 4,
                         cursor: "pointer",
                       }}
                     >
                       <Stack spacing={1.5} alignItems="center" textAlign="center">
-                        <CloudUploadRoundedIcon className="!text-[42px] text-sky-600" />
+                        <CloudUploadRoundedIcon className="!text-[42px]" sx={{ color: warehouseAccent }} />
                         <Typography variant="h5" fontWeight={800}>
                           Drop or choose evidence files
                         </Typography>
@@ -1303,7 +1347,13 @@ const EvidenceDashboard = () => {
                             event.stopPropagation();
                             openFilePicker();
                           }}
-                          sx={{ borderRadius: 999, px: 2.5, boxShadow: "none" }}
+                          sx={{
+                            borderRadius: 999,
+                            px: 2.5,
+                            boxShadow: "none",
+                            bgcolor: warehouseAccent,
+                            "&:hover": { bgcolor: "#df6f22" },
+                          }}
                         >
                           Choose files
                         </Button>
@@ -1341,7 +1391,13 @@ const EvidenceDashboard = () => {
                         fullWidth
                         variant="contained"
                         size="large"
-                        sx={{ mt: 2, borderRadius: 999, boxShadow: "none" }}
+                        sx={{
+                          mt: 2,
+                          borderRadius: 999,
+                          boxShadow: "none",
+                          bgcolor: warehouseAccent,
+                          "&:hover": { bgcolor: "#df6f22" },
+                        }}
                         startIcon={
                           isUploading ? (
                             <CircularProgress size={18} color="inherit" />
@@ -1425,7 +1481,7 @@ const EvidenceDashboard = () => {
               </Grid>
             ) : (
               <Stack spacing={2.5}>
-                <Grid container spacing={2.5}>
+                {/* <Grid container spacing={2.5}>
                   <Grid size={{ xs: 12, xl: 7 }}>
                     <Paper
                       variant="outlined"
@@ -1549,18 +1605,12 @@ const EvidenceDashboard = () => {
                       </Paper>
                     </Stack>
                   </Grid>
-                </Grid>
+                </Grid> */}
 
-                <Paper
-                  variant="outlined"
-                  sx={{
-                    borderRadius: 3,
-                    borderColor: ui.border,
-                    overflow: "hidden",
-                    bgcolor: ui.panel,
-                  }}
+                <Box
+                  
                 >
-                  <Box
+                  {/* <Box
                     sx={{
                       px: 2.5,
                       py: 2,
@@ -1598,26 +1648,10 @@ const EvidenceDashboard = () => {
                         </TextField>
                       </Stack>
                     </Stack>
-                  </Box>
+                  </Box> */}
 
-                  <Stack spacing={1.5} sx={{ p: 2.5 }}>
-                    {evidenceHighlights.map((highlight) => (
-                      <Paper
-                        key={highlight}
-                        variant="outlined"
-                        sx={{
-                          borderRadius: 2.5,
-                          px: 1.75,
-                          py: 1.35,
-                          borderColor: "rgba(244,63,94,0.10)",
-                          bgcolor: ui.softDanger,
-                        }}
-                      >
-                        <Typography variant="body2" sx={{ color: "#BE123C", fontWeight: 700 }}>
-                          {highlight}
-                        </Typography>
-                      </Paper>
-                    ))}
+                  <Stack spacing={1.5} >
+                     
 
                     <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
                       {mediaTabs.map((tab) => (
@@ -1632,8 +1666,12 @@ const EvidenceDashboard = () => {
                             textTransform: "none",
                             boxShadow: "none",
                             ...(activeMediaTab === tab.value
-                              ? { bgcolor: "#1E3A8A" }
-                              : { borderColor: ui.border, color: ui.textMuted }),
+                              ? { bgcolor: warehouseSlate }
+                              : {
+                                  borderColor: "rgba(255,138,61,0.24)",
+                                  color: ui.textMuted,
+                                  backgroundColor: "rgba(255,138,61,0.05)",
+                                }),
                           }}
                         >
                           {tab.label}
@@ -1683,7 +1721,16 @@ const EvidenceDashboard = () => {
                                 <Button
                                   variant="outlined"
                                   startIcon={<VisibilityRoundedIcon />}
-                                  sx={{ alignSelf: "flex-start", borderRadius: 999 }}
+                                  sx={{
+                                    alignSelf: "flex-start",
+                                    borderRadius: 999,
+                                    color: warehouseAccentDark,
+                                    borderColor: "rgba(255,138,61,0.24)",
+                                    "&:hover": {
+                                      borderColor: "rgba(255,138,61,0.36)",
+                                      bgcolor: "rgba(255,138,61,0.06)",
+                                    },
+                                  }}
                                   onClick={() => setSelectedMediaItem(item)}
                                 >
                                   Open
@@ -1736,12 +1783,106 @@ const EvidenceDashboard = () => {
                       </Paper>
                     )}
                   </Stack>
-                </Paper>
+                </Box>
               </Stack>
             )}
           </Box>
         </Box>
       </Card>
+
+      <Drawer
+        anchor="left"
+        open={categoryDrawerOpen}
+        onClose={() => {
+          if (isCreatingCategory) {
+            return;
+          }
+          setCategoryDrawerOpen(false);
+        }}
+        PaperProps={{
+          sx: {
+            width: { xs: "100%", sm: 420 },
+            p: 3,
+            bgcolor: ui.panel,
+          },
+        }}
+      >
+        <Stack spacing={3} sx={{ height: "100%" }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
+            <Box>
+              <Typography variant="h5" sx={{ fontWeight: 800, color: warehouseSlate }}>
+                Add Category
+              </Typography>
+              <Typography variant="body2" sx={{ mt: 0.75, color: ui.textMuted }}>
+                Create a new evidence category in the same warehouse-style workspace.
+              </Typography>
+            </Box>
+            <IconButton
+              onClick={() => setCategoryDrawerOpen(false)}
+              disabled={isCreatingCategory}
+            >
+              <CloseRoundedIcon />
+            </IconButton>
+          </Stack>
+
+          <Paper
+            variant="outlined"
+            sx={{
+              borderRadius: 3,
+              borderColor: ui.border,
+              p: 2,
+              bgcolor: ui.panelAlt,
+            }}
+          >
+            <Stack spacing={2}>
+              <TextField
+                fullWidth
+                label="Category name"
+                placeholder="Ex. Dispatch Evidence"
+                value={newCategoryName}
+                onChange={(event) => setNewCategoryName(event.target.value)}
+                disabled={isCreatingCategory}
+                sx={warehouseFieldSx}
+              />
+              <TextField
+                fullWidth
+                label="Company"
+                value={viewerProfile.company || "Not available"}
+                disabled
+                sx={warehouseFieldSx}
+              />
+            </Stack>
+          </Paper>
+
+          <Box sx={{ mt: "auto" }}>
+            <Stack direction="row" spacing={1.25} justifyContent="flex-end">
+              <Button
+                variant="outlined"
+                onClick={() => setCategoryDrawerOpen(false)}
+                disabled={isCreatingCategory}
+                sx={{ borderRadius: 2, textTransform: "none" }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="contained"
+                onClick={() => void handleCreateCategory()}
+                disabled={isCreatingCategory || !newCategoryName.trim()}
+                startIcon={isCreatingCategory ? <CircularProgress color="inherit" size={16} /> : <AddRoundedIcon />}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: "none",
+                  boxShadow: "none",
+                  bgcolor: warehouseAccent,
+                  "&:hover": { bgcolor: "#df6f22" },
+                }}
+              >
+                {isCreatingCategory ? "Creating..." : "Create category"}
+              </Button>
+            </Stack>
+          </Box>
+        </Stack>
+      </Drawer>
 
       <PreviewDialog
         item={selectedMediaItem}

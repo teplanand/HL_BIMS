@@ -63,14 +63,15 @@ export interface OrderTrackingUpdateData {
   dispatch_date_plan?: string | null;
   dispatch_date_actual?: string | null;
   on_time_delivery?: number | string | null;
-  remarks?: string;
+  remark?: string;
+  remarks?: unknown;
   [key: string]: unknown;
 }
 
 export interface OrderTrackingResponse {
   status: number;
   message: string;
-  data: OrderTrackingRecord[];
+  data: OrderTrackingRecord[] | OrderTrackingRecord | null;
 }
 
 export interface SysConfigurationRecord {

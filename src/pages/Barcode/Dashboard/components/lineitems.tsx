@@ -38,13 +38,6 @@ import FormSection from "../../../../components/ui/form/FormSection";
 import { useModal } from "../../../../hooks/useModal";
 import { openEntityFormModal } from "../../../Warehouse/shared/openEntityFormModal";
 import { EditListItem, EditListItemRef } from "./editlistitem";
-import {
-  getBarcodeDefaultContext,
-  useCreateWorkOrderMutation,
-  useGenerateSerialNumbersMutation,
-  useIssueMaterialMutation,
-  usePrintLabelMutation,
-} from "../../../../redux/api/barcode";
 import { useToast } from "../../../../hooks/useToast";
 import {
   BarcodeLineItemViewModel,
@@ -508,10 +501,6 @@ function Row({
 function Index({ orderDetails, onOrderUpdated }: LineItemsProps) {
   const { openModal } = useModal();
   const { showToast } = useToast();
-  const [createWorkOrder] = useCreateWorkOrderMutation();
-  const [generateSerialNumbers] = useGenerateSerialNumbersMutation();
-  const [issueMaterial] = useIssueMaterialMutation();
-  const [printLabel] = usePrintLabelMutation();
   const [dateRange, setDateRange] = useState<DateRange>({
     startDate: null,
     endDate: null,
@@ -700,32 +689,88 @@ function Index({ orderDetails, onOrderUpdated }: LineItemsProps) {
       return;
     }
 
-    const requestContext = getBarcodeDefaultContext();
-
     try {
       if (actionKey === "workOrder") {
-        const response = await createWorkOrder({
-          ...requestContext,
-          LINE_ID: row.lineId,
-          order_type: currentOrder?.order_type || "PBGPRLS",
-        }).unwrap();
-        showToast(response.message || "Work order processed", "success");
+        setRows((current) =>
+          current.map((currentRow) =>
+            currentRow.id === row.id
+              ? {
+                  ...currentRow,
+                  wo_no: currentRow.wo_no || `WO-${salesOrderNo}-${currentRow.line_no}`,
+                  wo_date: currentRow.wo_date || new Date().toISOString().slice(0, 10),
+                  status: "SH",
+                  mail_status: "Work order created",
+                  actions: actionSet("SH"),
+                }
+              : currentRow
+          )
+        );
+        showToast("Temporary static mode: work order created locally", "success");
       }
 
       if (actionKey === "serialNumber") {
-        const response = await generateSerialNumbers({
-          DIVISION_ID: requestContext.DIVISION_ID,
-          LINE_ID: row.lineId,
-        }).unwrap();
-        showToast(response.message || "Serial numbers generated", "success");
+        setRows((current) =>
+          current.map((currentRow) => {
+            if (currentRow.id !== row.id) {
+              return currentRow;
+            }
+
+            const existingSerials = currentRow.quantitys || [];
+            if (existingSerials.length > 0) {
+              return currentRow;
+            }
+
+            const generatedSerials = Array.from(
+              { length: Math.max(currentRow.quantity, 1) },
+              (_, index) => ({
+                serial_no: `${salesOrderNo}-${currentRow.line_no.replace(".", "")}-${index + 1}`,
+                status: "SH",
+                sh_type: currentRow.item_code,
+                sh_item: currentRow.description || currentRow.item_code,
+                ass_rel_date: currentRow.wo_date || new Date().toISOString().slice(0, 10),
+                ac_ua_date: null,
+                ac_comp_date: null,
+                ac_pk_date: null,
+                tent_rel_date: currentRow.client_delivery_date,
+                rpm: null,
+                motor_serial_no: null,
+                ac_ds_date: null,
+                ac_ho_date: null,
+                ac_ca_date: null,
+              })
+            );
+
+            return {
+              ...currentRow,
+              quantitys: generatedSerials,
+              mail_status: "Serial numbers generated",
+              actions: actionSet(currentRow.status),
+            };
+          })
+        );
+        showToast("Temporary static mode: serial numbers generated locally", "success");
       }
 
       if (actionKey === "issueMaterial") {
-        const response = await issueMaterial({
-          ...requestContext,
-          LINE_ID: row.lineId,
-        }).unwrap();
-        showToast(response.message || "Material issue processed", "success");
+        setRows((current) =>
+          current.map((currentRow) =>
+            currentRow.id === row.id
+              ? {
+                  ...currentRow,
+                  status: "MI",
+                  mail_status: "Material issued",
+                  quantitys: (currentRow.quantitys || []).map((serial) => ({
+                    ...serial,
+                    status: "MI",
+                    ac_ua_date:
+                      serial.ac_ua_date || new Date().toISOString().slice(0, 10),
+                  })),
+                  actions: actionSet("MI"),
+                }
+              : currentRow
+          )
+        );
+        showToast("Temporary static mode: material issue updated locally", "success");
       }
 
       if (actionKey === "printLabel") {
@@ -734,11 +779,25 @@ function Index({ orderDetails, onOrderUpdated }: LineItemsProps) {
           return;
         }
 
-        const response = await printLabel({
-          WONO: row.wo_no,
-          Line_Id: row.lineId,
-        }).unwrap();
-        showToast(response.message || "Print label request submitted", "success");
+        setRows((current) =>
+          current.map((currentRow) =>
+            currentRow.id === row.id
+              ? {
+                  ...currentRow,
+                  status: "PK",
+                  mail_status: "Ready for label print",
+                  quantitys: (currentRow.quantitys || []).map((serial) => ({
+                    ...serial,
+                    status: "PK",
+                    ac_pk_date:
+                      serial.ac_pk_date || new Date().toISOString().slice(0, 10),
+                  })),
+                  actions: actionSet("PK"),
+                }
+              : currentRow
+          )
+        );
+        showToast("Temporary static mode: label print completed locally", "success");
       }
 
       await onOrderUpdated?.();

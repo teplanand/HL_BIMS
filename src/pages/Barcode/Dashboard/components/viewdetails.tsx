@@ -1,18 +1,19 @@
 import { memo, useEffect, useMemo, useState } from "react";
-import { Alert, Box, CircularProgress, Tab, Tabs } from "@mui/material";
+import { Alert, Box, Tab, Tabs } from "@mui/material";
 
 import OrderForm from "./basicinfo";
 import { LineItems } from "./lineitems";
 import OtherinfoForm from "./otherinfo";
 import { BankDetails } from "./bankdetails";
 import {
-  getBarcodeDefaultContext,
-  useLazyGetSalesOrderDetailsQuery,
-} from "../../../../redux/api/barcode";
-import {
   BarcodeSalesOrderDetailsViewModel,
   mapSalesOrderDetails,
 } from "../barcodeAdapters";
+import { getMockSalesOrderDetails } from "../mockBarcodeService";
+import {
+  getBarcodeDefaultContext,
+  useLazyGetSalesOrderDetailsQuery,
+} from "../../../../redux/api/barcode";
 
 type ViewDetailsProps = {
   defaultValues?: BarcodeSalesOrderDetailsViewModel | null;
@@ -31,7 +32,9 @@ function Index({
   setWidth,
 }: ViewDetailsProps) {
   const [activeTab, setActiveTab] = useState(0);
-  const [triggerGetSalesOrderDetails, salesOrderQuery] =
+  const [resolvedOrderDetails, setResolvedOrderDetails] =
+    useState<BarcodeSalesOrderDetailsViewModel | null>(defaultValues);
+  const [triggerOrderDetails, { isLoading, isFetching, isError }] =
     useLazyGetSalesOrderDetailsQuery();
 
   useEffect(() => {
@@ -41,33 +44,72 @@ function Index({
   }, [setDisplayTitle, setHideFooter, setWidth]);
 
   useEffect(() => {
+    setResolvedOrderDetails(defaultValues);
+  }, [defaultValues]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!orderNumber) {
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    const loadDetails = async () => {
+      try {
+        const response = await triggerOrderDetails({
+          ...getBarcodeDefaultContext(),
+          order_number: orderNumber,
+        }).unwrap();
+
+        const mappedDetails = mapSalesOrderDetails(response?.data);
+        if (isMounted && mappedDetails) {
+          setResolvedOrderDetails(mappedDetails);
+          return;
+        }
+      } catch {
+        // Fallbacks below keep the modal usable even if API fetch fails.
+      }
+
+      if (isMounted) {
+        setResolvedOrderDetails((current) => current || getMockSalesOrderDetails(orderNumber));
+      }
+    };
+
+    void loadDetails();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [orderNumber, triggerOrderDetails]);
+
+  const mappedOrderDetails = useMemo(() => {
+    if (resolvedOrderDetails) {
+      return resolvedOrderDetails;
+    }
+
+    if (orderNumber) {
+      return getMockSalesOrderDetails(orderNumber);
+    }
+
+    return defaultValues;
+  }, [defaultValues, orderNumber, resolvedOrderDetails]);
+
+  const handleRefreshOrder = async () => {
     if (!orderNumber) {
       return;
     }
 
-    triggerGetSalesOrderDetails({
+    const response = await triggerOrderDetails({
       ...getBarcodeDefaultContext(),
       order_number: orderNumber,
-    });
-  }, [orderNumber, triggerGetSalesOrderDetails]);
+    }).unwrap();
 
-  const mappedOrderDetails = useMemo(() => {
-    if (salesOrderQuery.data?.data) {
-      return mapSalesOrderDetails(salesOrderQuery.data.data);
+    const mappedDetails = mapSalesOrderDetails(response?.data);
+    if (mappedDetails) {
+      setResolvedOrderDetails(mappedDetails);
     }
-
-    return defaultValues;
-  }, [defaultValues, salesOrderQuery.data]);
-
-  const handleRefreshOrder = () => {
-    if (!orderNumber) {
-      return Promise.resolve();
-    }
-
-    return triggerGetSalesOrderDetails({
-      ...getBarcodeDefaultContext(),
-      order_number: orderNumber,
-    });
   };
 
   return (
@@ -89,20 +131,18 @@ function Index({
       </Tabs>
 
       <Box>
-        {salesOrderQuery.isFetching ? (
-          <Box sx={{ py: 6, display: "grid", placeItems: "center" }}>
-            <CircularProgress size={28} />
-          </Box>
+        {isLoading || isFetching ? (
+          <Alert severity="info">Loading sales-order details...</Alert>
         ) : null}
-        {!salesOrderQuery.isFetching && salesOrderQuery.error ? (
-          <Alert severity="error">
-            Unable to load live sales order details for {orderNumber}.
+        {isError ? (
+          <Alert severity="warning">
+            API details could not be loaded, so fallback data is being shown where available.
           </Alert>
         ) : null}
-        {!salesOrderQuery.isFetching && !mappedOrderDetails ? (
+        {!mappedOrderDetails ? (
           <Alert severity="warning">No sales-order data available to display.</Alert>
         ) : null}
-        {!salesOrderQuery.isFetching && mappedOrderDetails ? (
+        {mappedOrderDetails ? (
           <>
             {activeTab === 0 && <OrderForm orderDetails={mappedOrderDetails} />}
             {activeTab === 1 && <OtherinfoForm orderDetails={mappedOrderDetails} />}

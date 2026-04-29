@@ -12,14 +12,8 @@ import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import SpeedOutlinedIcon from "@mui/icons-material/SpeedOutlined";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import { useToast } from "../../../../hooks/useToast";
-import {
-  BarcodeCompletionStage,
-  barcodeDefaults,
-  useLazyGetCompletionGearboxDetailsQuery,
-  useLazyGetQualityCheckDetailsQuery,
-  useUpdateOrderCompletionStageMutation,
-} from "../../../../redux/api/barcode";
-import { mapSerialLookup } from "../barcodeAdapters";
+import { BarcodeCompletionStage } from "../../../../redux/api/barcode";
+import { getMockGearMotorLookup } from "../mockBarcodeService";
 
 const mountTypeOptions = [
   "Foot Mount",
@@ -152,52 +146,24 @@ const resolveStage = (status: string): BarcodeCompletionStage => {
 
 function Index() {
   const { showToast } = useToast();
-  const [triggerCompletionLookup] = useLazyGetCompletionGearboxDetailsQuery();
-  const [triggerQualityCheckLookup] = useLazyGetQualityCheckDetailsQuery();
-  const [updateOrderCompletionStage, { isLoading }] = useUpdateOrderCompletionStageMutation();
   const { register, handleSubmit, getValues, setValue } = useForm({
     defaultValues,
   });
 
   const onSubmit = async (data: any) => {
-    try {
-      const stage = resolveStage(String(data.status || ""));
+    const stage = resolveStage(String(data.status || ""));
+    const submissionPreview = {
+      stage,
+      model: String(data.model || ""),
+      ratio: toNumeric(data.actualRatio),
+      wo_no: String(data.workOrderNumber || ""),
+      status: String(data.status || ""),
+      serial_no: String(data.gearedMotorSerialNumber || ""),
+      rpm: toNumeric(data.rpm),
+    };
 
-      const response = await updateOrderCompletionStage({
-        stage,
-        DivisionId: String(barcodeDefaults.divisionId),
-        dtPrint: {
-          oracle_order_no: 0,
-          model_type: "",
-          model: String(data.model || ""),
-          ratio: toNumeric(data.actualRatio),
-          qty: 1,
-          wo_no: String(data.workOrderNumber || ""),
-          order_header_id: 0,
-          order_line_id: 0,
-          status: String(data.status || ""),
-          kw: 0,
-          serial_no: String(data.gearedMotorSerialNumber || ""),
-          rpm: toNumeric(data.rpm),
-          motor_serial_no: String(data.motorSerialNumber || ""),
-          input_RPM: toNumeric(data.inputRpm),
-          actual_ratio: toNumeric(data.actualRatio),
-          pole: toNumeric(data.pole),
-          noiseLevel: toNumeric(data.noiseLevelDb),
-          paintColor: String(data.paint || ""),
-          MotorMake: String(data.electricMotorMake || ""),
-          OracleUserId: 0,
-          P_AMB_TEMP: "",
-          P_GREASE_TEMP: "",
-        },
-      }).unwrap();
-
-      showToast(response.message || "Order completion updated", "success");
-    } catch (error: any) {
-      const message =
-        error?.data?.message || error?.error || "Unable to update order completion";
-      showToast(message, "error");
-    }
+    console.log("barcode-order-completion-static-submit", submissionPreview);
+    showToast("Temporary static mode: order completion saved locally", "success");
   };
 
   const handleGetDetails = async () => {
@@ -209,25 +175,25 @@ function Index() {
     }
 
     try {
-      let response: any;
-
-      try {
-        response = await triggerCompletionLookup({
-          BarcodeSerialNo: serialNumber,
-        }).unwrap();
-      } catch {
-        response = await triggerQualityCheckLookup({
-          serial_no: serialNumber,
-        }).unwrap();
+      const lookup = getMockGearMotorLookup(serialNumber)?.orderCompletion;
+      if (!lookup) {
+        showToast("No static order completion data found", "warning");
+        return;
       }
 
-      const lookup = mapSerialLookup(response?.data, serialNumber);
-
       setValue("gearedMotorSerialNumber", serialNumber, { shouldDirty: true });
+      setValue("mountType", lookup.mountType, { shouldDirty: true });
       setValue("model", lookup.model, { shouldDirty: true });
       setValue("workOrderNumber", lookup.workOrderNumber, { shouldDirty: true });
       setValue("rpm", lookup.rpm, { shouldDirty: true });
       setValue("motorSerialNumber", lookup.motorSerialNumber, { shouldDirty: true });
+      setValue("pole", lookup.pole, { shouldDirty: true });
+      setValue("electricMotorMake", lookup.electricMotorMake, { shouldDirty: true });
+      setValue("inputRpm", lookup.inputRpm, { shouldDirty: true });
+      setValue("actualRatio", lookup.actualRatio, { shouldDirty: true });
+      setValue("noiseLevelDb", lookup.noiseLevelDb, { shouldDirty: true });
+      setValue("paint", lookup.paint, { shouldDirty: true });
+      setValue("status", lookup.status, { shouldDirty: true });
 
       showToast("Order completion details loaded", "success");
     } catch (error: any) {
@@ -266,7 +232,7 @@ function Index() {
                 sx={{ color: "#B45309", display: "block", mb: 1.25 }}
               >
                 Enter geared motor serial number and click Get to load completion
-                details from the barcode APIs.
+                details from temporary static barcode data.
               </Typography>
               <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
                 <MuiTextField
@@ -355,8 +321,8 @@ function Index() {
         </FormSection>
 
         <Box>
-          <Button type="submit" variant="contained" size="large" disabled={isLoading}>
-            {isLoading ? "Updating..." : "Update Order Completion"}
+          <Button type="submit" variant="contained" size="large">
+            Update Order Completion
           </Button>
         </Box>
       </Stack>

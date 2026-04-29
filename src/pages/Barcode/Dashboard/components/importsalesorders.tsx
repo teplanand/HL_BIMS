@@ -1,24 +1,27 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useState } from "react";
 import { Alert, Box, Button, Divider, Stack, Typography } from "@mui/material";
 import SyncAltOutlinedIcon from "@mui/icons-material/SyncAltOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import { MuiTextField } from "../../../../components/mui/input";
 import { FormStack } from "../../../../components/ui/form/stack";
 import FormSection from "../../../../components/ui/form/FormSection";
+import { useToast } from "../../../../hooks/useToast";
 import {
-  getBarcodeDefaultContext,
+  BarcodeImportResponseData,
   useImportSalesOrdersMutation,
 } from "../../../../redux/api/barcode";
-import { useToast } from "../../../../hooks/useToast";
 
 function ImportSalesOrders() {
   const { showToast } = useToast();
-  const defaultContext = useMemo(() => getBarcodeDefaultContext(), []);
-  const [organizationId, setOrganizationId] = useState(
-    String(defaultContext.ORGANIZATION_ID)
-  );
-  const [divisionId, setDivisionId] = useState(String(defaultContext.DIVISION_ID));
-  const [importSalesOrders, { data, isLoading }] = useImportSalesOrdersMutation();
+  const [organizationId, setOrganizationId] = useState("43");
+  const [divisionId, setDivisionId] = useState("374");
+  const [data, setData] = useState<{
+    status: boolean;
+    message: string;
+    records: number;
+    data: BarcodeImportResponseData[] | null;
+  } | null>(null);
+  const [importSalesOrders, { isLoading }] = useImportSalesOrdersMutation();
 
   const handleImport = async () => {
     try {
@@ -27,10 +30,24 @@ function ImportSalesOrders() {
         DIVISION_ID: Number(divisionId),
       }).unwrap();
 
-      showToast(response.message || "Sales orders import completed", "success");
+      const nextData = {
+        status: Boolean(response.status),
+        message: response.message || "Import completed",
+        records: response.records || 0,
+        data: Array.isArray(response.data) ? response.data : null,
+      };
+
+      setData(nextData);
+      showToast(nextData.message, nextData.status ? "success" : "warning");
     } catch (error: any) {
       const message =
         error?.data?.message || error?.error || "Unable to import sales orders";
+      setData({
+        status: false,
+        message,
+        records: 0,
+        data: null,
+      });
       showToast(message, "error");
     }
   };
@@ -74,36 +91,57 @@ function ImportSalesOrders() {
           </Stack>
         </FormSection>
 
-        {data?.status ? (
-          <Alert severity="success" icon={<CheckCircleOutlineOutlinedIcon />}>
-            {data.message || "Sales orders imported successfully"}
+        {data ? (
+          <Alert
+            severity={data.status ? "success" : "warning"}
+            icon={<CheckCircleOutlineOutlinedIcon />}
+          >
+            {data.message || "Sales-order import response received"}
           </Alert>
         ) : null}
 
         {data?.data ? (
           <FormSection
             title="Latest Import Result"
-            description="Backend response returned from the import endpoint."
+            description="Latest import response from barcode API."
             accentColor="#059669"
           >
             <Stack spacing={1.25}>
               <Typography variant="body2">
-                Header ID: <strong>{data.data.header_id || "--"}</strong>
+                Imported Orders: <strong>{data.records || 0}</strong>
               </Typography>
               <Typography variant="body2">
-                Order Booked Date:{" "}
-                <strong>{data.data.order_booked_date || "--"}</strong>
+                Organization ID: <strong>{organizationId || "--"}</strong>
               </Typography>
               <Typography variant="body2">
-                Order Type ID: <strong>{data.data.order_type_id || "--"}</strong>
+                Division ID: <strong>{divisionId || "--"}</strong>
               </Typography>
-              <Typography variant="body2">
-                Imported Order No: <strong>{String(data.data.ordernumber || "--")}</strong>
-              </Typography>
+              {data.data.map((order) => (
+                <Box
+                  key={`${order.header_id}-${order.ordernumber}`}
+                  sx={{ p: 1.25, border: "1px solid", borderColor: "divider", borderRadius: 2 }}
+                >
+                  <Typography variant="body2">
+                    Order No: <strong>{String(order.ordernumber || "--")}</strong>
+                  </Typography>
+                  <Typography variant="body2">
+                    Header ID: <strong>{String(order.header_id || "--")}</strong>
+                  </Typography>
+                  <Typography variant="body2">
+                    Customer: <strong>{order.customer_name || "--"}</strong>
+                  </Typography>
+                  <Typography variant="body2">
+                    Customer No: <strong>{order.customer_number || "--"}</strong>
+                  </Typography>
+                  <Typography variant="body2">
+                    Booked Date: <strong>{order.order_booked_date || "--"}</strong>
+                  </Typography>
+                </Box>
+              ))}
               <Divider />
               <Typography variant="caption" color="text.secondary">
-                Current import API returns import metadata only. Detailed order data is
-                fetched separately from the sales-order detail API.
+                Response is rendered directly from the shape documented in
+                `PBL_QRCODE.json`.
               </Typography>
             </Stack>
           </FormSection>

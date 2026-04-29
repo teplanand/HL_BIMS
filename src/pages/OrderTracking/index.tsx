@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
-import { Box, Button, ButtonBase, Card, CardContent, TextField, Tooltip, Typography } from "@mui/material";
+import { Box, Button, ButtonBase, Card, CardContent, Chip, TextField, Tooltip, Typography } from "@mui/material";
 import {
   GridColDef,
   GridFilterInputValueProps,
@@ -128,6 +128,43 @@ const planDateColumns = [
   { field: "testing_actual", headerName: "Testing Date"  },
   { field: "dispatch_date_actual", headerName: "Dispatch Date",  filterable: true },
 ] as const;
+
+const orderTrackingStageValueOptions = [
+  "Not Started",
+  "In Progress",
+  "Completed",
+] as const;
+
+const orderTrackingCurrentStageOptions = [
+  "Design",
+  "Mfg",
+  "Assembly",
+  "Testing",
+  "Dispatch",
+  "Finished",
+] as const;
+
+const currentStatusBadgeColorMap = {
+  Design: STAGE_ACCENT_COLORS.Design,
+  Mfg: STAGE_ACCENT_COLORS.Manufacturing,
+  Assembly: STAGE_ACCENT_COLORS.Assembly,
+  Testing: STAGE_ACCENT_COLORS.Testing,
+  Dispatch: STAGE_ACCENT_COLORS.Dispatch,
+  Finished: ORDER_TRACKING_COLORS.statusSuccess,
+} as const;
+
+const HEADER_SEARCHABLE_FIELDS = new Set([
+  "cust_po_no",
+  "division",
+  "sub_division",
+  "order_type",
+  "work_order_no",
+  "line_no",
+  "end_cust_name",
+  "branch_name",
+  "uom",
+  "po_value",
+]);
 
 const actualToPlanFieldMap: Record<string, string> = {
   amp_actual: "amp_plan",
@@ -670,6 +707,49 @@ const getManufacturingStatus = (row: any) => {
   return "In Progress";
 };
 
+const getManufacturingCoreStatus = (row: any) => {
+  const steps = [
+    [row.gear_case_plan, row.gearcase_actual],
+    [row.internal_plan, row.internal_actual],
+    [row.bo_plan, row.bo_actual],
+  ];
+
+  const statuses = steps.map(([plan, actual]) => getStageStatus(plan, actual));
+
+  if (statuses.every((status) => status === "Not Started")) return "Not Started";
+  if (statuses.every((status) => status === "Completed")) return "Completed";
+
+  return "In Progress";
+};
+
+const getAssemblyStageStatus = (row: any) =>
+  getStageStatus(row.assembly_plan, row.assembly_actual);
+
+const getCurrentWorkflowStage = (row: any) => {
+  const designStatus = getDesignStatus(row);
+  const manufacturingStatus = getManufacturingStatus(row);
+  const testingStatus = getQCStatus(row);
+  const dispatchStatus = getDispatchStatus(row);
+
+  if (designStatus !== "Completed") {
+    return "Design";
+  }
+
+  if (manufacturingStatus !== "Completed") {
+    return "Mfg";
+  }
+
+  if (testingStatus !== "Completed") {
+    return "Testing";
+  }
+
+  if (dispatchStatus === "Completed") {
+    return "Finished";
+  }
+
+  return "Dispatch";
+};
+
  
 
 const getFullStatus = (row: any) => {
@@ -678,7 +758,7 @@ const getFullStatus = (row: any) => {
     sales: getSalesStatus(row),
     planning: getPlanningStatus(row),
     manufacturing: getManufacturingStatus(row),
-   
+    assembly: getAssemblyStageStatus(row),
     qc: getQCStatus(row),
     dispatch: getDispatchStatus(row),
   };
@@ -689,6 +769,7 @@ const getFullStatus = (row: any) => {
 
 const OrderTrackingDashboard = () => {
   const { openModal } = useModal();
+  const [columnSearchFilters, setColumnSearchFilters] = useState<Record<string, string>>({});
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
     page: 0,
     pageSize: 5,
@@ -725,7 +806,7 @@ const OrderTrackingDashboard = () => {
   const apiRows = Array.isArray(data?.data) ? data.data : [];
   //const sourceRows = apiRows.length > 0 ? apiRows : ordertrackingdata;
  
-  const sourceRows =  apiRows;
+  const sourceRows =  ordertrackingdata;
   
   return sourceRows.map((item: any, index: number) => {
     const status = getFullStatus(item);
@@ -733,11 +814,11 @@ const OrderTrackingDashboard = () => {
     return {
       ...item,
       id: item.id ?? index,
+      current_status: getCurrentWorkflowStage(item),
 
-      // 🔥 MUST ADD THIS
       design: status.design,
       manufacturing: status.manufacturing,
-      assembly: status.manufacturing, // or separate later
+      assembly: status.assembly,
       testing: status.qc,
       dispatch: status.dispatch,
     };
@@ -962,11 +1043,116 @@ const renderProcessCell = useCallback(
     return `${computedValue.toFixed(2)}%`;
   }, []);
 
+  const renderCurrentStatusCell = useCallback((params: GridRenderCellParams) => {
+    const status = String(params.value ?? "").trim();
+
+    if (!status) {
+      return "-";
+    }
+
+    return (
+      <Box className="flex h-full w-full items-center">
+        <Chip
+          label={status}
+          size="small"
+          className="font-semibold !text-white [&_.MuiChip-label]:!text-white"
+          style={{
+            backgroundColor:
+              currentStatusBadgeColorMap[status as keyof typeof currentStatusBadgeColorMap] ??
+              statusColorMap[status as keyof typeof statusColorMap] ??
+              ORDER_TRACKING_COLORS.statusMuted,
+          }}
+        />
+      </Box>
+    );
+  }, []);
+
+  const getColumnSearchValue = useCallback(
+    (field: string) => columnSearchFilters[field] ?? "",
+    [columnSearchFilters]
+  );
+
+  const handleColumnSearchChange = useCallback(
+    (field: string, value: string) => {
+      setColumnSearchFilters((current) => ({
+        ...current,
+        [field]: value,
+      }));
+    },
+    []
+  );
+
+  const renderColumnHeaderWithSearch = useCallback(
+    (field: string, label: string) => (
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          width: "100%",
+          minWidth: 0,
+          py: 0.125,
+        }}
+      >
+        <TextField
+          size="small"
+          variant="outlined"
+          value={getColumnSearchValue(field)}
+          placeholder={label}
+          onChange={(event) => handleColumnSearchChange(field, event.target.value)}
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+          slotProps={{
+            input: {
+              sx: {
+                height: 24,
+                fontSize: "0.72rem",
+                backgroundColor: "#fcfdff",
+                width: "100%",
+              },
+            },
+          }}
+          sx={{
+            width: "100%",
+            minWidth: 0,
+            "& .MuiOutlinedInput-root": {
+              borderRadius: "8px",
+              width: "100%",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
+              "& fieldset": {
+                borderColor: "rgba(203, 213, 225, 0.8)",
+              },
+              "&:hover fieldset": {
+                borderColor: "rgba(148, 163, 184, 0.8)",
+              },
+              "&.Mui-focused fieldset": {
+                borderColor: "rgba(59, 130, 246, 0.45)",
+                borderWidth: "1px",
+              },
+            },
+            "& .MuiOutlinedInput-input": {
+              px: 0.75,
+              py: 0.2,
+              width: "100%",
+            },
+            "& .MuiOutlinedInput-input::placeholder": {
+              color: "rgba(100, 116, 139, 0.9)",
+              opacity: 1,
+              fontSize: "0.72rem",
+            },
+          }}
+        />
+      </Box>
+    ),
+    [getColumnSearchValue, handleColumnSearchChange]
+  );
+
   const columns: GridColDef[] = useMemo<GridColDef[]>(() => [
       {
         field: "line_id",
         headerName: "Line",
-      sortable:true,
+        sortable:false,
+        filterable: false,
+        disableColumnMenu: true,
         renderCell: (params: GridRenderCellParams) => (
           <Box
             onClick={(event) => {
@@ -984,87 +1170,112 @@ const renderProcessCell = useCallback(
       {
         field: "cust_po_no",
         headerName: "Customer PO",
-        filterable: true,
-        sortable:true,
+        filterable: HEADER_SEARCHABLE_FIELDS.has("cust_po_no"),
+        sortable:false,
+        disableColumnMenu: true,
+        minWidth: 100,
+        renderHeader: () => renderColumnHeaderWithSearch("cust_po_no", "Customer PO"),
       },
       {
         field: "division",
         headerName: "Division",
-        filterable: true,
-       sortable:true,
+        filterable: HEADER_SEARCHABLE_FIELDS.has("division"),
+        sortable:false,
+        disableColumnMenu: true,
+        minWidth: 100,
+        renderHeader: () => renderColumnHeaderWithSearch("division", "Division"),
       },
       {
         field: "sub_division",
         headerName: "Sub Division",
-        filterable: true,
-       sortable:true,
+        filterable: HEADER_SEARCHABLE_FIELDS.has("sub_division"),
+        sortable:false,
+        disableColumnMenu: true,
+        minWidth: 100,
+        renderHeader: () => renderColumnHeaderWithSearch("sub_division", "Sub Division"),
       },
       {
         field: "order_type",
         headerName: "Order Type",
-        filterable: true,
-        sortable:true,
+        filterable: HEADER_SEARCHABLE_FIELDS.has("order_type"),
+        sortable:false,
+        disableColumnMenu: true,
+        minWidth: 100,
+        renderHeader: () => renderColumnHeaderWithSearch("order_type", "Order Type"),
       },
       {
         field: "work_order_no",
         headerName: "Order Number",
-        filterable: true,
-       sortable:true,
+        filterable: HEADER_SEARCHABLE_FIELDS.has("work_order_no"),
+        sortable:false,
+        disableColumnMenu: true,
+        minWidth: 100,
+        renderHeader: () => renderColumnHeaderWithSearch("work_order_no", "Order Number"),
       },
       {
         field: "line_no",
         headerName: "Line No",
-        filterable: true,
-        sortable:true,
+        filterable: HEADER_SEARCHABLE_FIELDS.has("line_no"),
+        sortable:false,
+        disableColumnMenu: true,
+        minWidth: 100,
+        renderHeader: () => renderColumnHeaderWithSearch("line_no", "Line No"),
       },
       {
         field: "spare_gearbox",
         headerName: "Spare / Products",
-        filterable: true,
-        sortable:true,
+        filterable: false,
+        sortable:false,
+        disableColumnMenu: true,
       },
       {
         field: "end_cust_name",
         headerName: "Customer Name",
-        filterable: true,
-       sortable:true,
-       minWidth: 150,
-       flex: 1,
-       
-       
+        filterable: HEADER_SEARCHABLE_FIELDS.has("end_cust_name"),
+        sortable:false,
+        disableColumnMenu: true,
+        minWidth: 100,
+        flex: 1,
+        renderHeader: () => renderColumnHeaderWithSearch("end_cust_name", "Customer Name"),
       },
        {
         field: "branch_name",
         headerName: "Branch Name",
-        sortable:true,
-          filterable: true,
-           flex: 1,
-             minWidth: 150,
+        sortable:false,
+        filterable: HEADER_SEARCHABLE_FIELDS.has("branch_name"),
+        disableColumnMenu: true,
+        flex: 1,
+        minWidth: 100,
+        renderHeader: () => renderColumnHeaderWithSearch("branch_name", "Branch Name"),
       },
        {
         field: "qty",
         headerName: "Qty",
-  
-       
+        filterable: false,
         sortable: true,
-         
       },
        {
         field: "uom",
         headerName: "UOM",
-        sortable: true,
-        
+        filterable: HEADER_SEARCHABLE_FIELDS.has("uom"),
+        sortable: false,
+        disableColumnMenu: true,
+        minWidth: 100,
+        renderHeader: () => renderColumnHeaderWithSearch("uom", "UOM"),
       },
        {
         field: "po_value",
         headerName: "PO Value",
-       sortable: true,
-       
+        filterable: HEADER_SEARCHABLE_FIELDS.has("po_value"),
+        sortable: false,
+        disableColumnMenu: true,
+        minWidth: 100,
+        renderHeader: () => renderColumnHeaderWithSearch("po_value", "PO Value"),
       },
       {
         field: "currency",
         headerName: "Currency",
-        filterable: true,
+        filterable: false,
          sortable: true,
       },
       {
@@ -1072,7 +1283,7 @@ const renderProcessCell = useCallback(
         headerName: "Cust PO Date",
         type: "date" as const,
         sortable: true,
-        filterable: true,
+        filterable: false,
         filterOperators: orderTrackingDateFilterOperators,
         valueGetter: (_value: unknown, row: Record<string, unknown>) =>
           getGridDateValue(row, "cust_po_date"),
@@ -1084,7 +1295,7 @@ const renderProcessCell = useCallback(
         headerName: "Delivery Date",
         type: "date" as const,
         sortable: true,
-        filterable: true,
+        filterable: false,
         filterOperators: orderTrackingDateFilterOperators,
         valueGetter: (_value: unknown, row: Record<string, unknown>) =>
           getGridDateValue(row, "delivery_date_po"),
@@ -1096,7 +1307,7 @@ const renderProcessCell = useCallback(
         headerName: "Ex Works Date",
         type: "date" as const,
         sortable: true,
-        filterable: true,
+        filterable: false,
         filterOperators: orderTrackingDateFilterOperators,
         valueGetter: (_value: unknown, row: Record<string, unknown>) =>
           getGridDateValue(row, "commited_ex_works_delivery_date"),
@@ -1107,15 +1318,26 @@ const renderProcessCell = useCallback(
         field: "perc_time_taken_of_total_po_delivery",
         headerName: "Approval %",
         sortable: true,
-        filterable: true,
+        filterable: false,
        
         renderCell: renderMetricCell,
       },
+      {
+        field: "current_status",
+        headerName: "Status",
+        type: "singleSelect" as const,
+        valueOptions: orderTrackingCurrentStageOptions,
+        filterable: false,
+        sortable: true,
+        minWidth: 120,
+        renderCell: renderCurrentStatusCell,
+      },
       ...processStageColumns.map<GridColDef>((column) => ({
         ...column,
+        type: "singleSelect" as const,
+        valueOptions: orderTrackingStageValueOptions,
         sortable: false,
         filterable: false,
-       
         renderCell: renderProcessCell,
       })),
       ...planDateColumns.map<GridColDef>((column) => {
@@ -1123,7 +1345,7 @@ const renderProcessCell = useCallback(
           ...column,
           type: "date" as const,
           sortable: false,
-          filterable: true,
+          filterable: false,
           filterOperators: orderTrackingDateFilterOperators,
           valueGetter: (_value: unknown, row: Record<string, unknown>) =>
             getGridDateValue(row, column.field),
@@ -1136,10 +1358,16 @@ const renderProcessCell = useCallback(
         return planDateColumn as unknown as GridColDef;
       }),
     ],
-    [handleLineIdClick, renderActualDateCell, renderDateCell, renderMetricCell, renderProcessCell]
+    [
+      handleLineIdClick,
+      renderActualDateCell,
+      renderColumnHeaderWithSearch,
+      renderCurrentStatusCell,
+      renderDateCell,
+      renderMetricCell,
+      renderProcessCell,
+    ]
   );
-
- 
 
   const gridHeaderControls = useMemo(() => {
     if (!activeStageFilter) {
@@ -1154,7 +1382,7 @@ const renderProcessCell = useCallback(
           Showing {summaryCardKeys[activeStageFilter.field]} rows with status {activeStageFilter.status}.
         </Typography>
         <Button size="small" variant="outlined" onClick={clearStageFilter}>
-          Clear Filter
+          Clear Stage Filter
         </Button>
       </Box>
     );
@@ -1289,7 +1517,9 @@ const renderProcessCell = useCallback(
         headerControls={gridHeaderControls}
         refetch={refreshOrders}
         height="calc(100vh - 290px)"
-     
+        showFilterButton={false}
+        columnHeaderHeight={96}
+        disableColumnMenu
         pageSizeOptions={[5, 10, 15, 20, 50]}
         enableViewToggle={false}
         permissions={{ create: true, edit: false, delete: false, download: true, view: true }}
@@ -1309,7 +1539,9 @@ const renderProcessCell = useCallback(
           "cust_po_no",
           "branch_name",
           "uom",
+          "current_status",
         ]}
+        columnSearchFilters={columnSearchFilters}
       />
 
       <OpenEditPlanModal

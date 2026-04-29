@@ -9,6 +9,7 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import TimelineOutlinedIcon from "@mui/icons-material/TimelineOutlined";
 import { useToast } from "../../../../hooks/useToast";
 import { useGetOrderByIdMutation, useUpdateOrderMutation } from "../../../../redux/api/ordertracking";
+import { formatDateTime } from "../../../../utils/FormatDate";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
@@ -40,8 +41,6 @@ const ORDER_INFORMATION_FIELDS = [
   "work_order_no",
   "work_order_date",
   "commited_ex_works_delivery_date",
- 
-  "remarks",
 ] as const;
 
 const CALCULATED_FIELD_KEYS = new Set([
@@ -74,7 +73,8 @@ const EDITABLE_ORDER_FIELDS = new Set([
   "po_received_date_to_ga_drw_submission_days",
   "ga_drawing_submission_to_final_approval_received_days",
 ]);
-const MULTILINE_FIELDS = new Set(["item_desc_cust_po", "ora_item_desc", "remarks"]);
+const MULTILINE_FIELDS = new Set(["item_desc_cust_po", "ora_item_desc"]);
+const REMARKS_FIELD = "remark";
 const LABEL_OVERRIDES: Record<string, string> = {
   id: "ID",
   po: "PO",
@@ -90,8 +90,27 @@ const LABEL_OVERRIDES: Record<string, string> = {
   ga_dim_drw_submission_design_actual: "GA Submission Actual",
   final_drg_approval_received_date_plan: "Final Approval Plan",
   final_drg_approval_received_date_actual: "Final Approval Actual",
-  po_received_date_to_ga_drw_submission_days: "PO to GA Submission Days",
+  po_received_date_to_ga_drw_submission_days: "Tech cleared PO to 1st GA Submission days",
   ga_drawing_submission_to_final_approval_received_days: "GA to Final Approval Days",
+  remark: "Remark",
+  remarks: "Remarks",
+};
+
+type RemarkLogItem = {
+  order_tracking_id?: number | null;
+  remark?: string | null;
+  id?: number | string | null;
+  created_date?: string | null;
+  created_by?: string | null;
+  updated_date?: string | null;
+  updated_by?: string | null;
+  is_deleted?: boolean;
+  deleted_date?: string | null;
+  deleted_by?: string | null;
+  is_active?: boolean;
+  IsAudit?: boolean;
+  DoLog?: boolean;
+  DoAudit?: boolean;
 };
 
 const toFieldLabel = (key: string) =>
@@ -218,6 +237,43 @@ export type ViewDetailsRef = {
   submit: () => Promise<void>;
 };
 
+const normalizeRemarksLog = (value: unknown): RemarkLogItem[] => {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is RemarkLogItem => Boolean(item && typeof item === "object"));
+  }
+
+  if (typeof value === "string") {
+    const trimmedValue = value.trim();
+    return trimmedValue
+      ? [
+          {
+            id: "legacy-remark",
+            remark: trimmedValue,
+            created_date: null,
+          },
+        ]
+      : [];
+  }
+
+  return [];
+};
+
+const normalizeOrderDetailsPayload = (
+  value: unknown,
+  fallback: Record<string, any>
+): Record<string, any> => {
+  if (Array.isArray(value)) {
+    const firstItem = value[0];
+    return firstItem && typeof firstItem === "object" ? (firstItem as Record<string, any>) : fallback;
+  }
+
+  if (value && typeof value === "object") {
+    return value as Record<string, any>;
+  }
+
+  return fallback;
+};
+
 function Index(
   { defaultValues: rowData, onClose }: ViewDetailsProps,
   ref: React.Ref<ViewDetailsRef>
@@ -238,13 +294,17 @@ function Index(
     name: "final_drg_approval_received_date_actual",
   });
   const watchedPlanActualValues = useWatch({ control });
+  const remarkLogs = useMemo(
+    () => normalizeRemarksLog((orderDetails ?? rowData ?? {}).remarks),
+    [orderDetails, rowData]
+  );
 
   useEffect(() => {
     if (!rowData?.id) return;
     getOrderById(rowData.id)
       .unwrap()
       .then((result) => {
-        const d = result.data?.[0] ?? rowData;
+        const d = normalizeOrderDetailsPayload(result.data, rowData);
         setOrderDetails(d);
         reset({
           id: d.id ?? rowData?.id ?? "",
@@ -293,7 +353,7 @@ function Index(
           dispatch_date_plan: formatInputDate(d.dispatch_date_plan),
           dispatch_date_actual: formatInputDate(d.dispatch_date_actual),
           on_time_delivery: d.on_time_delivery ?? "",
-          remarks: d.remarks ?? "",
+          remark: "",
         });
       })
       .catch(() => {
@@ -416,7 +476,7 @@ function Index(
             {...register(field)}
             type="text"
             multiline={MULTILINE_FIELDS.has(field)}
-            rows={field === "remarks" ? 2 : MULTILINE_FIELDS.has(field) ? 3 : undefined}
+            rows={MULTILINE_FIELDS.has(field) ? 3 : undefined}
             inputProps={
               isOrderFieldReadOnly(field)
                 ? { readOnly: MULTILINE_FIELDS.has(field) ? false : true }
@@ -473,6 +533,75 @@ function Index(
               {EDITABLE_ORDER_INFORMATION_FIELDS.length > 0 && (
                 <Box>
                   <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
+                    Remarks
+                  </Typography>
+                  <Box
+                    sx={{
+                      mb: 1,
+                      minWidth: 0,
+                    }}
+                  >
+                    <MuiTextField
+                      label={toFieldLabel(REMARKS_FIELD)}
+                      {...register(REMARKS_FIELD)}
+                      type="text"
+                      multiline
+                      rows={2}
+                      placeholder="Enter new remark"
+                      fullWidth
+                      sx={getFieldHighlightSx(REMARKS_FIELD)}
+                    />
+                  </Box>
+                </Box>
+              )}
+
+              <Box>
+                <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
+                  Remark History
+                </Typography>
+                <Stack
+                  spacing={1}
+                  sx={{
+                    p: 1.5,
+                    border: "1px solid",
+                    borderColor: "divider",
+                    borderRadius: 1.5,
+                    backgroundColor: "background.default",
+                    maxHeight: 260,
+                    overflowY: "auto",
+                  }}
+                >
+                  {remarkLogs.length ? (
+                    remarkLogs.map((remarkItem, index) => (
+                      <Box
+                        key={String(remarkItem.id ?? `${remarkItem.created_date ?? "remark"}-${index}`)}
+                        sx={{
+                          p: 1.25,
+                          borderRadius: 1.25,
+                          border: "1px solid",
+                          borderColor: "divider",
+                          backgroundColor: "background.paper",
+                        }}
+                      >
+                        <Typography variant="body2" sx={{ fontWeight: 600, whiteSpace: "pre-wrap" }}>
+                          {remarkItem.remark || "-"}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
+                          {remarkItem.created_date ? formatDateTime(remarkItem.created_date) : ""}
+                        </Typography>
+                      </Box>
+                    ))
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      No remark history available.
+                    </Typography>
+                  )}
+                </Stack>
+              </Box>
+
+              {EDITABLE_ORDER_INFORMATION_FIELDS.length > 0 && (
+                <Box>
+                  <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
                     Editable Details
                   </Typography>
                   <FormStackGrid
@@ -507,7 +636,7 @@ function Index(
                     }}
                   >
                     <Typography variant="caption" color="text.secondary">
-                      Delivery Days From PO Date
+                      PO Delivery in days from PO date 
                     </Typography>
                     <Typography variant="h6" sx={{ mt: 0.5 }}>
                       {formatMetricValue(computedMetrics.delivery_days_frm_po_date)}

@@ -92,8 +92,10 @@ export interface ReusableDataGridProps {
   addButtonLabel?: string;
   uniqueIdField?: string;
   rowHeight?: number | "auto";
+  columnHeaderHeight?: number;
   height?: number | string;
   searchableFields?: string[];
+  columnSearchFilters?: Record<string, string>;
   pageSizeOptions?: number[];
   compact?: boolean;
 
@@ -107,6 +109,9 @@ export interface ReusableDataGridProps {
   enableViewToggle?: boolean;
   defaultViewMode?: "table" | "grid";
   onViewModeChange?: (mode: "table" | "grid") => void;
+  showFilterButton?: boolean;
+  enableHeaderFilters?: boolean;
+  disableColumnMenu?: boolean;
 
   // Card View Rendering
   renderRowCard?: (row: any) => React.ReactNode;
@@ -324,8 +329,10 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
   addButtonLabel = "Add New",
   uniqueIdField = "id",
   rowHeight = 40,
+  columnHeaderHeight = 62,
   height = "calc(100vh - 240px)",
   searchableFields,
+  columnSearchFilters,
   pageSizeOptions = [5, 10, 20, 50],
   compact = true,
   permissions = {
@@ -344,6 +351,9 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
   cardViewGridProps,
   headerTextAlign = "center",
   headerVerticalAlign = "center",
+  showFilterButton = true,
+  enableHeaderFilters = false,
+  disableColumnMenu = false,
 }) => {
   const [viewMode, setViewMode] = useState<"table" | "grid">(defaultViewMode);
   const [searchQuery, setSearchQuery] = useState("");
@@ -802,17 +812,38 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
       return item.value !== undefined && item.value !== null && String(item.value).trim() !== "";
     });
 
-    if (activeColumnFilters.length === 0) {
-      return searchedRows;
+    const gridFilteredRows =
+      activeColumnFilters.length === 0
+        ? searchedRows
+        : searchedRows.filter((row) => {
+            const results = activeColumnFilters.map((item) => matchesFilterItem(row, item));
+            const useOrLogic = filterModel.logicOperator === GridLogicOperator.Or;
+            return useOrLogic ? results.some(Boolean) : results.every(Boolean);
+          });
+
+    const activeHeaderSearchEntries = Object.entries(columnSearchFilters ?? {}).filter(
+      ([, value]) => value.trim() !== ""
+    );
+
+    if (activeHeaderSearchEntries.length === 0) {
+      return gridFilteredRows;
     }
 
-    const useOrLogic = filterModel.logicOperator === GridLogicOperator.Or;
-
-    return searchedRows.filter((row) => {
-      const results = activeColumnFilters.map((item) => matchesFilterItem(row, item));
-      return useOrLogic ? results.some(Boolean) : results.every(Boolean);
-    });
-  }, [filterModel.items, filterModel.logicOperator, matchesFilterItem, searchedRows]);
+    return gridFilteredRows.filter((row) =>
+      activeHeaderSearchEntries.every(([field, value]) =>
+        String(getCellValue(row, field) ?? "")
+          .toLowerCase()
+          .includes(value.trim().toLowerCase())
+      )
+    );
+  }, [
+    columnSearchFilters,
+    filterModel.items,
+    filterModel.logicOperator,
+    getCellValue,
+    matchesFilterItem,
+    searchedRows,
+  ]);
 
   const sortedRows = useMemo(() => {
     if (sortModel.length === 0) {
@@ -987,6 +1018,7 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
       onRemoveFilter: removeFilter,
       onClearFilters: clearAllFilters,
       hideTitleSection: true,
+      showFilterButton,
     }),
     [
       title,
@@ -998,6 +1030,7 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
       activeFilters,
       clearAllFilters,
       removeFilter,
+      showFilterButton,
     ],
   );
 
@@ -1044,7 +1077,7 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
       borderColor: (theme: any) => sharedGridHeaderBorder(theme),
     },
     "& .MuiDataGrid-columnHeader": {
-      padding: compact ? "8px 10px" : "12px 16px",
+      padding: compact ? "6px 6px" : "10px 12px",
       minHeight: compact ? 42 : 48,
       backgroundColor: (theme: any) => sharedGridHeaderBackground(theme),
       borderBottom: (theme: any) => `1px solid ${sharedGridHeaderBorder(theme)}`,
@@ -1076,6 +1109,31 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
       textAlign: headerTextAlign,
       overflow: "visible",
       textOverflow: "clip",
+    },
+    "& .MuiDataGrid-columnHeader--filter": {
+      backgroundColor: (theme: any) => sharedGridHeaderBackground(theme),
+      borderBottom: (theme: any) => `1px solid ${sharedGridHeaderBorder(theme)}`,
+      minHeight: compact ? 44 : 50,
+      py: 0.5,
+    },
+    "& .MuiDataGrid-columnHeaderFilterInput": {
+      width: "100%",
+      px: compact ? 0.5 : 0.75,
+    },
+    "& .MuiDataGrid-columnHeaderFilterInput .MuiInputBase-root": {
+      fontSize: compact ? "0.75rem" : "0.8125rem",
+      minHeight: compact ? 32 : 36,
+      borderRadius: "6px",
+      backgroundColor: "background.paper",
+    },
+    "& .MuiDataGrid-columnHeaderFilterInput .MuiInputBase-input": {
+      px: 1,
+      py: compact ? 0.75 : 0.875,
+    },
+    "& .MuiDataGrid-columnHeaderFilterOperatorLabel": {
+      fontSize: compact ? "0.7rem" : "0.75rem",
+      color: "text.secondary",
+      px: 0.5,
     },
     "& .MuiDataGrid-iconButtonContainer": {
       visibility: "visible",
@@ -1148,11 +1206,18 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
         getRowId={(row) => row[uniqueIdField]}
         filterModel={filterModel}
         onFilterModelChange={setFilterModel}
+        disableColumnMenu={disableColumnMenu}
         disableRowSelectionOnClick
         hideFooter
         showToolbar
         columnVisibilityModel={columnVisibilityModel}
         onColumnVisibilityModelChange={setColumnVisibilityModel}
+        {...(enableHeaderFilters
+          ? ({
+              headerFilters: true,
+              headerFilterHeight: compact ? 44 : 50,
+            } as any)
+          : {})}
         slots={{
           toolbar: DataGridToolbar,
           loadingOverlay: Loader,
@@ -1283,6 +1348,12 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
           paginationMode="server"
           paginationModel={paginationModel}
           onPaginationModelChange={setPaginationModel}
+          {...(enableHeaderFilters
+            ? ({
+                headerFilters: true,
+                headerFilterHeight: compact ? 44 : 50,
+              } as any)
+            : {})}
           sortingMode="server"
           sortModel={sortModel}
           onSortModelChange={setSortModel}
@@ -1290,11 +1361,12 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
           filterMode="server"
           filterModel={filterModel}
           onFilterModelChange={setFilterModel}
+          disableColumnMenu={disableColumnMenu}
           disableRowSelectionOnClick
           hideFooter
           density={compact ? "compact" : "standard"}
           getRowHeight={() => rowHeight}
-          columnHeaderHeight={62}
+          columnHeaderHeight={columnHeaderHeight}
           columnVisibilityModel={columnVisibilityModel}
           onColumnVisibilityModelChange={setColumnVisibilityModel}
           slots={{

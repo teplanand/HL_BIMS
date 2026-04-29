@@ -1,9 +1,11 @@
 type OrderTrackingMockVariant =
-  | "completed"
-  | "inProgress"
   | "notStarted"
-  | "mixed"
-  | "designDelayed";
+  | "designComplete"
+  | "mfgComplete"
+  | "assemblyComplete"
+  | "testingComplete"
+  | "dispatchComplete"
+  | "dispatchDelayed";
 
 const COMMON_META = {
   created_date: "2026-01-01",
@@ -34,11 +36,13 @@ const BRANCHES = [
 
 const SUB_DIVISIONS = ["GHB", "MMD", "HSD", "PWD"] as const;
 const VARIANTS: OrderTrackingMockVariant[] = [
-  "completed",
-  "inProgress",
   "notStarted",
-  "mixed",
-  "designDelayed",
+  "designComplete",
+  "mfgComplete",
+  "assemblyComplete",
+  "testingComplete",
+  "dispatchComplete",
+  "dispatchDelayed",
 ];
 
 const pad = (value: number) => String(value).padStart(2, "0");
@@ -66,99 +70,18 @@ const getBaseOrder = (id: number) => {
     po_value: 500 + id * 125,
     cust_po_date: dateValue(month, day),
     cust_po_tech_clear_date: dateValue(month, day + 1),
-    delivery_date_po: dateValue(month, day + 20),
-    delivery_days_frm_po_date: 20,
+    delivery_date_po: dateValue(month, day + 28),
+    delivery_days_frm_po_date: 28,
     ga_dim_no: `GA-${pad(id)}`,
     work_order_no: `WO-${id}`,
     work_order_date: dateValue(month, day + 6),
-    commited_ex_works_delivery_date: dateValue(month, day + 24),
+    commited_ex_works_delivery_date: dateValue(month, day + 30),
     remarks: "",
     ...COMMON_META,
   };
 };
 
-const buildCompletedRecord = (id: number) => {
-  const base = getBaseOrder(id);
-  const month = ((id - 1) % 9) + 1;
-  const day = ((id - 1) % 5) + 1;
-
-  return {
-    ...base,
-    ora_item_desc: `Completed Order ${id}`,
-    ga_dim_drw_submission_design_plan: dateValue(month, day + 2),
-    ga_dim_drw_submission_design_actual: dateValue(month, day + 1),
-    final_drg_approval_received_date_plan: dateValue(month, day + 4),
-    final_drg_approval_received_date_actual: dateValue(month, day + 3),
-    po_received_date_to_ga_drw_submission_days: 5,
-    ga_drawing_submission_to_final_approval_received_days: 3,
-    days_in_drawing_approval: 3,
-    perc_time_taken_of_total_po_delivery: 35,
-    amp_plan: dateValue(month, day + 7),
-    amp_actual: dateValue(month, day + 7),
-    bom_plan: dateValue(month, day + 8),
-    bom_actual: dateValue(month, day + 8),
-    gear_case_plan: dateValue(month, day + 10),
-    gearcase_actual: dateValue(month, day + 10),
-    internal_plan: dateValue(month, day + 12),
-    internal_actual: dateValue(month, day + 12),
-    bo_plan: dateValue(month, day + 14),
-    bo_actual: dateValue(month, day + 14),
-    assembly_plan: dateValue(month, day + 16),
-    assembly_actual: dateValue(month, day + 16),
-    testing_plan: dateValue(month, day + 18),
-    testing_actual: dateValue(month, day + 18),
-    dispatch_date_plan: dateValue(month, day + 19),
-    dispatch_date_actual: dateValue(month, day + 19),
-    on_time_delivery: 100,
-    remarks: "Completed on time",
-  };
-};
-
-const buildInProgressRecord = (id: number) => {
-  const base = getBaseOrder(id);
-  const month = ((id - 1) % 9) + 1;
-  const day = ((id - 1) % 5) + 1;
-
-  return {
-    ...base,
-    ora_item_desc: `In Progress Order ${id}`,
-    ga_dim_drw_submission_design_plan: dateValue(month, day + 2),
-    ga_dim_drw_submission_design_actual: null,
-    final_drg_approval_received_date_plan: dateValue(month, day + 4),
-    final_drg_approval_received_date_actual: null,
-    po_received_date_to_ga_drw_submission_days: 4,
-    ga_drawing_submission_to_final_approval_received_days: 0,
-    days_in_drawing_approval: null,
-    perc_time_taken_of_total_po_delivery: 20,
-    amp_plan: dateValue(month, day + 7),
-    amp_actual: null,
-    bom_plan: dateValue(month, day + 8),
-    bom_actual: null,
-    gear_case_plan: dateValue(month, day + 10),
-    gearcase_actual: null,
-    internal_plan: dateValue(month, day + 12),
-    internal_actual: null,
-    bo_plan: dateValue(month, day + 14),
-    bo_actual: null,
-    assembly_plan: dateValue(month, day + 16),
-    assembly_actual: null,
-    testing_plan: dateValue(month, day + 18),
-    testing_actual: null,
-    dispatch_date_plan: dateValue(month, day + 19),
-    dispatch_date_actual: null,
-    on_time_delivery: null,
-    remarks: "Running in progress",
-  };
-};
-
-const buildNotStartedRecord = (id: number) => ({
-  ...getBaseOrder(id),
-  ora_item_desc: `Not Started Order ${id}`,
-  cust_po_date: null,
-  cust_po_tech_clear_date: null,
-  delivery_date_po: null,
-  delivery_days_frm_po_date: null,
-  ga_dim_no: null,
+const getEmptyStages = () => ({
   ga_dim_drw_submission_design_plan: null,
   ga_dim_drw_submission_design_actual: null,
   final_drg_approval_received_date_plan: null,
@@ -167,9 +90,6 @@ const buildNotStartedRecord = (id: number) => ({
   ga_drawing_submission_to_final_approval_received_days: null,
   days_in_drawing_approval: null,
   perc_time_taken_of_total_po_delivery: null,
-  work_order_no: null,
-  work_order_date: null,
-  commited_ex_works_delivery_date: null,
   amp_plan: null,
   amp_actual: null,
   bom_plan: null,
@@ -187,95 +107,116 @@ const buildNotStartedRecord = (id: number) => ({
   dispatch_date_plan: null,
   dispatch_date_actual: null,
   on_time_delivery: null,
-  remarks: "Not started",
 });
 
-const buildMixedRecord = (id: number) => {
+const buildStageProgressRecord = (
+  id: number,
+  variant: Exclude<OrderTrackingMockVariant, "notStarted">
+) => {
   const base = getBaseOrder(id);
   const month = ((id - 1) % 9) + 1;
   const day = ((id - 1) % 5) + 1;
 
-  return {
-    ...base,
-    ora_item_desc: `Mixed Status Order ${id}`,
-    ga_dim_drw_submission_design_plan: dateValue(month, day + 2),
-    ga_dim_drw_submission_design_actual: dateValue(month, day + 3),
-    final_drg_approval_received_date_plan: dateValue(month, day + 4),
-    final_drg_approval_received_date_actual: dateValue(month, day + 4),
-    po_received_date_to_ga_drw_submission_days: 5,
-    ga_drawing_submission_to_final_approval_received_days: 4,
-    days_in_drawing_approval: 4,
-    perc_time_taken_of_total_po_delivery: 48,
-    amp_plan: dateValue(month, day + 7),
-    amp_actual: null,
-    bom_plan: dateValue(month, day + 8),
-    bom_actual: dateValue(month, day + 9),
-    gear_case_plan: dateValue(month, day + 10),
-    gearcase_actual: null,
-    internal_plan: null,
-    internal_actual: null,
-    bo_plan: null,
-    bo_actual: null,
-    assembly_plan: dateValue(month, day + 16),
-    assembly_actual: null,
-    testing_plan: dateValue(month, day + 18),
-    testing_actual: dateValue(month, day + 19),
-    dispatch_date_plan: dateValue(month, day + 20),
-    dispatch_date_actual: null,
-    on_time_delivery: null,
-    remarks: "Mixed progress",
-  };
-};
-
-const buildDesignDelayedRecord = (id: number) => {
-  const base = getBaseOrder(id);
-  const month = ((id - 1) % 9) + 1;
-  const day = ((id - 1) % 5) + 1;
+  const isDispatchDelayed = variant === "dispatchDelayed";
+  const reachedDesign = true;
+  const reachedMfg = [
+    "mfgComplete",
+    "assemblyComplete",
+    "testingComplete",
+    "dispatchComplete",
+    "dispatchDelayed",
+  ].includes(variant);
+  const reachedAssembly = [
+    "assemblyComplete",
+    "testingComplete",
+    "dispatchComplete",
+    "dispatchDelayed",
+  ].includes(variant);
+  const reachedTesting = [
+    "testingComplete",
+    "dispatchComplete",
+    "dispatchDelayed",
+  ].includes(variant);
+  const reachedDispatch = ["dispatchComplete", "dispatchDelayed"].includes(variant);
 
   return {
     ...base,
-    ora_item_desc: `Design Delayed Order ${id}`,
+    ora_item_desc: `Stage ${variant} Order ${id}`,
+    ...getEmptyStages(),
     ga_dim_drw_submission_design_plan: dateValue(month, day + 2),
-    ga_dim_drw_submission_design_actual: dateValue(month, day + 2),
+    ga_dim_drw_submission_design_actual: reachedDesign ? dateValue(month, day + 2) : null,
     final_drg_approval_received_date_plan: dateValue(month, day + 4),
-    final_drg_approval_received_date_actual: dateValue(month, day + 5),
-    po_received_date_to_ga_drw_submission_days: 5,
-    ga_drawing_submission_to_final_approval_received_days: 7,
-    days_in_drawing_approval: 7,
-    perc_time_taken_of_total_po_delivery: 62,
+    final_drg_approval_received_date_actual: reachedDesign
+      ? dateValue(month, isDispatchDelayed ? day + 5 : day + 4)
+      : null,
+    po_received_date_to_ga_drw_submission_days: reachedDesign ? 5 : null,
+    ga_drawing_submission_to_final_approval_received_days: reachedDesign
+      ? isDispatchDelayed
+        ? 6
+        : 4
+      : null,
+    days_in_drawing_approval: reachedDesign
+      ? isDispatchDelayed
+        ? 6
+        : 4
+      : null,
+    perc_time_taken_of_total_po_delivery: reachedDispatch ? (isDispatchDelayed ? 78 : 64) : 36,
     amp_plan: dateValue(month, day + 7),
-    amp_actual: dateValue(month, day + 8),
+    amp_actual: reachedMfg ? dateValue(month, day + 7) : null,
     bom_plan: dateValue(month, day + 8),
-    bom_actual: dateValue(month, day + 10),
+    bom_actual: reachedDesign ? dateValue(month, isDispatchDelayed ? day + 9 : day + 8) : null,
     gear_case_plan: dateValue(month, day + 10),
-    gearcase_actual: dateValue(month, day + 12),
+    gearcase_actual: reachedMfg ? dateValue(month, isDispatchDelayed ? day + 11 : day + 10) : null,
     internal_plan: dateValue(month, day + 12),
-    internal_actual: dateValue(month, day + 14),
+    internal_actual: reachedMfg ? dateValue(month, isDispatchDelayed ? day + 13 : day + 12) : null,
     bo_plan: dateValue(month, day + 14),
-    bo_actual: dateValue(month, day + 16),
-    assembly_plan: dateValue(month, day + 16),
-    assembly_actual: dateValue(month, day + 18),
-    testing_plan: dateValue(month, day + 18),
-    testing_actual: dateValue(month, day + 20),
-    dispatch_date_plan: dateValue(month, day + 19),
-    dispatch_date_actual: dateValue(month, day + 22),
-    on_time_delivery: 0,
-    remarks: "Completed with design delay",
+    bo_actual: reachedMfg ? dateValue(month, isDispatchDelayed ? day + 15 : day + 14) : null,
+    assembly_plan: dateValue(month, day + 17),
+    assembly_actual: reachedAssembly ? dateValue(month, isDispatchDelayed ? day + 18 : day + 17) : null,
+    testing_plan: dateValue(month, day + 20),
+    testing_actual: reachedTesting ? dateValue(month, isDispatchDelayed ? day + 21 : day + 20) : null,
+    dispatch_date_plan: dateValue(month, day + 23),
+    dispatch_date_actual: reachedDispatch
+      ? dateValue(month, isDispatchDelayed ? day + 26 : day + 23)
+      : null,
+    on_time_delivery: reachedDispatch ? (isDispatchDelayed ? 0 : 100) : null,
+    remarks: {
+      designComplete: "Design stage completed",
+      mfgComplete: "Design and manufacturing completed",
+      assemblyComplete: "Assembly stage completed",
+      testingComplete: "Testing stage completed",
+      dispatchComplete: "Dispatch completed on time",
+      dispatchDelayed: "Dispatch completed with delay",
+    }[variant],
   };
 };
+
+const buildNotStartedRecord = (id: number) => ({
+  ...getBaseOrder(id),
+  ora_item_desc: `Not Started Order ${id}`,
+  cust_po_date: null,
+  cust_po_tech_clear_date: null,
+  delivery_date_po: null,
+  delivery_days_frm_po_date: null,
+  ga_dim_no: null,
+  work_order_no: null,
+  work_order_date: null,
+  commited_ex_works_delivery_date: null,
+  ...getEmptyStages(),
+  remarks: "",
+});
 
 const buildRecord = (id: number, variant: OrderTrackingMockVariant) => {
   switch (variant) {
-    case "completed":
-      return buildCompletedRecord(id);
-    case "inProgress":
-      return buildInProgressRecord(id);
     case "notStarted":
       return buildNotStartedRecord(id);
-    case "mixed":
-      return buildMixedRecord(id);
-    case "designDelayed":
-      return buildDesignDelayedRecord(id);
+    case "designComplete":
+    case "mfgComplete":
+    case "assemblyComplete":
+    case "testingComplete":
+    case "dispatchComplete":
+    case "dispatchDelayed":
+      return buildStageProgressRecord(id, variant);
   }
 };
 

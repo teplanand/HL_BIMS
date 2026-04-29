@@ -415,6 +415,9 @@ export const normalizeViewerProfile = (
     pickString(tokenPayload, ["hrmsid", "employeeId"]) ||
     "";
   const company = pickString(record, ["CompanyName", "Company"]) || "";
+  const companyId =
+    pickNumber(record, ["CompanyId", "companyId", "CompId"]) ||
+    pickNumber(tokenPayload, ["companyId", "CompanyId", "compId"]);
   const division = pickString(record, ["DivisionName", "Division"]) || "";
   const normalizedRole = role.toLowerCase();
   const canUpload = !/(client|viewer|read only|readonly)/i.test(normalizedRole);
@@ -424,6 +427,7 @@ export const normalizeViewerProfile = (
     hrmsId,
     role,
     company,
+    companyId,
     division,
     canUpload,
     canView: true,

@@ -234,7 +234,7 @@ const AppPortal = () => {
           <AnimatePresence>
             {sortedApps.map((app) => (
               <Grid
-                size={{ xs: 12, sm: 6, md: 4, lg: 3 }}
+                size={{ xs: 6, sm: 6, md: 4, lg: 3 }}
                 key={app.id}
                 component={motion.div}
                 layout

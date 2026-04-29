@@ -1,6 +1,6 @@
 export type EvidenceApiRecord = Record<string, unknown>;
 
-export type EvidenceWorkspaceMode = "upload" | "view";
+export type EvidenceWorkspaceMode = "upload" | "view" | "admin";
 
 export type EvidenceMediaKind = "image" | "video" | "audio" | "file";
 
@@ -43,6 +43,7 @@ export interface EvidenceViewerProfile {
   hrmsId: string;
   role: string;
   company: string;
+  companyId: number | null;
   division: string;
   canUpload: boolean;
   canView: boolean;

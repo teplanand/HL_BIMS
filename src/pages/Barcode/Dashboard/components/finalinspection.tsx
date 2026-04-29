@@ -15,11 +15,7 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
 import NotesOutlinedIcon from "@mui/icons-material/NotesOutlined";
 import { useToast } from "../../../../hooks/useToast";
-import {
-  useLazyGetQualityCheckDetailsQuery,
-  useLazyGetUnderAssemblyDetailsQuery,
-} from "../../../../redux/api/barcode";
-import { mapSerialLookup } from "../barcodeAdapters";
+import { getMockGearMotorLookup } from "../mockBarcodeService";
 
 const mountTypeOptions = [
   "Foot Mount",
@@ -153,15 +149,10 @@ const accessoryFields: CheckboxField[] = [
 
 function FinalInspectionForm() {
   const { showToast } = useToast();
-  const [triggerUnderAssembly] = useLazyGetUnderAssemblyDetailsQuery();
-  const [triggerQualityCheck] = useLazyGetQualityCheckDetailsQuery();
   const { register, handleSubmit, getValues, setValue } = useForm({ defaultValues });
 
   const onSubmit = () => {
-    showToast(
-      "Final inspection lookup API is integrated. Save endpoint is not present in current Apidog spec.",
-      "info"
-    );
+    showToast("Temporary static mode: final inspection updated locally", "success");
   };
 
   const handleGetDetails = async () => {
@@ -173,21 +164,24 @@ function FinalInspectionForm() {
     }
 
     try {
-      let response: any;
-
-      try {
-        response = await triggerQualityCheck({ serial_no: serialNumber }).unwrap();
-      } catch {
-        response = await triggerUnderAssembly({ serial_no: serialNumber }).unwrap();
+      const lookup = getMockGearMotorLookup(serialNumber)?.finalInspection;
+      if (!lookup) {
+        showToast("No static final inspection data found", "warning");
+        return;
       }
 
-      const lookup = mapSerialLookup(response?.data, serialNumber);
-
       setValue("gearedMotorSerialNumber", serialNumber, { shouldDirty: true });
+      setValue("mountType", lookup.mountType, { shouldDirty: true });
       setValue("model", lookup.model, { shouldDirty: true });
       setValue("workOrderNumber", lookup.workOrderNumber, { shouldDirty: true });
       setValue("rpm", lookup.rpm, { shouldDirty: true });
       setValue("motorSerialNumber", lookup.motorSerialNumber, { shouldDirty: true });
+      setValue("pole", lookup.pole, { shouldDirty: true });
+      setValue("electricMotorMake", lookup.electricMotorMake, { shouldDirty: true });
+      setValue("boreSize", lookup.boreSize, { shouldDirty: true });
+      setValue("holdBack.type", lookup.holdBackType, { shouldDirty: true });
+      setValue("remarks", lookup.remarks, { shouldDirty: true });
+      setValue("accessories", { ...lookup.accessories }, { shouldDirty: true });
 
       showToast("Final inspection details loaded", "success");
     } catch (error: any) {
@@ -226,7 +220,7 @@ function FinalInspectionForm() {
                 sx={{ color: "#B45309", display: "block", mb: 1.25 }}
               >
                 Enter geared motor serial number and click Get to load inspection details
-                from the barcode APIs.
+                from temporary static barcode data.
               </Typography>
               <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
                 <MuiTextField

@@ -40,6 +40,7 @@ declare module "@mui/x-data-grid" {
     onClearFilters?: () => void;
     isGridView?: boolean;
     hideTitleSection?: boolean;
+    showFilterButton?: boolean;
   }
 }
 
@@ -55,6 +56,7 @@ export interface DataGridToolbarProps extends GridToolbarProps {
   onClearFilters?: () => void;
   isGridView?: boolean;
   hideTitleSection?: boolean;
+  showFilterButton?: boolean;
 }
 
 const DataGridToolbar: React.FC<DataGridToolbarProps> = ({
@@ -68,6 +70,7 @@ const DataGridToolbar: React.FC<DataGridToolbarProps> = ({
   onClearFilters,
   isGridView = false,
   hideTitleSection = false,
+  showFilterButton = true,
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -206,30 +209,32 @@ const DataGridToolbar: React.FC<DataGridToolbarProps> = ({
                   }
                 />
               </MenuItem>
-              <MenuItem>
-                <FilterPanelTrigger
-                  render={(props, state) => (
-                    <Box
-                      {...props}
-                      sx={{
-                        display: "flex",
-                        width: "100%",
-                        alignItems: "center",
-                      }}
-                    >
-                      <Badge
-                        badgeContent={state.filterCount}
-                        color="primary"
-                        variant="dot"
-                        sx={{ mr: 2 }}
+              {showFilterButton && (
+                <MenuItem>
+                  <FilterPanelTrigger
+                    render={(props, state) => (
+                      <Box
+                        {...props}
+                        sx={{
+                          display: "flex",
+                          width: "100%",
+                          alignItems: "center",
+                        }}
                       >
-                        <FilterListIcon fontSize="small" />
-                      </Badge>
-                      Filters
-                    </Box>
-                  )}
-                />
-              </MenuItem>
+                        <Badge
+                          badgeContent={state.filterCount}
+                          color="primary"
+                          variant="dot"
+                          sx={{ mr: 2 }}
+                        >
+                          <FilterListIcon fontSize="small" />
+                        </Badge>
+                        Filters
+                      </Box>
+                    )}
+                  />
+                </MenuItem>
+              )}
 
               {refetch && (
                 <MenuItem
@@ -282,25 +287,27 @@ const DataGridToolbar: React.FC<DataGridToolbarProps> = ({
                   }
                 />
               </Tooltip>
-              <Tooltip title="Filters">
-                <FilterPanelTrigger
-                  render={(props, state) => (
-                    <IconButton
-                      {...props}
-                      size="small"
-                      color={state.filterCount > 0 ? "primary" : "default"}
-                    >
-                      <Badge
-                        badgeContent={state.filterCount}
-                        color="primary"
-                        variant="dot"
+              {showFilterButton && (
+                <Tooltip title="Filters">
+                  <FilterPanelTrigger
+                    render={(props, state) => (
+                      <IconButton
+                        {...props}
+                        size="small"
+                        color={state.filterCount > 0 ? "primary" : "default"}
                       >
-                        <FilterListIcon fontSize="small" />
-                      </Badge>
-                    </IconButton>
-                  )}
-                />
-              </Tooltip>
+                        <Badge
+                          badgeContent={state.filterCount}
+                          color="primary"
+                          variant="dot"
+                        >
+                          <FilterListIcon fontSize="small" />
+                        </Badge>
+                      </IconButton>
+                    )}
+                  />
+                </Tooltip>
+              )}
               {/* Export */}
               {showExport && (
                 <>
