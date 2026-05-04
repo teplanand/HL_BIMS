@@ -31,6 +31,9 @@ const appendFormValue = (formData: FormData, key: string, value: StringLike) => 
   }
 };
 
+const isClientPreviewPath = (value: StringLike) =>
+  typeof value === "string" && /^(data:|blob:)/i.test(value);
+
 export const buildWarehouseCreatePayload = (
   payload: {
     orgId?: StringLike;
@@ -243,7 +246,9 @@ export const buildWarehouseItemCreateFormData = (payload: {
   appendFormValue(formData, "out_qty", payload.out_qty);
   appendFormValue(formData, "item_image_document_id", payload.item_image_document_id);
   appendFormValue(formData, "item_image_name", payload.item_image_name);
-  appendFormValue(formData, "item_image_path", payload.item_image_path);
+  if (!isClientPreviewPath(payload.item_image_path)) {
+    appendFormValue(formData, "item_image_path", payload.item_image_path);
+  }
   appendFormValue(formData, "file_name", payload.file_name);
   appendFormValue(formData, "qr_code", payload.qr_code);
 
@@ -293,10 +298,7 @@ export const buildWarehouseItemUpdateFormData = (payload: {
   appendFormValue(formData, "in_qty", payload.in_qty);
   appendFormValue(formData, "out_qty", payload.out_qty);
   appendFormValue(formData, "item_image_document_id", payload.item_image_document_id);
-  appendFormValue(formData, "item_image_name", payload.item_image_name);
-  appendFormValue(formData, "item_image_path", payload.item_image_path);
   appendFormValue(formData, "file_name", payload.file_name);
-  appendFormValue(formData, "qr_code", payload.qr_code);
 
   if (payload.item_image_file instanceof File) {
     formData.append("file", payload.item_image_file);

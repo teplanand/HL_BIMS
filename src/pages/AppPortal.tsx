@@ -123,7 +123,7 @@ const INITIAL_APPS = [
     id: 10,
     name: "Evidance Collection",
     icon: FactCheckIcon,
-    path: "/evidance/dashboard", // Navigate to existing dashboard
+    path: "/evidance/client-dashboard",
     notifications: 0,
     hasAccess: true,
     color: "#7C3AED",

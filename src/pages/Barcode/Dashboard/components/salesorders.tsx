@@ -14,15 +14,16 @@ import { useModal } from "../../../../hooks/useModal";
 import {
   BarcodeRecentOrderRow,
   mapSalesOrderDetails,
+  mapSalesOrdersList,
 } from "../barcodeAdapters";
-import { defaultRecentOrders } from "..";
-import { getMockSalesOrders } from "../mockBarcodeService";
 import {
   getBarcodeDefaultContext,
+  useGetSalesOrdersQuery,
   useLazyGetSalesOrderDetailsQuery,
 } from "../../../../redux/api/barcode";
 
 type RecentSalesOrder = BarcodeRecentOrderRow;
+const EMPTY_SALES_ORDERS: RecentSalesOrder[] = [];
 
 const getStatusColor = (status: RecentSalesOrder["status"]) => {
   switch (status) {
@@ -49,23 +50,34 @@ const formatDate = (value?: string) => {
 };
 
 interface SalesOrdersProps {
-  recentOrders?: RecentSalesOrder[];
+  salesOrders?: RecentSalesOrder[];
   title?: string;
   loading?: boolean;
-  onOrderView?: (order: RecentSalesOrder) => void;
+  summaryBadges?: Array<{
+    key: string;
+    title: string;
+    count: string | number;
+    color?: string;
+  }>;
   setDisplayTitle?: (title: string) => void;
   setHideFooter?: (hidden: boolean) => void;
   setWidth?: (width: number | string) => void;
 }
 
 const SalesOrders = ({
-  recentOrders = defaultRecentOrders,
+  salesOrders,
   title,
   loading = false,
-  onOrderView,
+  summaryBadges = [],
 }: SalesOrdersProps) => {
   const { openModal } = useModal();
   const [triggerOrderDetails] = useLazyGetSalesOrderDetailsQuery();
+  const { data: salesOrdersResponse, isLoading: isSalesOrdersLoading } = useGetSalesOrdersQuery(
+    undefined,
+    {
+      skip: salesOrders !== undefined,
+    }
+  );
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
     page: 0,
     pageSize: 5,
@@ -76,16 +88,18 @@ const SalesOrders = ({
     quickFilterValues: [],
   });
   const salesOrderRows = useMemo(() => {
-    if (recentOrders.length > 0) {
-      return recentOrders;
+    if (salesOrders !== undefined) {
+      return salesOrders;
     }
 
-    return getMockSalesOrders();
-  }, [recentOrders]);
+    if (!salesOrdersResponse) {
+      return EMPTY_SALES_ORDERS;
+    }
+
+    return mapSalesOrdersList(salesOrdersResponse?.data ?? salesOrdersResponse);
+  }, [salesOrders, salesOrdersResponse]);
 
   const openQuickView = async (order: RecentSalesOrder): Promise<void> => {
-    onOrderView?.(order);
-
     let prefetchedDetails = null;
 
     try {
@@ -191,13 +205,33 @@ const SalesOrders = ({
     []
   );
 
+  const headerControls = useMemo(
+    () => (
+      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+        {summaryBadges.map((badge) => (
+          <Chip
+            key={badge.key}
+            size="small"
+            label={`${badge.count} ${badge.title.toLowerCase()}`}
+            sx={{
+              fontWeight: 700,
+              bgcolor: badge.color ? `${badge.color}1F` : "rgba(59,130,246,0.12)",
+              color: badge.color || "#1D4ED8",
+            }}
+          />
+        ))}
+      </Box>
+    ),
+    [summaryBadges],
+  );
+
   return (
     <Box>
       <ReusableDataGrid
         rows={salesOrderRows}
         columns={columns}
         totalCount={salesOrderRows.length}
-        loading={loading}
+        loading={loading || isSalesOrdersLoading}
         paginationModel={paginationModel}
         setPaginationModel={setPaginationModel}
         sortModel={sortModel}
@@ -206,8 +240,9 @@ const SalesOrders = ({
         setFilterModel={setFilterModel}
         title={title || "Sales Orders"}
         refetch={() => undefined}
+        headerControls={summaryBadges.length ? headerControls : undefined}
         enableViewToggle={false}
-     
+      
         permissions={{
           create: false,
           edit: false,

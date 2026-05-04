@@ -18,6 +18,7 @@ import {
   MonitorHeart as MonitorHeartIcon,
   Assignment as AssignmentIcon,
   SyncAlt as SyncAltIcon,
+  PersonAddAlt as PersonAddAltIcon,
 } from "@mui/icons-material";
 import type { Navigation } from "@toolpad/core/AppProvider";
 
@@ -25,8 +26,9 @@ import type { Navigation } from "@toolpad/core/AppProvider";
 import SupplierPage from "./pages/AdvanceVoucher/Supplier";
 import POPage from "./pages/AdvanceVoucher/PO";
 import EvidanceDashboard from "./pages/EvidanceCollection/Dashboard";
-import EvidanceSupplierPage from "./pages/EvidanceCollection/Dashboard";
-import EvidancePOPage from "./pages/EvidanceCollection/Dashboard";
+import EvidanceAdminDashboard from "./pages/EvidanceCollection/AdminDashboard";
+import EvidanceUserRegistrationPage from "./pages/EvidanceCollection/UserRegistration";
+import EvidanceCompaniesListPage from "./pages/EvidanceCollection/CompaniesList";
 import InventoryDashboard from "./pages/Warehouse/Dashboard";
 import WarehouselistPage from "./pages/Warehouse/Warehouselist";
 import ZonelistPage from "./pages/Warehouse/Zonelist";
@@ -328,26 +330,33 @@ export const moduleRoutes: ModuleRouteConfig[] = [
   {
     module: "evidance",
     children: [
-      {
-        name: "Dashboard",
+       {
+        name: "Client Dashboard",
         icon: <DashboardOutlinedIcon />,
         roles: ["admin"],
-        path: "/dashboard",
+        path: "/client-dashboard",
         element: <EvidanceDashboard />,
       },
       {
-        name: "Supplier",
-        icon: <BusinessIcon />,
+        name: "Admin Dashboard",
+        icon: <DashboardOutlinedIcon />,
         roles: ["admin"],
-        path: "/supplier",
-        element: <EvidanceSupplierPage />,
+        path: "/admin-dashboard",
+        element: <EvidanceAdminDashboard />,
       },
       {
-        name: "PO",
-        icon: <VerifiedIcon />,
+        name: "User Registration",
+        icon: <PersonAddAltIcon />,
         roles: ["admin"],
-        path: "/po",
-        element: <EvidancePOPage />,
+        path: "/user-registration",
+        element: <EvidanceUserRegistrationPage />,
+      },
+      {
+        name: "Companies List",
+        icon: <BusinessIcon />,
+        roles: ["admin"],
+        path: "/companies",
+        element: <EvidanceCompaniesListPage />,
       },
     ],
   },
@@ -387,13 +396,15 @@ export const moduleRoutes: ModuleRouteConfig[] = [
 ];
 
 export const navItems: NavItem[] = moduleRoutes.flatMap((module) =>
-  module.children.map((page) => ({
-    name: page.name,
-    icon: page.icon,
-    path: `/${module.module}${page.path}`,
-    roles: page.roles,
-    module: module.module,
-  })),
+  module.children
+    .filter((page) => !(module.module === "barcode" && page.path === "/salesorders"))
+    .map((page) => ({
+      name: page.name,
+      icon: page.icon,
+      path: `/${module.module}${page.path}`,
+      roles: page.roles,
+      module: module.module,
+    })),
 );
 
 export const NAVIGATION: Navigation = navItems.map((item) => ({

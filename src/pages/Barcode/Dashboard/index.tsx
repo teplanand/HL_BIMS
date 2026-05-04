@@ -1,90 +1,84 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { Box, Button, Card, CardContent, Grid, Stack, Typography } from "@mui/material";
 
 import SalesOrders from "./components/salesorders";
 import { useDialog } from "../../../hooks/useDialog";
 import Importsalesorders from "./components/importsalesorders";
-import { BarcodeRecentOrderRow, mapSalesOrdersList } from "./barcodeAdapters";
-import { getMockSalesOrders } from "./mockBarcodeService";
-import { useGetSalesOrdersQuery } from "../../../redux/api/barcode";
+import { mapSalesOrdersList } from "./barcodeAdapters";
+import {
+  useGetSalesOrdersInitQuery,
+  useGetSalesOrdersQuery,
+} from "../../../redux/api/barcode";
 
-const STORAGE_KEY = "barcode_recent_sales_orders";
-const MAX_RECENT_ORDERS = 10;
-
-export const defaultRecentOrders: BarcodeRecentOrderRow[] = getMockSalesOrders().slice(
-  0,
-  MAX_RECENT_ORDERS
-);
-
-const persistRecentOrders = (orders: BarcodeRecentOrderRow[]) => {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify(orders.slice(0, MAX_RECENT_ORDERS))
-  );
+const counterLabelMap: Record<string, string> = {
+  totalsalesorder: "Total Sales Orders",
+  imported: "Imported",
+  generated: "Generated",
+  openorders: "Open Orders",
+  newimportsalse: "New Import Sales",
 };
 
-const safeReadRecentOrders = (): BarcodeRecentOrderRow[] => {
-  if (typeof window === "undefined") {
-    return defaultRecentOrders;
+const counterColorMap: Record<string, string> = {
+  totalsalesorder: "#1D4ED8",
+  imported: "#D97706",
+  generated: "#0891B2",
+  openorders: "#059669",
+  newimportsalse: "#7C3AED",
+};
+
+const normalizeCounterKey = (key: string) => key.replace(/[\s_-]/g, "").toLowerCase();
+
+const getCounterLabel = (key: string) => {
+  const normalizedKey = normalizeCounterKey(key);
+  if (counterLabelMap[normalizedKey]) {
+    return counterLabelMap[normalizedKey];
   }
 
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return defaultRecentOrders;
-    }
+  return key
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+};
 
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || !parsed.length) {
-      return defaultRecentOrders;
-    }
-
-    return parsed.slice(0, MAX_RECENT_ORDERS);
-  } catch {
-    return defaultRecentOrders;
+const toCounterValue = (value: unknown) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
   }
+
+  if (typeof value === "string") {
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : value;
+  }
+
+  if (typeof value === "boolean") {
+    return value ? 1 : 0;
+  }
+
+  return 0;
 };
 
 const BarcodeDashboard = () => {
   const { openDialog } = useDialog();
-  const [recentOrders, setRecentOrders] = useState<BarcodeRecentOrderRow[]>([]);
-  const { data: salesOrdersResponse, isLoading } = useGetSalesOrdersQuery();
+  const {
+    data: salesOrdersResponse,
+    isLoading,
+    refetch: refetchSalesOrders,
+  } = useGetSalesOrdersQuery();
+  const {
+    data: initResponse,
+    isLoading: isInitLoading,
+    refetch: refetchInit,
+  } = useGetSalesOrdersInitQuery();
+  const salesOrders = useMemo(
+    () => mapSalesOrdersList(salesOrdersResponse?.data ?? salesOrdersResponse),
+    [salesOrdersResponse]
+  );
 
-  useEffect(() => {
-    const mappedOrders = mapSalesOrdersList(salesOrdersResponse?.data ?? salesOrdersResponse);
-
-    if (mappedOrders.length) {
-      setRecentOrders(mappedOrders);
-      persistRecentOrders(mappedOrders);
-      return;
-    }
-
-    setRecentOrders(safeReadRecentOrders());
-  }, [salesOrdersResponse]);
-
-  const handleOrderView = useCallback((order: BarcodeRecentOrderRow) => {
-    setRecentOrders((currentOrders) => {
-      const nextOrders = [
-        order,
-        ...currentOrders.filter(
-          (currentOrder) => currentOrder.orderNumber !== order.orderNumber
-        ),
-      ].slice(0, MAX_RECENT_ORDERS);
-
-      persistRecentOrders(nextOrders);
-      return nextOrders;
-    });
-  }, []);
-
-  const dashboardStats = useMemo(() => {
-    const totalOrders = recentOrders.length;
-    const importedCount = recentOrders.filter((order) => order.importStatus === true).length;
-    const generatedCount = recentOrders.filter((order) => order.generateStatus === true).length;
-    const openOrderCount = recentOrders.filter(
+  const fallbackDashboardStats = useMemo(() => {
+    const totalOrders = salesOrders.length;
+    const importedCount = salesOrders.filter((order) => order.importStatus === true).length;
+    const generatedCount = salesOrders.filter((order) => order.generateStatus === true).length;
+    const openOrderCount = salesOrders.filter(
       (order) => String(order.rawOrderStatus || "").toUpperCase() === "OPEN"
     ).length;
 
@@ -94,7 +88,6 @@ const BarcodeDashboard = () => {
         title: "Total Sales Orders",
         count: totalOrders,
         color: "#1D4ED8",
-        showImport: true,
       },
       {
         key: "imported",
@@ -115,13 +108,33 @@ const BarcodeDashboard = () => {
         color: "#059669",
       },
     ];
-  }, [recentOrders]);
+  }, [salesOrders]);
+
+  const dashboardStats = useMemo(() => {
+    const initCounters = initResponse?.data;
+    if (!initCounters || Array.isArray(initCounters) || typeof initCounters !== "object") {
+      return fallbackDashboardStats;
+    }
+
+    return Object.entries(initCounters).map(([key, value]) => {
+      const normalizedKey = normalizeCounterKey(key);
+      const count = toCounterValue(value);
+
+      return {
+        key,
+        title: getCounterLabel(key),
+        count,
+        color: counterColorMap[normalizedKey] || "#1D4ED8",
+        showImport: normalizedKey === "newimportsalse" && Number(count || 0) > 0,
+      };
+    });
+  }, [fallbackDashboardStats, initResponse]);
 
   return (
     <Box>
       <Grid container spacing={2} className="mb-4">
         {dashboardStats.map((card) => (
-          <Grid size={{ xs: 12, sm: 6, md: 3 }} key={card.key}>
+          <Grid size={{ xs: 12, sm: 3, md: 1 }} key={card.key}>
             <Card
               sx={{
                 height: "100%",
@@ -165,7 +178,12 @@ const BarcodeDashboard = () => {
                                 width: 520,
                                 showCloseButton: true,
                                 component: (modalProps: any) => (
-                                  <Importsalesorders {...modalProps} />
+                                  <Importsalesorders
+                                    {...modalProps}
+                                    onImportCompleted={async () => {
+                                      await Promise.all([refetchInit(), refetchSalesOrders()]);
+                                    }}
+                                  />
                                 ),
                               })
                             }
@@ -184,10 +202,15 @@ const BarcodeDashboard = () => {
       </Grid>
 
       <SalesOrders
-        recentOrders={recentOrders}
-        loading={isLoading}
-        onOrderView={handleOrderView}
+        salesOrders={salesOrders}
+        loading={isLoading || isInitLoading}
         title="Sales Orders"
+        summaryBadges={dashboardStats.map((card) => ({
+          key: card.key,
+          title: card.title,
+          count: card.count,
+          color: card.color,
+        }))}
       />
     </Box>
   );

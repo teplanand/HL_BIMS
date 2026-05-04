@@ -26,6 +26,15 @@ export interface BarcodeCreateWorkOrderRequest extends BarcodeContextPayload {
   order_type: string;
 }
 
+export interface BarcodeCreateWorkOrderResponseData {
+  header_id?: number | null;
+  Massage?: string | null;
+  ORACLE_ORDER_NUMBER?: number | string | null;
+  ORDER_TYPE?: string | null;
+  WONO?: string | null;
+  WONODATE?: string | null;
+}
+
 export interface BarcodeGenerateSerialRequest {
   DIVISION_ID: number;
   LINE_ID: number | string;
@@ -38,10 +47,25 @@ export interface BarcodeIssueMaterialRequest extends BarcodeContextPayload {
 export interface BarcodePrintLabelRequest {
   WONO: string;
   Line_Id: number | string;
+  ORGANIZATION_ID?: number | string;
+  ORDER_LINE_NO?: number | string;
+}
+
+export interface BarcodePrintLabelResponse {
+  blob: Blob | null;
+  message?: string;
+  data?: unknown;
+  contentType?: string | null;
+  fileName?: string | null;
 }
 
 export interface BarcodeSerialLookupRequest {
   serial_no: string;
+}
+
+export interface BarcodeUnderAssemblyRequest {
+  serial_no: string;
+  id: number | string;
 }
 
 export interface BarcodeCompletionLookupRequest {
@@ -81,6 +105,38 @@ export interface BarcodeCompletionUpdateRequest {
   dtPrint: BarcodeCompletionRecordPayload;
 }
 
+export interface BarcodeQualityCheckSaveRequest {
+  serial_no: string;
+  position: string;
+  pole: string;
+  make: string;
+  additional_requirement: boolean;
+  breather_plug: boolean;
+  oil_level_indicator: boolean;
+  oil_level_sticker: boolean;
+  caution_sticker: boolean;
+  name_plate: boolean;
+  shaft_protector: boolean;
+  adaptor_cover: boolean;
+  eye_bolt: boolean;
+  torque_brush: boolean;
+  end_cover: boolean;
+  spring_washer: boolean;
+  circlip: boolean;
+  hex_bolt: boolean;
+  washer: boolean;
+  output_flange: boolean;
+  single_exe_shaft: boolean;
+  double_exe_shaft: boolean;
+  torque_arm: boolean;
+  motor_mounting_ring: boolean;
+  mountingfeet: boolean;
+  hold_back_cw_acw: string;
+  bore_size: string;
+  remarks: string;
+  created_by: string;
+}
+
 export interface BarcodeImportResponseData {
   order_booked_date?: string | null;
   order_type_id?: number | null;
@@ -89,6 +145,11 @@ export interface BarcodeImportResponseData {
   customer_name?: string | null;
   customer_number?: string | null;
 }
+
+export type BarcodeSalesOrderInitData = Record<
+  string,
+  number | string | boolean | null | undefined
+>;
 
 export interface BarcodeSalesOrderLineSerialRaw {
   id?: number | null;
@@ -100,6 +161,8 @@ export interface BarcodeSalesOrderLineSerialRaw {
   ASS_REL_DATE?: string | null;
   ac_ua_date?: string | null;
   AC_UA_DATE?: string | null;
+  ac_qc_date?: string | null;
+  AC_QC_DATE?: string | null;
   ac_comp_date?: string | null;
   AC_COMP_DATE?: string | null;
   ac_pk_date?: string | null;
@@ -267,6 +330,20 @@ const parseNumericEnv = (value: string | undefined, fallback: number) => {
   return Number.isFinite(parsedValue) ? parsedValue : fallback;
 };
 
+const getFileNameFromContentDisposition = (value: string | null) => {
+  if (!value) {
+    return null;
+  }
+
+  const utfMatch = value.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utfMatch?.[1]) {
+    return decodeURIComponent(utfMatch[1]);
+  }
+
+  const asciiMatch = value.match(/filename="?([^"]+)"?/i);
+  return asciiMatch?.[1] || null;
+};
+
 export const barcodeDefaults = {
   baseUrl:
     import.meta.env.VITE_BARCODE_API_BASE_URL || "https://barcodeapi.techelecon.in/api",
@@ -301,6 +378,19 @@ export const barcodeApi = createApi({
       }),
       providesTags: ["BarcodeSalesOrder"],
     }),
+    getSalesOrdersInit: builder.query<
+      BarcodeApiResponse<BarcodeSalesOrderInitData>,
+      Partial<BarcodeContextPayload> | void
+    >({
+      query: (body) => ({
+        url: "/barcode/sales-orders/init",
+        method: "POST",
+        body: {
+          ...getBarcodeDefaultContext(),
+          ...(body || {}),
+        },
+      }),
+    }),
     importSalesOrders: builder.mutation<
       BarcodeApiResponse<BarcodeImportResponseData>,
       Partial<BarcodeContextPayload> | void
@@ -328,15 +418,15 @@ export const barcodeApi = createApi({
         { type: "BarcodeSalesOrder", id: String(arg.order_number) },
       ],
     }),
-    createWorkOrder: builder.mutation<BarcodeApiResponse, BarcodeCreateWorkOrderRequest>({
+    createWorkOrder: builder.mutation<
+      BarcodeApiResponse<BarcodeCreateWorkOrderResponseData>,
+      BarcodeCreateWorkOrderRequest
+    >({
       query: (body) => ({
         url: "/barcode/sales-orders/workordercreate",
         method: "POST",
         body,
       }),
-      invalidatesTags: (_result, _error, arg) => [
-        { type: "BarcodeSalesOrder", id: String(arg.LINE_ID) },
-      ],
     }),
     generateSerialNumbers: builder.mutation<BarcodeApiResponse, BarcodeGenerateSerialRequest>({
       query: (body) => ({
@@ -344,7 +434,6 @@ export const barcodeApi = createApi({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["BarcodeSalesOrder"],
     }),
     issueMaterial: builder.mutation<BarcodeApiResponse, BarcodeIssueMaterialRequest>({
       query: (body) => ({
@@ -352,18 +441,51 @@ export const barcodeApi = createApi({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["BarcodeSalesOrder"],
     }),
-    printLabel: builder.mutation<BarcodeApiResponse, BarcodePrintLabelRequest>({
+    printLabel: builder.mutation<BarcodePrintLabelResponse, BarcodePrintLabelRequest>({
       query: (body) => ({
         url: "/barcode/sales-orders/printlabel",
         method: "POST",
         body,
+        headers: {
+          Accept: "application/pdf, application/json",
+        },
+        responseHandler: async (response) => {
+          const contentType = response.headers.get("content-type") || "";
+
+          if (contentType.toLowerCase().includes("application/json")) {
+            return response.json();
+          }
+
+          return response.blob();
+        },
       }),
+      transformResponse: (response: Blob | BarcodeApiResponse, meta) => {
+        const contentType = meta?.response?.headers.get("content-type");
+        const fileName = getFileNameFromContentDisposition(
+          meta?.response?.headers.get("content-disposition")
+        );
+
+        if (response instanceof Blob) {
+          return {
+            blob: response,
+            contentType,
+            fileName,
+          };
+        }
+
+        return {
+          blob: null,
+          message: response?.message,
+          data: response?.data,
+          contentType,
+          fileName,
+        };
+      },
     }),
     getUnderAssemblyDetails: builder.query<
       BarcodeApiResponse<BarcodeSerialLookupResponseData>,
-      BarcodeSerialLookupRequest
+      BarcodeUnderAssemblyRequest
     >({
       query: (body) => ({
         url: "/barcode/sales-orders/underAssembly",
@@ -401,12 +523,23 @@ export const barcodeApi = createApi({
         body,
       }),
     }),
+    qualityCheckSave: builder.mutation<
+      BarcodeApiResponse,
+      BarcodeQualityCheckSaveRequest
+    >({
+      query: (body) => ({
+        url: "/barcode/sales-orders/qualityCheckSave",
+        method: "POST",
+        body,
+      }),
+    }),
   }),
 });
 
 export const {
   useLazyGetSalesOrdersQuery,
   useGetSalesOrdersQuery,
+  useGetSalesOrdersInitQuery,
   useImportSalesOrdersMutation,
   useGetSalesOrderDetailsQuery,
   useLazyGetSalesOrderDetailsQuery,
@@ -418,4 +551,5 @@ export const {
   useLazyGetQualityCheckDetailsQuery,
   useLazyGetCompletionGearboxDetailsQuery,
   useUpdateOrderCompletionStageMutation,
+  useQualityCheckSaveMutation,
 } = barcodeApi;

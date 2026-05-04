@@ -192,7 +192,6 @@ export const orderTrackingApi = createApi({
   reducerPath: "orderTrackingApi",
   baseQuery: createAppBaseQuery({
     baseUrl: "https://ordtrk.techelecon.in/api",
-    includeAuthHeader: false,
     prepareHeaders: (headers) => {
       headers.set("Content-Type", "application/json");
       return headers;

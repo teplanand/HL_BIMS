@@ -8,6 +8,7 @@ export interface EvidenceCategoryOption {
   id: string;
   numericId: number | null;
   label: string;
+  childLabel: string;
   subtitle: string;
   raw: EvidenceApiRecord | null;
 }

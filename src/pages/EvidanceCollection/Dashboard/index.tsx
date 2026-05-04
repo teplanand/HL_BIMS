@@ -36,6 +36,8 @@ import VisibilityRoundedIcon from "@mui/icons-material/VisibilityRounded";
 import FolderOpenRoundedIcon from "@mui/icons-material/FolderOpenRounded";
 import CategoryRoundedIcon from "@mui/icons-material/CategoryRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
+import ChevronLeftRoundedIcon from "@mui/icons-material/ChevronLeftRounded";
+import ChevronRightRoundedIcon from "@mui/icons-material/ChevronRightRounded";
 import ImageRoundedIcon from "@mui/icons-material/ImageRounded";
 import MovieRoundedIcon from "@mui/icons-material/MovieRounded";
 import AudiotrackRoundedIcon from "@mui/icons-material/AudiotrackRounded";
@@ -44,14 +46,17 @@ import CloudUploadRoundedIcon from "@mui/icons-material/CloudUploadRounded";
 import VerifiedRoundedIcon from "@mui/icons-material/VerifiedRounded";
 import LockOpenRoundedIcon from "@mui/icons-material/LockOpenRounded";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
+import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
 import { toast } from "react-toastify";
 
 import { Page } from "../../../components/common/Page";
 import {
   useCheckTransactionMutation,
+  useCheckForCategoryMutation,
   useCreateCategoryMutation,
   useFilterReferenceNoMutation,
   useGetAudioMutation,
+  useGetChildRefNoMutation,
   useGetImagesMutation,
   useGetRefreneceNumbersListMutation,
   useGetUserCategoriesMutation,
@@ -132,6 +137,23 @@ const workspaceTitleMap: Record<EvidenceWorkspaceMode, string> = {
 const warehouseAccent = "#FF8A3D";
 const warehouseAccentDark = "#C2410C";
 const warehouseSlate = "#0F172A";
+const EVIDENCE_CHILD_CATEGORY_ID = 1;
+
+type EvidencePhaseOption = {
+  id: string;
+  phaseId: number | null;
+  phaseName: string;
+};
+
+const formatCategoryInlineLabel = (category: EvidenceCategoryOption | null) => {
+  if (!category) {
+    return "";
+  }
+
+  return category.childLabel
+    ? `${category.label} / ${category.childLabel}`
+    : category.label;
+};
 
 const pickPreviewKind = (file: File): EvidenceMediaKind => {
   if (file.type.startsWith("image/")) {
@@ -146,16 +168,97 @@ const pickPreviewKind = (file: File): EvidenceMediaKind => {
   return "file";
 };
 
+const sanitizeDownloadFileName = (value: string) =>
+  value.replace(/[<>:"/\\|?*\u0000-\u001F]/g, "_").trim();
+
+const getFileExtensionFromUrl = (value: string) => {
+  const cleanValue = value.split("#")[0].split("?")[0];
+  const fileName = cleanValue.split("/").pop() ?? "";
+  const lastDotIndex = fileName.lastIndexOf(".");
+
+  if (lastDotIndex <= 0 || lastDotIndex === fileName.length - 1) {
+    return "";
+  }
+
+  return fileName.slice(lastDotIndex);
+};
+
+const buildDownloadFileName = (item: EvidenceMediaItem) => {
+  const baseName = sanitizeDownloadFileName(item.title || `${item.kind}-evidence`) || `${item.kind}-evidence`;
+
+  if (/\.[a-z0-9]{2,6}$/i.test(baseName)) {
+    return baseName;
+  }
+
+  return `${baseName}${getFileExtensionFromUrl(item.url)}`;
+};
+
+const triggerBrowserDownload = (href: string, fileName: string) => {
+  const anchor = document.createElement("a");
+  anchor.href = href;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+};
+
+const downloadMediaItem = async (item: EvidenceMediaItem) => {
+  if (!item.url) {
+    throw new Error("Missing media url");
+  }
+
+  const fileName = buildDownloadFileName(item);
+
+  if (item.url.startsWith("data:")) {
+    triggerBrowserDownload(item.url, fileName);
+    return;
+  }
+
+  try {
+    const response = await fetch(item.url, { credentials: "include" });
+
+    if (!response.ok) {
+      throw new Error(`Download failed with status ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+
+    try {
+      triggerBrowserDownload(blobUrl, fileName);
+    } finally {
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    }
+  } catch (error) {
+    console.warn("Falling back to direct download link", error);
+    triggerBrowserDownload(item.url, fileName);
+  }
+};
+
 const PreviewDialog = ({
   item,
+  items,
   open,
   onClose,
+  onPrevious,
+  onNext,
+  onDownload,
 }: {
   item: EvidenceMediaItem | null;
+  items: EvidenceMediaItem[];
   open: boolean;
   onClose: () => void;
+  onPrevious: () => void;
+  onNext: () => void;
+  onDownload: () => void;
 }) => {
   const theme = useMuiTheme();
+
+  const currentIndex = item
+    ? items.findIndex((candidate) => candidate.id === item.id)
+    : -1;
+  const hasPrevious = currentIndex > 0;
+  const hasNext = currentIndex >= 0 && currentIndex < items.length - 1;
 
   if (!item) {
     return null;
@@ -180,14 +283,91 @@ const PreviewDialog = ({
             {item.remark || item.sourceLabel || "Evidence preview"}
           </Typography>
         </Box>
-        <IconButton onClick={onClose}>
-          <CloseRoundedIcon />
-        </IconButton>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Button
+            variant="outlined"
+            startIcon={<DownloadRoundedIcon />}
+            onClick={onDownload}
+            sx={{ borderRadius: 999, textTransform: "none" }}
+          >
+            Download
+          </Button>
+          <IconButton onClick={onClose}>
+            <CloseRoundedIcon />
+          </IconButton>
+        </Stack>
       </DialogTitle>
       <DialogContent
         className="p-0"
-        sx={{ bgcolor: theme.palette.mode === "dark" ? "#020617" : "#0F172A" }}
+        sx={{
+          position: "relative",
+          bgcolor: theme.palette.mode === "dark" ? "#020617" : "#0F172A",
+        }}
       >
+        {items.length > 1 ? (
+          <>
+            <IconButton
+              onClick={onPrevious}
+              disabled={!hasPrevious}
+              sx={{
+                position: "absolute",
+                left: 16,
+                top: "50%",
+                transform: "translateY(-50%)",
+                zIndex: 2,
+                color: "#fff",
+                bgcolor: "rgba(15, 23, 42, 0.54)",
+                backdropFilter: "blur(8px)",
+                "&:hover": {
+                  bgcolor: "rgba(15, 23, 42, 0.74)",
+                },
+                "&.Mui-disabled": {
+                  color: "rgba(255,255,255,0.35)",
+                  bgcolor: "rgba(15,23,42,0.28)",
+                },
+              }}
+            >
+              <ChevronLeftRoundedIcon />
+            </IconButton>
+            <IconButton
+              onClick={onNext}
+              disabled={!hasNext}
+              sx={{
+                position: "absolute",
+                right: 16,
+                top: "50%",
+                transform: "translateY(-50%)",
+                zIndex: 2,
+                color: "#fff",
+                bgcolor: "rgba(15, 23, 42, 0.54)",
+                backdropFilter: "blur(8px)",
+                "&:hover": {
+                  bgcolor: "rgba(15, 23, 42, 0.74)",
+                },
+                "&.Mui-disabled": {
+                  color: "rgba(255,255,255,0.35)",
+                  bgcolor: "rgba(15,23,42,0.28)",
+                },
+              }}
+            >
+              <ChevronRightRoundedIcon />
+            </IconButton>
+            <Chip
+              label={`${currentIndex + 1} / ${items.length}`}
+              size="small"
+              sx={{
+                position: "absolute",
+                left: "50%",
+                bottom: 16,
+                transform: "translateX(-50%)",
+                zIndex: 2,
+                color: "#fff",
+                bgcolor: "rgba(15, 23, 42, 0.62)",
+                fontWeight: 700,
+              }}
+            />
+          </>
+        ) : null}
         {item.kind === "image" ? (
           <Box
             component="img"
@@ -368,6 +548,8 @@ const EvidenceDashboard = () => {
   const [createCategory, { isLoading: isCreatingCategory }] = useCreateCategoryMutation();
   const [getReferenceNumbers] = useGetRefreneceNumbersListMutation();
   const [filterReferenceNumbers] = useFilterReferenceNoMutation();
+  const [getChildReferenceNumbers] = useGetChildRefNoMutation();
+  const [checkForCategory] = useCheckForCategoryMutation();
   const [getImages] = useGetImagesMutation();
   const [getVideos] = useGetVideosMutation();
   const [getAudio] = useGetAudioMutation();
@@ -399,6 +581,17 @@ const EvidenceDashboard = () => {
   const [referenceOptions, setReferenceOptions] = useState(
     normalizeReferences([]),
   );
+  const [childReferenceMap, setChildReferenceMap] = useState<
+    Record<string, ReturnType<typeof normalizeReferences>>
+  >({});
+  const [childReferenceLoadingFor, setChildReferenceLoadingFor] = useState("");
+  const [childReferenceSearch, setChildReferenceSearch] = useState("");
+  const [selectedChildReferenceNo, setSelectedChildReferenceNo] = useState("");
+  const [childPhaseMap, setChildPhaseMap] = useState<Record<string, EvidencePhaseOption[]>>(
+    {},
+  );
+  const [childPhaseLoadingFor, setChildPhaseLoadingFor] = useState("");
+  const [selectedPhaseId, setSelectedPhaseId] = useState<number | null>(null);
   const [referencesLoading, setReferencesLoading] = useState(false);
   const [selectedReferenceNo, setSelectedReferenceNo] = useState("");
   const [remarkOptions, setRemarkOptions] = useState(normalizeRemarks([]));
@@ -406,6 +599,7 @@ const EvidenceDashboard = () => {
   const [activeMediaTab, setActiveMediaTab] = useState<EvidenceMediaKind>("image");
   const [mediaItems, setMediaItems] = useState<EvidenceMediaItem[]>([]);
   const [mediaLoading, setMediaLoading] = useState(false);
+  const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const [selectedMediaItem, setSelectedMediaItem] = useState<EvidenceMediaItem | null>(
     null,
   );
@@ -440,7 +634,9 @@ const EvidenceDashboard = () => {
     }
 
     return categories.filter((category) =>
-      `${category.label} ${category.subtitle}`.toLowerCase().includes(normalizedQuery),
+      `${category.label} ${category.childLabel} ${category.subtitle}`
+        .toLowerCase()
+        .includes(normalizedQuery),
     );
   }, [categories, categorySearch]);
 
@@ -457,13 +653,47 @@ const EvidenceDashboard = () => {
       referenceOptions.find((reference) => reference.refNo === selectedReferenceNo) ?? null,
     [referenceOptions, selectedReferenceNo],
   );
- 
+  const selectedChildReferences = useMemo(
+    () => childReferenceMap[selectedReferenceNo] ?? [],
+    [childReferenceMap, selectedReferenceNo],
+  );
+  const filteredChildReferences = useMemo(() => {
+    const normalizedQuery = childReferenceSearch.trim().toLowerCase();
+
+    if (!normalizedQuery) {
+      return selectedChildReferences;
+    }
+
+    return selectedChildReferences.filter((reference) =>
+      `${reference.refNo} ${reference.label} ${reference.subtitle}`
+        .toLowerCase()
+        .includes(normalizedQuery),
+    );
+  }, [childReferenceSearch, selectedChildReferences]);
+  const selectedChildReferenceOption = useMemo(
+    () =>
+      selectedChildReferences.find(
+        (reference) => reference.refNo === selectedChildReferenceNo,
+      ) ?? null,
+    [selectedChildReferenceNo, selectedChildReferences],
+  );
+  const selectedChildPhases = useMemo(
+    () => childPhaseMap[selectedChildReferenceNo] ?? [],
+    [childPhaseMap, selectedChildReferenceNo],
+  );
   const uploadSummary = useMemo(
     () => ({
       files: uploadFiles.length,
       totalSize: formatBytes(uploadFiles.reduce((total, file) => total + file.size, 0)),
     }),
     [uploadFiles],
+  );
+  const selectedMediaIndex = useMemo(
+    () =>
+      selectedMediaItem
+        ? mediaItems.findIndex((item) => item.id === selectedMediaItem.id)
+        : -1,
+    [mediaItems, selectedMediaItem],
   );
   const dashboardStatus = useMemo(() => {
     if (!selectedReferenceNo) {
@@ -640,6 +870,13 @@ const EvidenceDashboard = () => {
     let isMounted = true;
     setReferencesLoading(true);
     setSelectedReferenceNo("");
+    setSelectedChildReferenceNo("");
+    setSelectedPhaseId(null);
+    setChildReferenceSearch("");
+    setChildReferenceMap({});
+    setChildReferenceLoadingFor("");
+    setChildPhaseMap({});
+    setChildPhaseLoadingFor("");
     setRemarkOptions(normalizeRemarks([]));
     setSelectedRemark("");
     setMediaItems([]);
@@ -687,6 +924,127 @@ const EvidenceDashboard = () => {
     sessionReady,
     viewCategory,
   ]);
+
+  const handleReferenceSelect = async (referenceNo: string) => {
+    setSelectedReferenceNo(referenceNo);
+    setSelectedChildReferenceNo("");
+    setSelectedPhaseId(null);
+    setChildReferenceSearch("");
+
+    if (!viewCategory) {
+      return;
+    }
+
+    const numericCategoryId = getNumericCategoryId(viewCategory);
+    if (!numericCategoryId) {
+      return;
+    }
+
+    if (!viewCategory.childLabel) {
+      setChildReferenceMap((current) => ({
+        ...current,
+        [referenceNo]: [],
+      }));
+      return;
+    }
+
+    if (childReferenceMap[referenceNo]) {
+      return;
+    }
+
+    setChildReferenceLoadingFor(referenceNo);
+
+    try {
+      const childResponse = await getChildReferenceNumbers({
+        CategoryId: numericCategoryId,
+        PageNo: 0,
+        RefNo: referenceNo,
+        ChildCategoryId: EVIDENCE_CHILD_CATEGORY_ID,
+      }).unwrap();
+
+      setChildReferenceMap((current) => ({
+        ...current,
+        [referenceNo]: normalizeReferences(childResponse),
+      }));
+    } catch (error) {
+      console.error("Failed to fetch child references", error);
+      setChildReferenceMap((current) => ({
+        ...current,
+        [referenceNo]: [],
+      }));
+    } finally {
+      setChildReferenceLoadingFor((current) =>
+        current === referenceNo ? "" : current,
+      );
+    }
+  };
+
+  const normalizePhaseOptions = (payload: unknown) => {
+    const list =
+      Array.isArray((payload as { data?: unknown } | null)?.data)
+        ? ((payload as { data: unknown[] }).data ?? [])
+        : [];
+
+    return list.map<EvidencePhaseOption>((entry, index) => {
+      const record =
+        entry && typeof entry === "object" && !Array.isArray(entry)
+          ? (entry as Record<string, unknown>)
+          : {};
+      const rawPhaseId = record.phaseId ?? record.PhaseId ?? record.id ?? record.Id;
+      const parsedPhaseId = Number(rawPhaseId);
+      const phaseNameCandidate =
+        record.phaseName ?? record.PhaseName ?? record.name ?? record.Name;
+
+      return {
+        id: `${String(rawPhaseId ?? index)}-${String(phaseNameCandidate ?? index)}`,
+        phaseId: Number.isFinite(parsedPhaseId) ? parsedPhaseId : null,
+        phaseName:
+          typeof phaseNameCandidate === "string" && phaseNameCandidate.trim()
+            ? phaseNameCandidate.trim()
+            : `Phase ${index + 1}`,
+      };
+    });
+  };
+
+  const handleChildReferenceSelect = async (
+    referenceNo: string,
+    childReferenceNo: string,
+  ) => {
+    setSelectedChildReferenceNo(childReferenceNo);
+    setSelectedPhaseId(null);
+
+    if (childPhaseMap[childReferenceNo]) {
+      setSelectedPhaseId(childPhaseMap[childReferenceNo][0]?.phaseId ?? null);
+      return;
+    }
+
+    setChildPhaseLoadingFor(childReferenceNo);
+
+    try {
+      const response = await checkForCategory({
+        RefNo: referenceNo,
+        ChildRefNo: childReferenceNo,
+      }).unwrap();
+
+      const phases = normalizePhaseOptions(response);
+
+      setChildPhaseMap((current) => ({
+        ...current,
+        [childReferenceNo]: phases,
+      }));
+      setSelectedPhaseId(phases[0]?.phaseId ?? null);
+    } catch (error) {
+      console.error("Failed to fetch child reference phases", error);
+      setChildPhaseMap((current) => ({
+        ...current,
+        [childReferenceNo]: [],
+      }));
+    } finally {
+      setChildPhaseLoadingFor((current) =>
+        current === childReferenceNo ? "" : current,
+      );
+    }
+  };
 
   useEffect(() => {
     if (!sessionReady || !selectedReferenceNo || !viewCategory) {
@@ -752,6 +1110,8 @@ const EvidenceDashboard = () => {
         const payload = {
           RefNo: selectedReferenceNo,
           CatId: numericCategoryId,
+          ...(selectedChildReferenceNo ? { ChildRefNo: selectedChildReferenceNo } : {}),
+          ...(selectedPhaseId ? { PhaseId: selectedPhaseId } : {}),
           ...(selectedRemark ? { Remarks: selectedRemark } : {}),
         };
 
@@ -789,6 +1149,8 @@ const EvidenceDashboard = () => {
     getAudio,
     getImages,
     getVideos,
+    selectedChildReferenceNo,
+    selectedPhaseId,
     selectedReferenceNo,
     selectedRemark,
     sessionReady,
@@ -831,6 +1193,46 @@ const EvidenceDashboard = () => {
     } catch (error) {
       console.error("Failed to upload evidence", error);
       toast.error("Evidence upload failed. Please verify category and files.");
+    }
+  };
+
+  const handleDownloadItem = async (item: EvidenceMediaItem) => {
+    try {
+      await downloadMediaItem(item);
+    } catch (error) {
+      console.error("Failed to download evidence item", error);
+      toast.error(`Unable to download ${item.title}.`);
+    }
+  };
+
+  const handleDownloadAll = async () => {
+    if (!mediaItems.length) {
+      toast.info(`No ${activeMediaTab}s available to download.`);
+      return;
+    }
+
+    setIsDownloadingAll(true);
+    let successCount = 0;
+
+    try {
+      for (const item of mediaItems) {
+        try {
+          await downloadMediaItem(item);
+          successCount += 1;
+        } catch (error) {
+          console.error("Failed to download evidence item", error);
+        }
+      }
+
+      if (successCount === mediaItems.length) {
+        toast.success(`Downloaded ${successCount} ${activeMediaTab}${successCount > 1 ? "s" : ""}.`);
+      } else if (successCount > 0) {
+        toast.warn(`Downloaded ${successCount} of ${mediaItems.length} ${activeMediaTab}${mediaItems.length > 1 ? "s" : ""}.`);
+      } else {
+        toast.error(`Unable to download ${activeMediaTab} files.`);
+      }
+    } finally {
+      setIsDownloadingAll(false);
     }
   };
 
@@ -916,27 +1318,6 @@ const EvidenceDashboard = () => {
                 }}
                 sx={{ flex: 1, ...warehouseFieldSx }}
               />
-              <Button
-                variant="outlined"
-                onClick={() => setCategoryDrawerOpen(true)}
-                sx={{
-                  minWidth: "fit-content",
-                  borderRadius: 2,
-                  minHeight: 40,
-                  px: 1.25,
-                  boxShadow: "none",
-                  textTransform: "none",
-                  color: warehouseAccent,
-                  borderColor: "rgba(255,138,61,0.22)",
-                  backgroundColor: "rgba(255,138,61,0.08)",
-                  "&:hover": {
-                    borderColor: "rgba(255,138,61,0.32)",
-                    backgroundColor: "rgba(255,138,61,0.16)",
-                  },
-                }}
-              >
-                <AddRoundedIcon />
-              </Button>
             </Stack>
           </Stack>
 
@@ -970,7 +1351,11 @@ const EvidenceDashboard = () => {
                   <Typography variant="body1" sx={{ fontWeight: 800, color: ui.textSoft }} noWrap>
                     {category.label}
                   </Typography>
-                  
+                  {category.childLabel ? (
+                    <Typography variant="body2" sx={{ mt: 0.5, color: ui.textMuted }} noWrap>
+                      {category.childLabel}
+                    </Typography>
+                  ) : null}
                 </Paper>
               );
             })}
@@ -993,15 +1378,6 @@ const EvidenceDashboard = () => {
             overflow: "hidden",
           }}
         >
-          <Box sx={{ px: 2.5, pt: 2.5, pb: 1.5, borderBottom: `1px solid ${ui.border}` }}>
-            <Typography variant="h5" sx={{ fontWeight: 800, color: warehouseSlate }}>
-              {viewCategory?.label || "Evidence Hub"}
-            </Typography>
-            
-
-           
-          </Box>
-
           <Box sx={{ px: 1.25, py: 1.25, overflowY: "auto", flex: 1 }}>
 
              <TextField
@@ -1139,7 +1515,7 @@ const EvidenceDashboard = () => {
                     <Paper
                       key={reference.id}
                       variant="outlined"
-                      onClick={() => setSelectedReferenceNo(reference.refNo)}
+                      onClick={() => void handleReferenceSelect(reference.refNo)}
                       sx={{
                         p: 1.75,
                         borderRadius: 2.5,
@@ -1151,29 +1527,35 @@ const EvidenceDashboard = () => {
                         boxShadow: isSelected ? ui.shadowWarm : ui.shadowSoft,
                       }}
                     >
-                      <Stack direction="row" justifyContent="space-between" spacing={1} alignItems="flex-start">
+                      <Stack direction="row" spacing={1} justifyContent="space-between" alignItems="flex-start">
                         <Box sx={{ minWidth: 0 }}>
-                          <Typography variant="body1" sx={{ fontWeight: 800, color: ui.textStrong }} noWrap>
-                            {reference.label}
-                          </Typography>
-                          <Typography variant="body2" sx={{ mt: 0.35, color: warehouseAccentDark, fontWeight: 700 }}>
+                          <Typography
+                            variant="body1"
+                            sx={{ fontWeight: 800, color: ui.textStrong }}
+                            noWrap
+                          >
                             {reference.refNo}
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: ui.textMuted }} noWrap>
+                            {isSelected
+                              ? childReferenceLoadingFor === reference.refNo
+                                ? "Loading linked child references..."
+                                : viewCategory?.childLabel
+                                  ? `${viewCategory.childLabel} can be selected in workspace`
+                                  : "Open evidence in workspace"
+                              : "Tap to inspect evidence"}
                           </Typography>
                         </Box>
                         <Chip
-                          label={isSelected ? dashboardStatus.label : "Ready"}
                           size="small"
+                          label={isSelected ? "Open" : "View"}
                           sx={{
-                            height: 26,
-                            bgcolor: isSelected ? dashboardStatus.background : ui.panelAlt,
-                            color: isSelected ? dashboardStatus.color : ui.textMuted,
-                            fontWeight: 800,
+                            bgcolor: isSelected ? ui.selectedWarm : ui.panelAlt,
+                            color: isSelected ? warehouseAccentDark : ui.textMuted,
+                            fontWeight: 700,
                           }}
                         />
                       </Stack>
-                      <Typography variant="caption" sx={{ mt: 1, display: "block", color: ui.textMuted }}>
-                        {reference.subtitle}
-                      </Typography>
                     </Paper>
                   );
                 })}
@@ -1213,7 +1595,7 @@ const EvidenceDashboard = () => {
                     {">"}
                   </Typography>
                   <Typography variant="body2" sx={{ color: ui.textMuted }}>
-                    {viewCategory?.label || "Category"}
+                    {formatCategoryInlineLabel(viewCategory) || "Category"}
                   </Typography>
                   <Typography variant="body2" sx={{ color: "#94A3B8" }}>
                     {">"}
@@ -1283,11 +1665,26 @@ const EvidenceDashboard = () => {
                             label="Category"
                             value={uploadCategoryId}
                             onChange={(event) => setUploadCategoryId(event.target.value)}
+                            SelectProps={{
+                              renderValue: (selected) =>
+                                formatCategoryInlineLabel(
+                                  categories.find((category) => category.id === selected) ?? null,
+                                ),
+                            }}
                             sx={warehouseFieldSx}
                           >
                             {categories.map((category) => (
                               <MenuItem key={category.id} value={category.id}>
-                                {category.label}
+                                <Box sx={{ minWidth: 0 }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                    {category.label}
+                                  </Typography>
+                                  {category.childLabel ? (
+                                    <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                                      {category.childLabel}
+                                    </Typography>
+                                  ) : null}
+                                </Box>
                               </MenuItem>
                             ))}
                           </TextField>
@@ -1384,7 +1781,7 @@ const EvidenceDashboard = () => {
                       <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
                         <Chip label={`${uploadSummary.files} files`} />
                         <Chip label={uploadSummary.totalSize} />
-                        <Chip label={uploadCategory?.label || "No category"} />
+                        <Chip label={formatCategoryInlineLabel(uploadCategory) || "No category"} />
                       </Stack>
 
                       <Button
@@ -1650,119 +2047,403 @@ const EvidenceDashboard = () => {
                     </Stack>
                   </Box> */}
 
-                  <Stack spacing={1.5} >
-                     
+                  <Stack spacing={2}>
+                    {selectedReferenceNo ? (
+                      <>
+                        {viewCategory?.childLabel ? (
+                          <Paper
+                            variant="outlined"
+                            sx={{
+                              borderRadius: 3,
+                              borderColor: ui.border,
+                              bgcolor: ui.panel,
+                              p: 2.25,
+                            }}
+                          >
+                            <Stack spacing={2}>
+                              <Stack
+                                direction={{ xs: "column", md: "row" }}
+                                spacing={1.5}
+                                justifyContent="space-between"
+                                alignItems={{ xs: "flex-start", md: "center" }}
+                              >
+                                <Box>
+                                  <Typography variant="h6" sx={{ fontWeight: 800, color: ui.textStrong }}>
+                                    {viewCategory.childLabel}
+                                  </Typography>
+                                  <Typography variant="body2" sx={{ color: ui.textMuted }}>
+                                    Select linked child reference for main reference {selectedReferenceNo}.
+                                  </Typography>
+                                </Box>
+                                <Chip
+                                  label={`${selectedChildReferences.length} linked`}
+                                  sx={{
+                                    bgcolor: ui.panelAlt,
+                                    color: ui.textMuted,
+                                    fontWeight: 700,
+                                  }}
+                                />
+                              </Stack>
 
-                    <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                      {mediaTabs.map((tab) => (
-                        <Button
-                          key={tab.value}
-                          variant={activeMediaTab === tab.value ? "contained" : "outlined"}
-                          startIcon={tab.icon}
-                          disabled={!selectedReferenceNo}
-                          onClick={() => setActiveMediaTab(tab.value)}
+                              <TextField
+                                fullWidth
+                                size="small"
+                                placeholder={`Search ${viewCategory.childLabel.toLowerCase()}...`}
+                                value={childReferenceSearch}
+                                onChange={(event) => setChildReferenceSearch(event.target.value)}
+                                InputProps={{
+                                  startAdornment: (
+                                    <InputAdornment position="start">
+                                      <SearchRoundedIcon fontSize="small" sx={{ color: "#94A3B8" }} />
+                                    </InputAdornment>
+                                  ),
+                                }}
+                                disabled={
+                                  childReferenceLoadingFor === selectedReferenceNo ||
+                                  !selectedChildReferences.length
+                                }
+                                sx={warehouseFieldSx}
+                              />
+
+                              {childReferenceLoadingFor === selectedReferenceNo ? (
+                                <Stack spacing={1}>
+                                  <LinearProgress />
+                                  <Typography variant="caption" sx={{ color: ui.textMuted }}>
+                                    Loading child references for {selectedReferenceNo}...
+                                  </Typography>
+                                </Stack>
+                              ) : filteredChildReferences.length ? (
+                                <Box sx={{ maxHeight: 240, overflowY: "auto", pr: 0.5 }}>
+                                  <Grid container spacing={1.25}>
+                                    {filteredChildReferences.map((childReference) => {
+                                      const isSelectedChild =
+                                        selectedChildReferenceNo === childReference.refNo;
+
+                                      return (
+                                        <Grid key={childReference.id} size={{ xs: 12, sm: 6, xl: 4 }}>
+                                          <Paper
+                                            variant="outlined"
+                                            onClick={() =>
+                                              void handleChildReferenceSelect(
+                                                selectedReferenceNo,
+                                                childReference.refNo,
+                                              )
+                                            }
+                                            sx={{
+                                              p: 1.5,
+                                              borderRadius: 2.5,
+                                              cursor: "pointer",
+                                              borderColor: isSelectedChild
+                                                ? "rgba(255,138,61,0.32)"
+                                                : ui.border,
+                                              bgcolor: isSelectedChild ? ui.selectedWarm : ui.panelAlt,
+                                              boxShadow: isSelectedChild
+                                                ? ui.shadowWarm
+                                                : "none",
+                                            }}
+                                          >
+                                            <Typography variant="body2" sx={{ fontWeight: 800 }} noWrap>
+                                              {childReference.refNo}
+                                            </Typography>
+                                            <Typography variant="caption" sx={{ color: ui.textMuted }} noWrap>
+                                              {isSelectedChild
+                                                ? "Selected child reference"
+                                                : "Click to load phases and media"}
+                                            </Typography>
+                                          </Paper>
+                                        </Grid>
+                                      );
+                                    })}
+                                  </Grid>
+                                </Box>
+                              ) : (
+                                <Paper
+                                  variant="outlined"
+                                  sx={{
+                                    borderRadius: 2.5,
+                                    p: 3,
+                                    textAlign: "center",
+                                    color: ui.textMuted,
+                                    bgcolor: ui.panelAlt,
+                                  }}
+                                >
+                                  <Typography variant="body1" sx={{ fontWeight: 800 }}>
+                                    No linked {viewCategory.childLabel.toLowerCase()} found
+                                  </Typography>
+                                  <Typography variant="body2">
+                                    Media will continue using reference {selectedReferenceNo} directly.
+                                  </Typography>
+                                </Paper>
+                              )}
+                            </Stack>
+                          </Paper>
+                        ) : null}
+
+                        <Paper
+                          variant="outlined"
                           sx={{
-                            borderRadius: 999,
-                            textTransform: "none",
-                            boxShadow: "none",
-                            ...(activeMediaTab === tab.value
-                              ? { bgcolor: warehouseSlate }
-                              : {
-                                  borderColor: "rgba(255,138,61,0.24)",
-                                  color: ui.textMuted,
-                                  backgroundColor: "rgba(255,138,61,0.05)",
-                                }),
+                            borderRadius: 3,
+                            borderColor: ui.border,
+                            bgcolor: ui.panel,
+                            p: 2.25,
                           }}
                         >
-                          {tab.label}
-                        </Button>
-                      ))}
-                    </Stack>
+                          <Stack spacing={1.75}>
+                            {selectedChildReferenceNo ? (
+                              <Stack spacing={1.5}>
+                                <Box>
+                                  <Typography variant="h6" sx={{ fontWeight: 800, color: ui.textStrong }}>
+                                    Phases
+                                  </Typography>
+                                  <Typography variant="body2" sx={{ color: ui.textMuted }}>
+                                    Phase-wise evidence for child reference {selectedChildReferenceNo}.
+                                  </Typography>
+                                </Box>
 
-                    {mediaLoading ? <LinearProgress /> : null}
+                                {childPhaseLoadingFor === selectedChildReferenceNo ? (
+                                  <LinearProgress />
+                                ) : selectedChildPhases.length ? (
+                                  <Box
+                                    sx={{
+                                      display: "flex",
+                                      width: "100%",
+                                      borderBottom: `1px solid ${alpha(theme.palette.text.primary, 0.12)}`,
+                                      overflowX: "auto",
+                                    }}
+                                  >
+                                    {selectedChildPhases.map((phase) => (
+                                      <Button
+                                        key={phase.id}
+                                        variant={selectedPhaseId === phase.phaseId ? "contained" : "outlined"}
+                                        onClick={() => setSelectedPhaseId(phase.phaseId)}
+                                        sx={{
+                                          flex: 1,
+                                          minWidth: 140,
+                                          borderRadius: 0,
+                                          textTransform: "none",
+                                          boxShadow: "none",
+                                          border: "none",
+                                          borderBottom: "3px solid",
+                                          borderBottomColor:
+                                            selectedPhaseId === phase.phaseId
+                                              ? warehouseAccentDark
+                                              : "transparent",
+                                          py: 1.25,
+                                          ...(selectedPhaseId === phase.phaseId
+                                            ? {
+                                                bgcolor: "transparent",
+                                                color: warehouseAccentDark,
+                                              }
+                                            : {
+                                                color: ui.textMuted,
+                                                backgroundColor: "transparent",
+                                              }),
+                                          "&:hover": {
+                                            backgroundColor: alpha(warehouseAccent, 0.06),
+                                            borderBottomColor:
+                                              selectedPhaseId === phase.phaseId
+                                                ? warehouseAccentDark
+                                                : alpha(warehouseAccentDark, 0.24),
+                                          },
+                                        }}
+                                      >
+                                        {phase.phaseName}
+                                      </Button>
+                                    ))}
+                                  </Box>
+                                ) : (
+                                  <Typography variant="body2" sx={{ color: ui.textMuted }}>
+                                    No phase data returned for this child reference. Media is shown without phase filter.
+                                  </Typography>
+                                )}
+                              </Stack>
+                            ) : null}
 
-                    {selectedReferenceNo ? (
-                      <Grid container spacing={2}>
-                        {mediaItems.map((item) => (
-                          <Grid key={item.id} size={{ xs: 12, sm: 6, xl: 4 }}>
-                            <Paper
-                              variant="outlined"
-                              sx={{
-                                height: "100%",
-                                overflow: "hidden",
-                                borderRadius: 3,
-                                borderColor: ui.border,
-                              }}
+                            <Stack
+                              direction={{ xs: "column", lg: "row" }}
+                              spacing={1.5}
+                              justifyContent="space-between"
+                              alignItems={{ xs: "stretch", lg: "center" }}
+                              sx={
+                                selectedChildReferenceNo
+                                  ? {
+                                      pt: 0.5,
+                                    }
+                                  : undefined
+                              }
                             >
-                              <Box
-                                sx={{
-                                  height: 220,
-                                  display: "grid",
-                                  placeItems: "center",
-                                  color: "#FFFFFF",
-                                  background:
-                                    item.kind === "image" && item.previewUrl
-                                      ? `center / cover no-repeat url(${item.previewUrl})`
-                                      : ui.mediaFallback,
-                                }}
+                              <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                                {mediaTabs.map((tab) => (
+                                  <Button
+                                    key={tab.value}
+                                    variant={activeMediaTab === tab.value ? "contained" : "outlined"}
+                                    startIcon={tab.icon}
+                                    disabled={!selectedReferenceNo}
+                                    onClick={() => setActiveMediaTab(tab.value)}
+                                    sx={{
+                                      borderRadius: 999,
+                                      textTransform: "none",
+                                      boxShadow: "none",
+                                      ...(activeMediaTab === tab.value
+                                        ? { bgcolor: warehouseSlate }
+                                        : {
+                                            borderColor: "rgba(255,138,61,0.24)",
+                                            color: ui.textMuted,
+                                            backgroundColor: "rgba(255,138,61,0.05)",
+                                          }),
+                                    }}
+                                  >
+                                    {tab.label}
+                                  </Button>
+                                ))}
+                              </Stack>
+
+                              <Stack
+                                direction={{ xs: "column", sm: "row" }}
+                                spacing={1}
+                                alignItems={{ xs: "stretch", sm: "center" }}
+                                sx={{ width: { xs: "100%", lg: "auto" } }}
                               >
-                                {item.kind !== "image" ? mediaIconMap[item.kind] : null}
-                              </Box>
-                              <Stack spacing={0.85} sx={{ p: 1.75 }}>
-                                <Typography variant="body2" fontWeight={800} noWrap>
-                                  {item.title}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary" noWrap>
-                                  {item.remark || "No remark supplied"}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                  {formatMediaDate(item.createdAt)}
-                                </Typography>
                                 <Button
                                   variant="outlined"
-                                  startIcon={<VisibilityRoundedIcon />}
+                                  startIcon={<DownloadRoundedIcon />}
+                                  onClick={() => void handleDownloadAll()}
+                                  disabled={!selectedReferenceNo || !mediaItems.length || isDownloadingAll}
                                   sx={{
-                                    alignSelf: "flex-start",
                                     borderRadius: 999,
-                                    color: warehouseAccentDark,
-                                    borderColor: "rgba(255,138,61,0.24)",
-                                    "&:hover": {
-                                      borderColor: "rgba(255,138,61,0.36)",
-                                      bgcolor: "rgba(255,138,61,0.06)",
-                                    },
+                                    textTransform: "none",
+                                    boxShadow: "none",
+                                    minWidth: { xs: "100%", sm: "fit-content" },
                                   }}
-                                  onClick={() => setSelectedMediaItem(item)}
                                 >
-                                  Open
+                                  {isDownloadingAll ? "Downloading..." : "Download all"}
                                 </Button>
+                                <TextField
+                                  select
+                                  size="small"
+                                  label="Remarks"
+                                  value={selectedRemark}
+                                  onChange={(event) => setSelectedRemark(event.target.value)}
+                                  disabled={!selectedReferenceNo}
+                                  sx={{
+                                    minWidth: { xs: "100%", sm: 220 },
+                                    width: { xs: "100%", lg: "auto" },
+                                    ...warehouseFieldSx,
+                                  }}
+                                >
+                                  {remarkOptions.map((remark) => (
+                                    <MenuItem key={remark.id} value={remark.value}>
+                                      {remark.label}
+                                    </MenuItem>
+                                  ))}
+                                </TextField>
                               </Stack>
-                            </Paper>
-                          </Grid>
-                        ))}
+                            </Stack>
 
-                        {!mediaLoading && !mediaItems.length ? (
-                          <Grid size={{ xs: 12 }}>
-                            <Paper
-                              variant="outlined"
-                              sx={{
-                                borderRadius: 3,
-                                p: 5,
-                                textAlign: "center",
-                                color: ui.textMuted,
-                              }}
-                            >
-                              <CollectionsRoundedIcon className="mb-1 !text-[42px]" />
-                              <Typography variant="h6" fontWeight={800}>
-                                No {activeMediaTab}s found
-                              </Typography>
-                              <Typography variant="body2">
-                                No media was returned for this reference on the selected tab,
-                                or the API response did not contain a usable file path.
-                              </Typography>
-                            </Paper>
-                          </Grid>
-                        ) : null}
-                      </Grid>
+                            {mediaLoading ? <LinearProgress /> : null}
+
+                            <Grid container spacing={2}>
+                              {mediaItems.map((item) => (
+                                <Grid key={item.id} size={{ xs: 12, sm: 6, xl: 4 }}>
+                                  <Paper
+                                    variant="outlined"
+                                    sx={{
+                                      height: "100%",
+                                      overflow: "hidden",
+                                      borderRadius: 3,
+                                      borderColor: ui.border,
+                                    }}
+                                  >
+                                    <Box
+                                      sx={{
+                                        height: 220,
+                                        display: "grid",
+                                        placeItems: "center",
+                                        color: "#FFFFFF",
+                                        background:
+                                          item.kind === "image" && item.previewUrl
+                                            ? `center / cover no-repeat url(${item.previewUrl})`
+                                            : ui.mediaFallback,
+                                      }}
+                                    >
+                                      {item.kind !== "image" ? mediaIconMap[item.kind] : null}
+                                    </Box>
+                                    <Stack spacing={0.85} sx={{ p: 1.75 }}>
+                                      <Typography variant="body2" fontWeight={800} noWrap>
+                                        {item.title}
+                                      </Typography>
+                                      <Typography variant="caption" color="text.secondary" noWrap>
+                                        {item.remark || "No remark supplied"}
+                                      </Typography>
+                                      <Typography variant="caption" color="text.secondary">
+                                        {formatMediaDate(item.createdAt)}
+                                      </Typography>
+                                      <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                                        <Button
+                                          variant="outlined"
+                                          startIcon={<VisibilityRoundedIcon />}
+                                          sx={{
+                                            alignSelf: "flex-start",
+                                            borderRadius: 999,
+                                            color: warehouseAccentDark,
+                                            borderColor: "rgba(255,138,61,0.24)",
+                                            "&:hover": {
+                                              borderColor: "rgba(255,138,61,0.36)",
+                                              bgcolor: "rgba(255,138,61,0.06)",
+                                            },
+                                          }}
+                                          onClick={() => setSelectedMediaItem(item)}
+                                        >
+                                          Open
+                                        </Button>
+                                        <Button
+                                          variant="outlined"
+                                          startIcon={<DownloadRoundedIcon />}
+                                          sx={{
+                                            alignSelf: "flex-start",
+                                            borderRadius: 999,
+                                            color: ui.textStrong,
+                                            borderColor: ui.border,
+                                            "&:hover": {
+                                              borderColor: alpha(theme.palette.text.primary, 0.18),
+                                              bgcolor: alpha(theme.palette.text.primary, 0.03),
+                                            },
+                                          }}
+                                          onClick={() => void handleDownloadItem(item)}
+                                        >
+                                          Download
+                                        </Button>
+                                      </Stack>
+                                    </Stack>
+                                  </Paper>
+                                </Grid>
+                              ))}
+
+                              {!mediaLoading && !mediaItems.length ? (
+                                <Grid size={{ xs: 12 }}>
+                                  <Paper
+                                    variant="outlined"
+                                    sx={{
+                                      borderRadius: 3,
+                                      p: 5,
+                                      textAlign: "center",
+                                      color: ui.textMuted,
+                                    }}
+                                  >
+                                    <CollectionsRoundedIcon className="mb-1 !text-[42px]" />
+                                    <Typography variant="h6" fontWeight={800}>
+                                      No {activeMediaTab}s found
+                                    </Typography>
+                                    <Typography variant="body2">
+                                      No media was returned for this selection, or the API response did not contain a usable file path.
+                                    </Typography>
+                                  </Paper>
+                                </Grid>
+                              ) : null}
+                            </Grid>
+                          </Stack>
+                        </Paper>
+                      </>
                     ) : (
                       <Paper
                         variant="outlined"
@@ -1886,8 +2567,24 @@ const EvidenceDashboard = () => {
 
       <PreviewDialog
         item={selectedMediaItem}
+        items={mediaItems}
         open={Boolean(selectedMediaItem)}
         onClose={() => setSelectedMediaItem(null)}
+        onDownload={() => {
+          if (selectedMediaItem) {
+            void handleDownloadItem(selectedMediaItem);
+          }
+        }}
+        onPrevious={() => {
+          if (selectedMediaIndex > 0) {
+            setSelectedMediaItem(mediaItems[selectedMediaIndex - 1]);
+          }
+        }}
+        onNext={() => {
+          if (selectedMediaIndex >= 0 && selectedMediaIndex < mediaItems.length - 1) {
+            setSelectedMediaItem(mediaItems[selectedMediaIndex + 1]);
+          }
+        }}
       />
     </Page>
   );

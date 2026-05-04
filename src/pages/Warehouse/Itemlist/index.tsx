@@ -22,6 +22,19 @@ import {
 
 const toBoolean = (value: unknown) => value === true || value === 1 || value === "1" || value === "true";
 
+const toPreviewUrl = (path: string | null | undefined) => {
+    if (!path) {
+        return "";
+    }
+
+    if (/^https?:\/\//i.test(path) || path.startsWith("data:") || path.startsWith("blob:")) {
+        return path;
+    }
+
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
+    return `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
+};
+
 const ItemlistPage: React.FC = () => {
     const { openModal } = useModal();
     const { showToast } = useToast();
@@ -132,7 +145,7 @@ const ItemlistPage: React.FC = () => {
                 out_qty: "",
                 item_image_document_id: item.item_image_document_id ?? item.document_id ?? null,
                 item_image_name: item.item_image_name ?? item.file_name ?? null,
-                item_image_path: item.item_image_path || item.image_path || item.path || null,
+                item_image_path: item.file_url || item.item_image_path || item.image_path || item.path || null,
                 qr_code: item.qr_code || null,
             })),
         [data, palletMap]
@@ -153,6 +166,55 @@ const ItemlistPage: React.FC = () => {
     }, [error, showToast]);
 
     const columns: GridColDef[] = [
+        {
+            field: "item_image_path",
+            headerName: "Image",
+            width: 100,
+            sortable: false,
+            filterable: false,
+            align: "center",
+            headerAlign: "center",
+            renderCell: (params) => {
+                const imageUrl = toPreviewUrl(params.value);
+
+                if (!imageUrl) {
+                    return (
+                        <Box
+                            sx={{
+                                width: 48,
+                                height: 48,
+                                borderRadius: 1.5,
+                                bgcolor: "grey.100",
+                                color: "text.disabled",
+                                fontSize: 11,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                textTransform: "uppercase",
+                            }}
+                        >
+                            N/A
+                        </Box>
+                    );
+                }
+
+                return (
+                    <Box
+                        component="img"
+                        src={imageUrl}
+                        alt={params.row.item_image_name || params.row.oracle_code || "Item image"}
+                        sx={{
+                            width: 48,
+                            height: 48,
+                            objectFit: "cover",
+                            borderRadius: 1.5,
+                            border: (theme) => `1px solid ${theme.palette.divider}`,
+                            bgcolor: "grey.100",
+                        }}
+                    />
+                );
+            },
+        },
         { field: "oracle_code", headerName: "Oracle Code", flex: 1.1, minWidth: 160 },
         { field: "palletCode", headerName: "Pallet Code", flex: 1, minWidth: 150 },
         { field: "item_category", headerName: "Item Category", flex: 1, minWidth: 170 },

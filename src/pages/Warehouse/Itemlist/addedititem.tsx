@@ -147,6 +147,7 @@ function Index({
   const isEditMode = Boolean(defaultValues?.id);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const qrCanvasWrapperRef = useRef<HTMLDivElement | null>(null);
+  const previewObjectUrlRef = useRef<string | null>(null);
   const { data: palletsData } = useListPalletsQuery();
   const [fetchItemDetails, { isFetching: isFetchingItemDetails }] =
     useLazyListWarehouseItemsQuery();
@@ -289,6 +290,22 @@ function Index({
     setDataChanged?.(isDirty || Boolean(selectedImageFile));
   }, [isDirty, selectedImageFile, setDataChanged]);
 
+  const revokePreviewObjectUrl = useCallback(() => {
+    if (!previewObjectUrlRef.current) {
+      return;
+    }
+
+    URL.revokeObjectURL(previewObjectUrlRef.current);
+    previewObjectUrlRef.current = null;
+  }, []);
+
+  useEffect(
+    () => () => {
+      revokePreviewObjectUrl();
+    },
+    [revokePreviewObjectUrl]
+  );
+
   const handleLookupItemDetails = useCallback(async () => {
     if (!normalizedOracleCode) {
       showToast("Oracle code is required", "warning");
@@ -322,6 +339,7 @@ function Index({
 
       const resolvedImagePath = firstString(match.item_image_path, match.image_path, match.path) || null;
       if (resolvedImagePath) {
+        revokePreviewObjectUrl();
         setImagePreviewUrl(toPreviewUrl(resolvedImagePath));
         setUploadedItemImage({
           documentId: firstNumber(match.item_image_document_id, match.document_id) ?? null,
@@ -342,14 +360,13 @@ function Index({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setSelectedImageFile(file);
-      setImagePreviewUrl(String(reader.result || ""));
-      setUploadedItemImage({ documentId: null, path: null, name: file.name });
-    };
-    reader.readAsDataURL(file);
-  }, []);
+    revokePreviewObjectUrl();
+    const previewUrl = URL.createObjectURL(file);
+    previewObjectUrlRef.current = previewUrl;
+    setSelectedImageFile(file);
+    setImagePreviewUrl(previewUrl);
+    setUploadedItemImage({ documentId: null, path: null, name: file.name });
+  }, [revokePreviewObjectUrl]);
 
   const handlePrintQr = useCallback(() => {
     const canvas = qrCanvasWrapperRef.current?.querySelector("canvas") as HTMLCanvasElement | null;
@@ -525,7 +542,7 @@ function Index({
 
     const uploadedImage = uploadedItemImage;
     const selectedImageName = selectedImageFile?.name || uploadedImage.name || null;
-    const selectedImagePath = selectedImageFile ? imagePreviewUrl || null : uploadedImage.path;
+    const selectedImagePath = selectedImageFile ? null : uploadedImage.path;
     const payload: ItemSubmitPayload = {
       ...(defaultValues?.id ? { id: defaultValues.id } : {}),
       pallet_id: palletId,
@@ -551,7 +568,7 @@ function Index({
     showToast(isEditMode ? "Item updated successfully" : "Item created successfully", "success");
     setDataChanged?.(false);
     closeModal();
-  }, [closeModal, defaultValues?.id, imagePreviewUrl, isEditMode, onSubmitItem, qrPayload, resolvedRackId, selectedImageFile, setDataChanged, showToast, uploadedItemImage]);
+  }, [closeModal, defaultValues?.id, isEditMode, onSubmitItem, qrPayload, resolvedRackId, selectedImageFile, setDataChanged, showToast, uploadedItemImage]);
 
   useImperativeHandle(
     ref,

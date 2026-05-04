@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import { Box, Button, Stack, Typography } from "@mui/material";
 import { useForm } from "react-hook-form";
 import {
@@ -12,8 +12,14 @@ import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import SpeedOutlinedIcon from "@mui/icons-material/SpeedOutlined";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import { useToast } from "../../../../hooks/useToast";
-import { BarcodeCompletionStage } from "../../../../redux/api/barcode";
-import { getMockGearMotorLookup } from "../mockBarcodeService";
+import { useAppSelector } from "../../../../redux/hooks";
+import {
+  BarcodeCompletionStage,
+  barcodeDefaults,
+  useLazyGetCompletionGearboxDetailsQuery,
+  useLazyGetQualityCheckDetailsQuery,
+  useUpdateOrderCompletionStageMutation,
+} from "../../../../redux/api/barcode";
 
 const mountTypeOptions = [
   "Foot Mount",
@@ -132,6 +138,29 @@ const toNumeric = (value: unknown) => {
   return Number.isFinite(parsedValue) ? parsedValue : 0;
 };
 
+type CompletionLookupMetadata = {
+  oracle_order_no?: number | string | null;
+  model_type?: string | null;
+  qty?: number | string | null;
+  order_header_id?: number | string | null;
+  order_line_id?: number | string | null;
+  kw?: number | string | null;
+  input_RPM?: number | string | null;
+  actual_ratio?: number | string | null;
+  pole?: number | string | null;
+  noiseLevel?: number | string | null;
+  paintColor?: string | null;
+  MotorMake?: string | null;
+  OracleUserId?: number | string | null;
+  P_AMB_TEMP?: string | null;
+  P_GREASE_TEMP?: string | null;
+  rpm?: number | string | null;
+  motor_serial_no?: string | null;
+  Model?: string | null;
+  model?: string | null;
+  wo_no?: string | null;
+};
+
 const resolveStage = (status: string): BarcodeCompletionStage => {
   if (status === "PI") {
     return "painting";
@@ -146,24 +175,60 @@ const resolveStage = (status: string): BarcodeCompletionStage => {
 
 function Index() {
   const { showToast } = useToast();
+  const authUserId = useAppSelector((state) => state.auth.id);
   const { register, handleSubmit, getValues, setValue } = useForm({
     defaultValues,
   });
+  const [lookupMetadata, setLookupMetadata] = useState<CompletionLookupMetadata | null>(
+    null
+  );
+  const [triggerCompletionLookup] = useLazyGetCompletionGearboxDetailsQuery();
+  const [triggerQualityCheckLookup] = useLazyGetQualityCheckDetailsQuery();
+  const [updateOrderCompletionStage, { isLoading: isSubmitting }] =
+    useUpdateOrderCompletionStageMutation();
 
   const onSubmit = async (data: any) => {
     const stage = resolveStage(String(data.status || ""));
-    const submissionPreview = {
-      stage,
-      model: String(data.model || ""),
-      ratio: toNumeric(data.actualRatio),
-      wo_no: String(data.workOrderNumber || ""),
-      status: String(data.status || ""),
-      serial_no: String(data.gearedMotorSerialNumber || ""),
-      rpm: toNumeric(data.rpm),
-    };
+    const oracleUserId = toNumeric(authUserId) || toNumeric(lookupMetadata?.OracleUserId) || 1;
 
-    console.log("barcode-order-completion-static-submit", submissionPreview);
-    showToast("Temporary static mode: order completion saved locally", "success");
+    try {
+      const response = await updateOrderCompletionStage({
+        stage,
+        DivisionId: String(barcodeDefaults.divisionId),
+        dtPrint: {
+          oracle_order_no: toNumeric(lookupMetadata?.oracle_order_no),
+          model_type: String(lookupMetadata?.model_type || "GM"),
+          model: String(data.model || ""),
+          ratio: toNumeric(data.actualRatio),
+          qty: Math.max(1, toNumeric(lookupMetadata?.qty) || 1),
+          wo_no: String(data.workOrderNumber || ""),
+          order_header_id: toNumeric(lookupMetadata?.order_header_id),
+          order_line_id: toNumeric(lookupMetadata?.order_line_id),
+          status: String(data.status || ""),
+          kw: toNumeric(lookupMetadata?.kw),
+          serial_no: String(data.gearedMotorSerialNumber || ""),
+          rpm: toNumeric(data.rpm),
+          motor_serial_no: String(data.motorSerialNumber || ""),
+          input_RPM: toNumeric(data.inputRpm || lookupMetadata?.input_RPM),
+          actual_ratio: toNumeric(data.actualRatio || lookupMetadata?.actual_ratio),
+          pole: toNumeric(data.pole || lookupMetadata?.pole),
+          noiseLevel: toNumeric(data.noiseLevelDb || lookupMetadata?.noiseLevel),
+          paintColor: String(data.paint || lookupMetadata?.paintColor || ""),
+          MotorMake: String(
+            data.electricMotorMake || lookupMetadata?.MotorMake || ""
+          ),
+          OracleUserId: oracleUserId,
+          P_AMB_TEMP: String(lookupMetadata?.P_AMB_TEMP || ""),
+          P_GREASE_TEMP: String(lookupMetadata?.P_GREASE_TEMP || ""),
+        },
+      }).unwrap();
+
+      showToast(response?.message || "Order completion updated", "success");
+    } catch (error: any) {
+      const message =
+        error?.data?.message || error?.error || "Unable to update order completion";
+      showToast(message, "error");
+    }
   };
 
   const handleGetDetails = async () => {
@@ -175,25 +240,41 @@ function Index() {
     }
 
     try {
-      const lookup = getMockGearMotorLookup(serialNumber)?.orderCompletion;
+      let response = await triggerCompletionLookup({
+        BarcodeSerialNo: serialNumber,
+      }).unwrap();
+
+      if (!response?.data) {
+        response = await triggerQualityCheckLookup({
+          serial_no: serialNumber,
+        }).unwrap();
+      }
+
+      const lookup = response?.data as CompletionLookupMetadata | null;
       if (!lookup) {
-        showToast("No static order completion data found", "warning");
+        showToast("No order completion details found from API", "warning");
         return;
       }
 
+      setLookupMetadata(lookup);
       setValue("gearedMotorSerialNumber", serialNumber, { shouldDirty: true });
-      setValue("mountType", lookup.mountType, { shouldDirty: true });
-      setValue("model", lookup.model, { shouldDirty: true });
-      setValue("workOrderNumber", lookup.workOrderNumber, { shouldDirty: true });
-      setValue("rpm", lookup.rpm, { shouldDirty: true });
-      setValue("motorSerialNumber", lookup.motorSerialNumber, { shouldDirty: true });
-      setValue("pole", lookup.pole, { shouldDirty: true });
-      setValue("electricMotorMake", lookup.electricMotorMake, { shouldDirty: true });
-      setValue("inputRpm", lookup.inputRpm, { shouldDirty: true });
-      setValue("actualRatio", lookup.actualRatio, { shouldDirty: true });
-      setValue("noiseLevelDb", lookup.noiseLevelDb, { shouldDirty: true });
-      setValue("paint", lookup.paint, { shouldDirty: true });
-      setValue("status", lookup.status, { shouldDirty: true });
+      setValue("model", String(lookup.Model ?? lookup.model ?? ""), { shouldDirty: true });
+      setValue("workOrderNumber", String(lookup.wo_no ?? ""), { shouldDirty: true });
+      setValue("rpm", String(lookup.rpm ?? ""), { shouldDirty: true });
+      setValue("motorSerialNumber", String(lookup.motor_serial_no ?? ""), {
+        shouldDirty: true,
+      });
+      setValue("pole", String(lookup.pole ?? ""), { shouldDirty: true });
+      setValue("electricMotorMake", String(lookup.MotorMake ?? ""), {
+        shouldDirty: true,
+      });
+      setValue("inputRpm", String(lookup.input_RPM ?? ""), { shouldDirty: true });
+      setValue("actualRatio", String(lookup.actual_ratio ?? ""), { shouldDirty: true });
+      setValue("noiseLevelDb", String(lookup.noiseLevel ?? defaultValues.noiseLevelDb), {
+        shouldDirty: true,
+      });
+      setValue("paint", String(lookup.paintColor ?? defaultValues.paint), { shouldDirty: true });
+      setValue("status", String(defaultValues.status), { shouldDirty: true });
 
       showToast("Order completion details loaded", "success");
     } catch (error: any) {
@@ -232,7 +313,7 @@ function Index() {
                 sx={{ color: "#B45309", display: "block", mb: 1.25 }}
               >
                 Enter geared motor serial number and click Get to load completion
-                details from temporary static barcode data.
+                details from barcode API.
               </Typography>
               <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
                 <MuiTextField
@@ -321,8 +402,8 @@ function Index() {
         </FormSection>
 
         <Box>
-          <Button type="submit" variant="contained" size="large">
-            Update Order Completion
+          <Button type="submit" variant="contained" size="large" disabled={isSubmitting}>
+            {isSubmitting ? "Updating..." : "Update Order Completion"}
           </Button>
         </Box>
       </Stack>

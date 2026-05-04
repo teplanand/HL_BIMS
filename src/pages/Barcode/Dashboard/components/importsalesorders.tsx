@@ -1,20 +1,34 @@
-import { memo, useState } from "react";
-import { Alert, Box, Button, Divider, Stack, Typography } from "@mui/material";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import {
+  Alert,
+  Box,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Typography,
+} from "@mui/material";
 import SyncAltOutlinedIcon from "@mui/icons-material/SyncAltOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
-import { MuiTextField } from "../../../../components/mui/input";
 import { FormStack } from "../../../../components/ui/form/stack";
 import FormSection from "../../../../components/ui/form/FormSection";
 import { useToast } from "../../../../hooks/useToast";
 import {
   BarcodeImportResponseData,
+  getBarcodeDefaultContext,
   useImportSalesOrdersMutation,
 } from "../../../../redux/api/barcode";
 
-function ImportSalesOrders() {
+function ImportSalesOrders({
+  onImportCompleted,
+}: {
+  onImportCompleted?: () => Promise<unknown> | unknown;
+}) {
   const { showToast } = useToast();
-  const [organizationId, setOrganizationId] = useState("43");
-  const [divisionId, setDivisionId] = useState("374");
+  const hasAutoImportedRef = useRef(false);
   const [data, setData] = useState<{
     status: boolean;
     message: string;
@@ -23,12 +37,9 @@ function ImportSalesOrders() {
   } | null>(null);
   const [importSalesOrders, { isLoading }] = useImportSalesOrdersMutation();
 
-  const handleImport = async () => {
+  const handleImport = useCallback(async () => {
     try {
-      const response = await importSalesOrders({
-        ORGANIZATION_ID: Number(organizationId),
-        DIVISION_ID: Number(divisionId),
-      }).unwrap();
+      const response = await importSalesOrders(getBarcodeDefaultContext()).unwrap();
 
       const nextData = {
         status: Boolean(response.status),
@@ -38,7 +49,13 @@ function ImportSalesOrders() {
       };
 
       setData(nextData);
-      showToast(nextData.message, nextData.status ? "success" : "warning");
+      if (nextData.status) {
+        await onImportCompleted?.();
+      }
+      showToast(
+        nextData.status ? "Imported successfully" : nextData.message,
+        nextData.status ? "success" : "warning"
+      );
     } catch (error: any) {
       const message =
         error?.data?.message || error?.error || "Unable to import sales orders";
@@ -50,53 +67,30 @@ function ImportSalesOrders() {
       });
       showToast(message, "error");
     }
-  };
+  }, [importSalesOrders, onImportCompleted, showToast]);
+
+  useEffect(() => {
+    if (hasAutoImportedRef.current) {
+      return;
+    }
+
+    hasAutoImportedRef.current = true;
+    void handleImport();
+  }, [handleImport]);
 
   return (
     <Box>
       <FormStack>
-        <FormSection
-          title="Run Barcode Import"
-          description="Trigger barcode sales-order import using the configured organization and division."
-          icon={<SyncAltOutlinedIcon fontSize="small" />}
-          accentColor="#1D4ED8"
-        >
-          <Stack spacing={2}>
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
-                gap: 2,
-              }}
-            >
-              <MuiTextField
-                label="Organization ID"
-                type="number"
-                value={organizationId}
-                onChange={(event) => setOrganizationId(event.target.value)}
-              />
-              <MuiTextField
-                label="Division ID"
-                type="number"
-                value={divisionId}
-                onChange={(event) => setDivisionId(event.target.value)}
-              />
-            </Box>
-
-            <Box>
-              <Button variant="contained" onClick={handleImport} disabled={isLoading}>
-                {isLoading ? "Importing..." : "Import Sales Orders"}
-              </Button>
-            </Box>
-          </Stack>
-        </FormSection>
+        
 
         {data ? (
           <Alert
             severity={data.status ? "success" : "warning"}
             icon={<CheckCircleOutlineOutlinedIcon />}
           >
-            {data.message || "Sales-order import response received"}
+            {data.status
+              ? "Imported successfully"
+              : data.message || "Sales-order import response received"}
           </Alert>
         ) : null}
 
@@ -110,39 +104,41 @@ function ImportSalesOrders() {
               <Typography variant="body2">
                 Imported Orders: <strong>{data.records || 0}</strong>
               </Typography>
-              <Typography variant="body2">
-                Organization ID: <strong>{organizationId || "--"}</strong>
-              </Typography>
-              <Typography variant="body2">
-                Division ID: <strong>{divisionId || "--"}</strong>
-              </Typography>
-              {data.data.map((order) => (
-                <Box
-                  key={`${order.header_id}-${order.ordernumber}`}
-                  sx={{ p: 1.25, border: "1px solid", borderColor: "divider", borderRadius: 2 }}
-                >
-                  <Typography variant="body2">
-                    Order No: <strong>{String(order.ordernumber || "--")}</strong>
-                  </Typography>
-                  <Typography variant="body2">
-                    Header ID: <strong>{String(order.header_id || "--")}</strong>
-                  </Typography>
-                  <Typography variant="body2">
-                    Customer: <strong>{order.customer_name || "--"}</strong>
-                  </Typography>
-                  <Typography variant="body2">
-                    Customer No: <strong>{order.customer_number || "--"}</strong>
-                  </Typography>
-                  <Typography variant="body2">
-                    Booked Date: <strong>{order.order_booked_date || "--"}</strong>
-                  </Typography>
-                </Box>
-              ))}
-              <Divider />
-              <Typography variant="caption" color="text.secondary">
-                Response is rendered directly from the shape documented in
-                `PBL_QRCODE.json`.
-              </Typography>
+              <TableContainer
+                sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2 }}
+              >
+                <Table size="small">
+                  <TableHead>
+                    <TableRow
+                      sx={{
+                        "& th": {
+                          bgcolor: "#F8FAFC",
+                          color: "#475569",
+                          fontWeight: 700,
+                          whiteSpace: "nowrap",
+                        },
+                      }}
+                    >
+                      <TableCell>Order No</TableCell>
+                      <TableCell>Header ID</TableCell>
+                      <TableCell>Customer</TableCell>
+                      <TableCell>Customer No</TableCell>
+                      <TableCell>Booked Date</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {data.data.map((order) => (
+                      <TableRow key={`${order.header_id}-${order.ordernumber}`} hover>
+                        <TableCell>{String(order.ordernumber || "--")}</TableCell>
+                        <TableCell>{String(order.header_id || "--")}</TableCell>
+                        <TableCell>{order.customer_name || "--"}</TableCell>
+                        <TableCell>{order.customer_number || "--"}</TableCell>
+                        <TableCell>{order.order_booked_date || "--"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
             </Stack>
           </FormSection>
         ) : null}

@@ -30,9 +30,11 @@ export type BarcodeRecentOrderRow = {
 };
 
 export type BarcodeSerialItemViewModel = {
+  id?: number | null;
   serial_no: string;
   ass_rel_date: string | null;
   ac_ua_date: string | null;
+  ac_qc_date: string | null;
   ac_comp_date: string | null;
   ac_pk_date: string | null;
   ac_ds_date: string | null;
@@ -253,12 +255,14 @@ const getMailStatus = (status: BarcodeLineStatusCode) => {
   }
 };
 
-const mapSerialItem = (
+export const mapSerialItem = (
   serialItem: BarcodeSalesOrderLineSerialRaw
 ): BarcodeSerialItemViewModel => ({
+  id: typeof serialItem.id === "number" ? serialItem.id : null,
   serial_no: toStringValue(serialItem.serial_no ?? serialItem.SERIAL_NO),
   ass_rel_date: toStringValue(serialItem.ass_rel_date ?? serialItem.ASS_REL_DATE) || null,
   ac_ua_date: toStringValue(serialItem.ac_ua_date ?? serialItem.AC_UA_DATE) || null,
+  ac_qc_date: toStringValue(serialItem.ac_qc_date ?? serialItem.AC_QC_DATE) || null,
   ac_comp_date: toStringValue(serialItem.ac_comp_date ?? serialItem.AC_COMP_DATE) || null,
   ac_pk_date: toStringValue(serialItem.ac_pk_date ?? serialItem.AC_PK_DATE) || null,
   ac_ds_date: toStringValue(serialItem.ac_ds_date ?? serialItem.AC_DS_DATE) || null,

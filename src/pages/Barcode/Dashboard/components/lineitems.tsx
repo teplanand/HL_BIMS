@@ -36,13 +36,30 @@ import {
 import { PageHeader } from "../../../../components/ui/form/stack";
 import FormSection from "../../../../components/ui/form/FormSection";
 import { useModal } from "../../../../hooks/useModal";
-import { openEntityFormModal } from "../../../Warehouse/shared/openEntityFormModal";
-import { EditListItem, EditListItemRef } from "./editlistitem";
 import { useToast } from "../../../../hooks/useToast";
+import { useAppSelector } from "../../../../redux/hooks";
 import {
   BarcodeLineItemViewModel,
+  BarcodeSalesOrderStatus,
   BarcodeSalesOrderDetailsViewModel,
+  mapSerialItem,
 } from "../barcodeAdapters";
+import { FinalInspection } from "./finalinspection";
+import {
+  barcodeDefaults,
+  BarcodeCompletionStage,
+  BarcodeCreateWorkOrderResponseData,
+  getBarcodeDefaultContext,
+  useCreateWorkOrderMutation,
+  useGenerateSerialNumbersMutation,
+  useLazyGetCompletionGearboxDetailsQuery,
+  useLazyGetQualityCheckDetailsQuery,
+  useLazyGetUnderAssemblyDetailsQuery,
+  useIssueMaterialMutation,
+  usePrintLabelMutation,
+  useUpdateOrderCompletionStageMutation,
+} from "../../../../redux/api/barcode";
+import { printPdfBlob } from "../../../../utils/printPdfBlob";
 
 type LineItemsProps = {
   orderDetails?: BarcodeSalesOrderDetailsViewModel | null;
@@ -59,12 +76,14 @@ type ActionConfig = {
 };
 
 type SerialItem = {
+  id?: number | null;
   serial_no: string;
   status: string | null;
   sh_type: string | null;
   sh_item: string | null;
   ass_rel_date: string | null;
   ac_ua_date: string | null;
+  ac_qc_date?: string | null;
   ac_comp_date: string | null;
   ac_pk_date: string | null;
   tent_rel_date: string | null;
@@ -75,9 +94,36 @@ type SerialItem = {
   ac_ca_date?: string | null;
 };
 
+type SerialWorkflowActionKey = "acUa" | "acQc" | "acComp" | "acPk" | "acDs";
+
+type CompletionLookupMetadata = {
+  oracle_order_no?: number | string | null;
+  model_type?: string | null;
+  qty?: number | string | null;
+  order_header_id?: number | string | null;
+  order_line_id?: number | string | null;
+  kw?: number | string | null;
+  input_RPM?: number | string | null;
+  actual_ratio?: number | string | null;
+  pole?: number | string | null;
+  noiseLevel?: number | string | null;
+  paintColor?: string | null;
+  MotorMake?: string | null;
+  OracleUserId?: number | string | null;
+  P_AMB_TEMP?: string | null;
+  P_GREASE_TEMP?: string | null;
+  rpm?: number | string | null;
+  motor_serial_no?: string | null;
+  Model?: string | null;
+  model?: string | null;
+  wo_no?: string | null;
+};
+
 type LineItemRow = {
   id: string;
   lineId: number;
+  headerId?: number | null;
+  orgId?: number | null;
   line_no: string;
   item_code: string;
   description?: string;
@@ -95,8 +141,17 @@ type LineItemRow = {
   con_auth: string | null;
   status: StatusCode;
   mail_status?: string;
+  model?: string | null;
+  model_type?: string | null;
+  kw?: number | null;
+  ratio?: number | null;
   quantitys?: SerialItem[];
   actions?: Record<string, ActionConfig>;
+};
+
+type LineItemOverride = Partial<LineItemRow> & {
+  forceEnableSerialNumber?: boolean;
+  materialIssued?: boolean;
 };
 
 const meta: Record<
@@ -118,34 +173,63 @@ const actionIcon: Record<string, React.ReactNode> = {
   edit: <ViewListOutlinedIcon fontSize="small" />,
 };
 
-const actionSet = (status: StatusCode): Record<ActionKey, ActionConfig> => ({
+const actionSet = (
+  status: StatusCode,
+  options?: {
+    forceEnableSerialNumber?: boolean;
+    hasWorkOrder?: boolean;
+    hasSerialNumbers?: boolean;
+    materialIssued?: boolean;
+  }
+): Record<ActionKey, ActionConfig> => ({
   workOrder: {
-    visible: true,
+    visible: !options?.hasWorkOrder,
     enabled: true,
-    label: status === "PL" || status === "BOOKED" ? "Create WO" : "View WO",
+    label: "Create WO",
   },
-  serialNumber: { visible: true, enabled: status !== "PL" && status !== "BOOKED", label: "Serial No" },
-  issueMaterial: { visible: true, enabled: status !== "PL" && status !== "BOOKED", label: "Issue Material" },
-  printLabel: { visible: true, enabled: status === "MI" || status === "PK", label: "Print Label" },
-  edit: { visible: true, enabled: true, label: "Edit" },
+  serialNumber: {
+    visible:
+      !options?.hasSerialNumbers &&
+      (options?.forceEnableSerialNumber || options?.hasWorkOrder || (status !== "PL" && status !== "BOOKED")),
+    enabled:
+      options?.forceEnableSerialNumber || (status !== "PL" && status !== "BOOKED"),
+    label: "Serial No",
+  },
+  issueMaterial: {
+    visible:
+      !options?.materialIssued &&
+      !["MI", "PK"].includes(status),
+    enabled:
+      !options?.materialIssued &&
+      status !== "PL" &&
+      status !== "BOOKED",
+    label: "Issue Material",
+  },
+  printLabel: {
+    visible: true,
+    enabled: options?.materialIssued || status === "MI" || status === "PK",
+    label: "Print Label",
+  },
+  edit: { visible: false, enabled: false, label: "Edit" },
 });
 
-const editStatusOptions = [
-  { value: "Hold", label: "Hold" },
-  { value: "Planning", label: "Planning" },
-  { value: "Sortage", label: "Sortage" },
-  { value: "Actual Release", label: "Actual Release" },
-  { value: "Cancel", label: "Cancel" },
-];
-
 const sampleRows = (
-  orderDetails?: BarcodeSalesOrderDetailsViewModel | null
+  orderDetails?: BarcodeSalesOrderDetailsViewModel | null,
+  overrides: Record<string, LineItemOverride> = {}
 ): LineItemRow[] =>
   (orderDetails?.line_items || []).map((line: BarcodeLineItemViewModel) => ({
     ...line,
+    ...(overrides[String(line.lineId)] || {}),
     lineId: line.lineId,
     description: line.description || "Description not available",
-    actions: actionSet(line.status),
+    actions: actionSet(line.status, {
+      forceEnableSerialNumber: overrides[String(line.lineId)]?.forceEnableSerialNumber,
+      hasWorkOrder: Boolean((overrides[String(line.lineId)]?.wo_no ?? line.wo_no) || ""),
+      hasSerialNumbers: Boolean(
+        ((overrides[String(line.lineId)]?.quantitys ?? line.quantitys) || []).length
+      ),
+      materialIssued: Boolean(overrides[String(line.lineId)]?.materialIssued),
+    }),
     quantitys: line.quantitys || [],
   }));
 
@@ -174,6 +258,39 @@ const formatAmount = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value || 0);
 
+const toNumeric = (value: unknown) => {
+  const parsedValue = Number(value);
+  return Number.isFinite(parsedValue) ? parsedValue : 0;
+};
+
+const resolveCompletionStage = (status: string): BarcodeCompletionStage => {
+  if (status === "PI") {
+    return "painting";
+  }
+
+  if (status === "PK") {
+    return "packing";
+  }
+
+  return "completion";
+};
+
+const serialActionButtonMeta: Record<
+  SerialWorkflowActionKey,
+  { label: string; status: string; stage?: BarcodeCompletionStage; dateField: keyof SerialItem }
+> = {
+  acUa: { label: "Under Assembly", status: "UA", dateField: "ac_ua_date" },
+  acQc: { label: "Quality Check", status: "QC", dateField: "ac_qc_date" },
+  acComp: {
+    label: "Completion",
+    status: "CP",
+    stage: "completion",
+    dateField: "ac_comp_date",
+  },
+  acPk: { label: "Packing", status: "PK", stage: "packing", dateField: "ac_pk_date" },
+  acDs: { label: "Dispatch", status: "DS", dateField: "ac_ds_date" },
+};
+
 const dateHeaderLabel = (label: string) => (
   <Stack direction="row" spacing={0.5} alignItems="center">
     <Box component="span">{label}</Box>
@@ -183,22 +300,239 @@ const dateHeaderLabel = (label: string) => (
 
 function SerialNumberDrawer({
   row,
+  orderDetails,
+  onSerialUpdated,
   setDisplayTitle,
   setHideFooter,
   setWidth,
 }: {
   row: LineItemRow;
+  orderDetails?: BarcodeSalesOrderDetailsViewModel | null;
+  onSerialUpdated?: (
+    lineId: number,
+    serialNo: string,
+    updates: Partial<SerialItem>,
+  ) => void;
   setDisplayTitle?: (title: string) => void;
   setHideFooter?: (hidden: boolean) => void;
   setWidth?: (width: number | string) => void;
 }) {
+  const { showToast } = useToast();
+  const { openModal } = useModal();
+  const authUserId = useAppSelector((state) => state.auth.id);
+  const [triggerUnderAssembly] = useLazyGetUnderAssemblyDetailsQuery();
+  const [triggerQualityCheck] = useLazyGetQualityCheckDetailsQuery();
+  const [triggerCompletionLookup] = useLazyGetCompletionGearboxDetailsQuery();
+  const [updateOrderCompletionStage] = useUpdateOrderCompletionStageMutation();
   const serialsCount = row.quantitys?.length || 0;
+  const [serialRows, setSerialRows] = useState<SerialItem[]>(() => row.quantitys || []);
+  const [pendingActionKey, setPendingActionKey] = useState<string | null>(null);
 
   useEffect(() => {
     setDisplayTitle?.(`Line ${row.line_no} Serial Numbers`);
     setHideFooter?.(true);
     setWidth?.(980);
   }, [row.line_no, setDisplayTitle, setHideFooter, setWidth]);
+
+  useEffect(() => {
+    setSerialRows(row.quantitys || []);
+  }, [row.quantitys]);
+
+  const currentOrder = orderDetails?.order;
+
+  const handleSerialWorkflowAction = async (
+    serial: SerialItem,
+    actionKey: SerialWorkflowActionKey,
+  ) => {
+    const serialActionId = `${serial.serial_no}-${actionKey}`;
+    const metaConfig = serialActionButtonMeta[actionKey];
+
+    if (actionKey === "acQc") {
+      openModal({
+        title: serial.serial_no,
+        width: 980,
+        showCloseButton: true,
+        askDataChangeConfirm: false,
+        component: (modalProps: any) => (
+          <FinalInspection
+            {...modalProps}
+            serialNumber={serial.serial_no}
+            onSaved={({ savedAt }) => {
+              const serialUpdates: Partial<SerialItem> = {
+                ac_qc_date: savedAt,
+              };
+
+              setSerialRows((current) =>
+                current.map((entry) =>
+                  entry.serial_no === serial.serial_no
+                    ? {
+                        ...entry,
+                        ...serialUpdates,
+                      }
+                    : entry,
+                ),
+              );
+              onSerialUpdated?.(row.lineId, serial.serial_no, serialUpdates);
+            }}
+          />
+        ),
+      });
+      return;
+    }
+
+    if (actionKey === "acDs") {
+      showToast("Dispatch API is not available in barcode docs yet.", "warning");
+      return;
+    }
+
+    if (!serial.serial_no?.trim()) {
+      showToast("Serial number is required for this action.", "warning");
+      return;
+    }
+
+    setPendingActionKey(serialActionId);
+
+    try {
+      let successMessage = `${metaConfig.label} completed successfully`;
+      let serialUpdates: Partial<SerialItem> = {};
+
+      if (actionKey === "acUa") {
+        if (!serial.id) {
+          showToast("Serial id is required for Under Assembly action.", "warning");
+          return;
+        }
+
+        const response = await triggerUnderAssembly({
+          serial_no: serial.serial_no,
+          id: serial.id,
+        }).unwrap();
+
+        serialUpdates = {
+          ac_ua_date: new Date().toISOString(),
+        };
+        successMessage =
+          response?.message ||
+          "Under assembly updated successfully";
+      }
+
+      if (actionKey === "acComp" || actionKey === "acPk") {
+        let response = await triggerCompletionLookup({
+          BarcodeSerialNo: serial.serial_no,
+        }).unwrap();
+
+        if (!response?.data) {
+          response = await triggerQualityCheck({
+            serial_no: serial.serial_no,
+          }).unwrap();
+        }
+
+        const lookup = (response?.data || {}) as CompletionLookupMetadata;
+        const status = metaConfig.status;
+        const stage = metaConfig.stage || resolveCompletionStage(status);
+        const oracleUserId = toNumeric(authUserId) || toNumeric(lookup?.OracleUserId) || 1;
+
+        const updateResponse = await updateOrderCompletionStage({
+          stage,
+          DivisionId: String(barcodeDefaults.divisionId),
+          dtPrint: {
+            oracle_order_no:
+              toNumeric(lookup?.oracle_order_no) ||
+              toNumeric(currentOrder?.order_number) ||
+              0,
+            model_type: String(lookup?.model_type || row.model_type || "GM"),
+            model: String(lookup?.Model || lookup?.model || row.model || row.item_code || ""),
+            ratio: toNumeric(lookup?.actual_ratio) || toNumeric(row.ratio) || 0,
+            qty: Math.max(1, toNumeric(lookup?.qty) || toNumeric(row.quantity) || 1),
+            wo_no: String(lookup?.wo_no || row.wo_no || ""),
+            order_header_id:
+              toNumeric(lookup?.order_header_id) ||
+              toNumeric(orderDetails?.header_id) ||
+              toNumeric(row.headerId) ||
+              0,
+            order_line_id: toNumeric(lookup?.order_line_id) || toNumeric(row.lineId),
+            status,
+            kw: toNumeric(lookup?.kw) || toNumeric(row.kw),
+            serial_no: String(serial.serial_no || ""),
+            rpm: toNumeric(serial.rpm) || toNumeric(lookup?.rpm),
+            motor_serial_no: String(serial.motor_serial_no || lookup?.motor_serial_no || ""),
+            input_RPM:
+              toNumeric(lookup?.input_RPM) || toNumeric(serial.rpm) || toNumeric(lookup?.rpm),
+            actual_ratio: toNumeric(lookup?.actual_ratio) || toNumeric(row.ratio),
+            pole: toNumeric(lookup?.pole),
+            noiseLevel: toNumeric(lookup?.noiseLevel),
+            paintColor: String(lookup?.paintColor || "GOOD"),
+            MotorMake: String(lookup?.MotorMake || ""),
+            OracleUserId: oracleUserId,
+            P_AMB_TEMP: String(lookup?.P_AMB_TEMP || ""),
+            P_GREASE_TEMP: String(lookup?.P_GREASE_TEMP || ""),
+          },
+        }).unwrap();
+
+        serialUpdates =
+          actionKey === "acComp"
+            ? { ac_comp_date: new Date().toISOString() }
+            : { ac_pk_date: new Date().toISOString() };
+        successMessage = updateResponse?.message || `${metaConfig.label} updated successfully`;
+      }
+
+      if (Object.keys(serialUpdates).length) {
+        setSerialRows((current) =>
+          current.map((entry) =>
+            entry.serial_no === serial.serial_no
+              ? {
+                  ...entry,
+                  ...serialUpdates,
+                }
+              : entry,
+          ),
+        );
+        onSerialUpdated?.(row.lineId, serial.serial_no, serialUpdates);
+      }
+
+      showToast(successMessage, "success");
+    } catch (error: any) {
+      const message =
+        error?.data?.message || error?.error || `Unable to process ${metaConfig.label}`;
+      showToast(message, "error");
+    } finally {
+      setPendingActionKey(null);
+    }
+  };
+
+  const renderSerialWorkflowCell = (
+    serial: SerialItem,
+    actionKey: SerialWorkflowActionKey,
+  ) => {
+    const actionMeta = serialActionButtonMeta[actionKey];
+    const value = serial[actionMeta.dateField] as string | null | undefined;
+    const isPending = pendingActionKey === `${serial.serial_no}-${actionKey}`;
+
+    if (value) {
+      return <TableCell>{formatDate(value)}</TableCell>;
+    }
+
+    return (
+      <TableCell>
+        <Button
+          size="small"
+          variant="contained"
+          disabled={isPending}
+          onClick={() => void handleSerialWorkflowAction(serial, actionKey)}
+          sx={{
+            minWidth: 88,
+            textTransform: "none",
+            borderRadius: 2,
+            boxShadow: "none",
+            fontSize: "0.72rem",
+            px: 1,
+            py: 0.4,
+          }}
+        >
+          {isPending ? "Working..." : actionMeta.label}
+        </Button>
+      </TableCell>
+    );
+  };
 
   return (
     <Box sx={{ px: { xs: 0.5, md: 1 }, py: 1 }}>
@@ -232,9 +566,7 @@ function SerialNumberDrawer({
             </Typography>
           </Box>
         </Card>
-      </Stack>
-
-      <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} sx={{ mb: 2 }}>
+      
         <Card sx={{ ...cardSx, flex: 1 }}>
           <Box sx={{ p: 2 }}>
             <Typography variant="caption" color="text.secondary">
@@ -285,6 +617,7 @@ function SerialNumberDrawer({
               <TableCell>Serial No</TableCell>
               <TableCell>{dateHeaderLabel("Ass Rel")}</TableCell>
               <TableCell>{dateHeaderLabel("Ac Ua")}</TableCell>
+              <TableCell>{dateHeaderLabel("Qc")}</TableCell>
               <TableCell>{dateHeaderLabel("Ac Comp")}</TableCell>
               <TableCell>{dateHeaderLabel("Ac Pk")}</TableCell>
               <TableCell>{dateHeaderLabel("Ac Ds")}</TableCell>
@@ -299,17 +632,18 @@ function SerialNumberDrawer({
             </TableRow>
           </TableHead>
           <TableBody>
-            {row.quantitys && row.quantitys.length ? (
-              row.quantitys.map((serial) => (
+            {serialRows.length ? (
+              serialRows.map((serial) => (
                 <TableRow key={serial.serial_no} hover>
                   <TableCell>
                     <Typography fontWeight={700}>{serial.serial_no}</Typography>
                   </TableCell>
                   <TableCell>{formatDate(serial.ass_rel_date)}</TableCell>
-                  <TableCell>{formatDate(serial.ac_ua_date)}</TableCell>
-                  <TableCell>{formatDate(serial.ac_comp_date)}</TableCell>
-                  <TableCell>{formatDate(serial.ac_pk_date)}</TableCell>
-                  <TableCell>{formatDate(serial.ac_ds_date)}</TableCell>
+                  {renderSerialWorkflowCell(serial, "acUa")}
+                  {renderSerialWorkflowCell(serial, "acQc")}
+                  {renderSerialWorkflowCell(serial, "acComp")}
+                  {renderSerialWorkflowCell(serial, "acPk")}
+                  {renderSerialWorkflowCell(serial, "acDs")}
                   <TableCell>{formatDate(serial.tent_rel_date)}</TableCell>
                   <TableCell>{formatDate(serial.ac_ho_date)}</TableCell>
                   <TableCell>{formatDate(serial.ac_ca_date)}</TableCell>
@@ -332,7 +666,7 @@ function SerialNumberDrawer({
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={14} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={15} align="center" sx={{ py: 4 }}>
                   <Typography fontWeight={700}>Serials not generated yet.</Typography>
                   <Typography variant="body2" color="text.secondary">
                     Start with work order approval, then enable serial number generation.
@@ -382,7 +716,7 @@ function Row({
       <TableCell sx={{ minWidth: 70 }}>
         <Typography fontWeight={700}>{row.line_no}</Typography>
         <Typography variant="caption" color="text.secondary">
-          {row.con_auth || "--"}
+          {row.lineId || "--"}
         </Typography>
       </TableCell>
       <TableCell sx={{ minWidth: 270 }}>
@@ -391,16 +725,20 @@ function Row({
           {row.description}
         </Typography>
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1.25 }}>
-          <Chip
-            size="small"
-            label={row.ship_to_location}
-            sx={{ bgcolor: "#EFF6FF", color: "#1D4ED8", fontWeight: 700 }}
-          />
-          <Chip
-            size="small"
-            label={row.road_permit ? "Road Permit Required" : "Road Permit Not Required"}
-            variant="outlined"
-          />
+          <Tooltip title={`Ship to ${row.ship_to_location}`}>
+            <Chip
+              size="small"
+              label={row.ship_to_location}
+              sx={{ bgcolor: "#EFF6FF", color: "#1D4ED8", fontWeight: 700 }}
+            />
+          </Tooltip>
+          <Tooltip title={row.road_permit ? "Road Permit Required" : "Road Permit Not Required"}>
+            <Chip
+              size="small"
+              label={row.road_permit ? "Road Permit Required" : "Road Permit Not Required"}
+              variant="outlined"
+            />
+          </Tooltip>
         </Stack>
       </TableCell>
       <TableCell sx={{ minWidth: 90 }}>
@@ -425,16 +763,13 @@ function Row({
       <TableCell sx={{ minWidth: 130 }}>
         <Typography fontWeight={700}>{formatDate(row.client_delivery_date)}</Typography>
         <Typography variant="caption" color="text.secondary" display="block">
-          WO Date {formatDate(row.wo_date)}
-        </Typography>
-        <Typography variant="caption" color="text.secondary" display="block">
           Month {row.delivery_month || "--"}
         </Typography>
       </TableCell>
       <TableCell sx={{ minWidth: 125 }}>
         <Typography fontWeight={700}>{row.wo_no || "--"}</Typography>
-        <Typography variant="caption" color="text.secondary">
-          {row.mail_status || "--"}
+        <Typography variant="caption" color="text.secondary" display="block">
+          WO Date {formatDate(row.wo_date)}
         </Typography>
       </TableCell>
       <TableCell sx={{ minWidth: 130 }}>
@@ -501,6 +836,10 @@ function Row({
 function Index({ orderDetails, onOrderUpdated }: LineItemsProps) {
   const { openModal } = useModal();
   const { showToast } = useToast();
+  const [createWorkOrder] = useCreateWorkOrderMutation();
+  const [generateSerialNumbers] = useGenerateSerialNumbersMutation();
+  const [issueMaterial] = useIssueMaterialMutation();
+  const [printLabel] = usePrintLabelMutation();
   const [dateRange, setDateRange] = useState<DateRange>({
     startDate: null,
     endDate: null,
@@ -509,12 +848,13 @@ function Index({ orderDetails, onOrderUpdated }: LineItemsProps) {
   const [location, setLocation] = useState("");
   const [searchText, setSearchText] = useState("");
   const [page, setPage] = useState(1);
-  const [rows, setRows] = useState<LineItemRow[]>(() => sampleRows(orderDetails));
+  const [rowOverrides, setRowOverrides] = useState<Record<string, LineItemOverride>>({});
+  const [rows, setRows] = useState<LineItemRow[]>(() => sampleRows(orderDetails, rowOverrides));
   const rowsPerPage = 4;
 
   useEffect(() => {
-    setRows(sampleRows(orderDetails));
-  }, [orderDetails]);
+    setRows(sampleRows(orderDetails, rowOverrides));
+  }, [orderDetails, rowOverrides]);
 
   const statusOptions = useMemo(
     () => [
@@ -628,149 +968,174 @@ function Index({ orderDetails, onOrderUpdated }: LineItemsProps) {
     },
   ];
 
+  const handleSerialUpdated = (
+    lineId: number,
+    serialNo: string,
+    updates: Partial<SerialItem>,
+  ) => {
+    setRows((current) =>
+      current.map((currentRow) =>
+        currentRow.lineId === lineId
+          ? {
+              ...currentRow,
+              quantitys: (currentRow.quantitys || []).map((serial) =>
+                serial.serial_no === serialNo
+                  ? {
+                      ...serial,
+                      ...updates,
+                    }
+                  : serial,
+              ),
+            }
+          : currentRow,
+      ),
+    );
+  };
+
   const handleOpenSerialDrawer = (row: LineItemRow) => {
     openModal({
       title: `Line ${row.line_no} Serial Numbers`,
       width: "calc(100% - 180px)",
       showCloseButton: true,
       askDataChangeConfirm: false,
-      component: (modalProps: any) => <SerialNumberDrawer {...modalProps} row={row} />,
+      component: (modalProps: any) => (
+        <SerialNumberDrawer
+          {...modalProps}
+          row={row}
+          orderDetails={orderDetails}
+          onSerialUpdated={handleSerialUpdated}
+        />
+      ),
     });
-  };
-
-  const normalizeRoadPermitValue = (value: string | boolean) => {
-    if (typeof value === "boolean") {
-      return value;
-    }
-
-    return Boolean(value);
-  };
-
-  const handleUpdateLineItem = async (
-    rowId: string,
-    payload: { roadPermit: boolean; deliveryMonth: string; status: string }
-  ) => {
-    setRows((current) =>
-      current.map((row) =>
-        row.id === rowId
-          ? {
-              ...row,
-              road_permit: payload.roadPermit,
-              delivery_month: payload.deliveryMonth,
-              status: payload.status as StatusCode,
-              actions: actionSet(payload.status as StatusCode),
-            }
-          : row
-      )
-    );
   };
 
   const handleRowAction = async (row: LineItemRow, actionKey: ActionKey) => {
     if (actionKey === "edit") {
-      openEntityFormModal<EditListItemRef>({
-        openModal,
-        entityLabel: "Line Item",
-        width: 520,
-        FormComponent: EditListItem,
-        defaultValues: {
-          roadPermit: normalizeRoadPermitValue(row.road_permit),
-          deliveryMonth: row.delivery_month || "",
-          status: row.status || "",
-        },
-        extraProps: {
-          statusOptions: editStatusOptions,
-          onSubmitSection: (payload: {
-            roadPermit: boolean;
-            deliveryMonth: string;
-            status: string;
-          }) => handleUpdateLineItem(row.id, payload),
-        },
-      });
+      showToast("Line item edit API is not available yet", "warning");
       return;
     }
 
     try {
+      let successMessage = "Line item action completed";
+
       if (actionKey === "workOrder") {
-        setRows((current) =>
-          current.map((currentRow) =>
-            currentRow.id === row.id
-              ? {
-                  ...currentRow,
-                  wo_no: currentRow.wo_no || `WO-${salesOrderNo}-${currentRow.line_no}`,
-                  wo_date: currentRow.wo_date || new Date().toISOString().slice(0, 10),
-                  status: "SH",
-                  mail_status: "Work order created",
-                  actions: actionSet("SH"),
-                }
-              : currentRow
-          )
-        );
-        showToast("Temporary static mode: work order created locally", "success");
+        const response = await createWorkOrder({
+          ...getBarcodeDefaultContext(),
+          LINE_ID: row.lineId,
+          order_type: String(currentOrder?.order_type || ""),
+        }).unwrap();
+        if (response?.status === true || response?.status === 1) {
+          const workOrderData = (response?.data || {}) as BarcodeCreateWorkOrderResponseData;
+          const nextWoNo = String(workOrderData.WONO || "");
+          const nextWoDate = workOrderData.WONODATE || null;
+
+          setRowOverrides((current) => ({
+            ...current,
+            [String(row.lineId)]: {
+              ...current[String(row.lineId)],
+              wo_no: nextWoNo,
+              wo_date: nextWoDate,
+              forceEnableSerialNumber: true,
+            },
+          }));
+
+          setRows((current) =>
+            current.map((currentRow) =>
+              currentRow.id === row.id
+                ? {
+                    ...currentRow,
+                    wo_no: nextWoNo,
+                    wo_date: nextWoDate,
+                  actions: actionSet(currentRow.status, {
+                      forceEnableSerialNumber: true,
+                      hasWorkOrder: Boolean(nextWoNo),
+                      hasSerialNumbers: Boolean(currentRow.quantitys?.length),
+                      materialIssued: Boolean(
+                        rowOverrides[String(currentRow.lineId)]?.materialIssued
+                      ),
+                    }),
+                  }
+                : currentRow
+            )
+          );
+        }
+
+        successMessage =
+          response?.data?.Massage ||
+          response?.message ||
+          "Work order processed successfully";
       }
 
       if (actionKey === "serialNumber") {
-        setRows((current) =>
-          current.map((currentRow) => {
-            if (currentRow.id !== row.id) {
-              return currentRow;
-            }
+        const response = await generateSerialNumbers({
+          DIVISION_ID: barcodeDefaults.divisionId,
+          LINE_ID: row.lineId,
+        }).unwrap();
+        const generatedSerials = Array.isArray((response?.data as any)?.serial_line_items)
+          ? ((response?.data as any).serial_line_items as any[]).map(mapSerialItem)
+          : [];
 
-            const existingSerials = currentRow.quantitys || [];
-            if (existingSerials.length > 0) {
-              return currentRow;
-            }
+        if (generatedSerials.length) {
+          setRows((current) =>
+            current.map((currentRow) =>
+              currentRow.id === row.id
+                ? {
+                    ...currentRow,
+                    quantitys: generatedSerials,
+                    actions: actionSet(currentRow.status, {
+                      forceEnableSerialNumber:
+                        rowOverrides[String(currentRow.lineId)]?.forceEnableSerialNumber,
+                      hasWorkOrder: Boolean(
+                        (rowOverrides[String(currentRow.lineId)]?.wo_no ?? currentRow.wo_no) || ""
+                      ),
+                      hasSerialNumbers: generatedSerials.length > 0,
+                      materialIssued: Boolean(
+                        rowOverrides[String(currentRow.lineId)]?.materialIssued
+                      ),
+                    }),
+                  }
+                : currentRow
+            )
+          );
+        }
 
-            const generatedSerials = Array.from(
-              { length: Math.max(currentRow.quantity, 1) },
-              (_, index) => ({
-                serial_no: `${salesOrderNo}-${currentRow.line_no.replace(".", "")}-${index + 1}`,
-                status: "SH",
-                sh_type: currentRow.item_code,
-                sh_item: currentRow.description || currentRow.item_code,
-                ass_rel_date: currentRow.wo_date || new Date().toISOString().slice(0, 10),
-                ac_ua_date: null,
-                ac_comp_date: null,
-                ac_pk_date: null,
-                tent_rel_date: currentRow.client_delivery_date,
-                rpm: null,
-                motor_serial_no: null,
-                ac_ds_date: null,
-                ac_ho_date: null,
-                ac_ca_date: null,
-              })
-            );
-
-            return {
-              ...currentRow,
-              quantitys: generatedSerials,
-              mail_status: "Serial numbers generated",
-              actions: actionSet(currentRow.status),
-            };
-          })
-        );
-        showToast("Temporary static mode: serial numbers generated locally", "success");
+        successMessage = response?.message || "Serial numbers generated successfully";
       }
 
       if (actionKey === "issueMaterial") {
+        const response = await issueMaterial({
+          ...getBarcodeDefaultContext(),
+          LINE_ID: row.lineId,
+        }).unwrap();
+
+        setRowOverrides((current) => ({
+          ...current,
+          [String(row.lineId)]: {
+            ...current[String(row.lineId)],
+            materialIssued: true,
+          },
+        }));
+
         setRows((current) =>
           current.map((currentRow) =>
             currentRow.id === row.id
               ? {
                   ...currentRow,
-                  status: "MI",
-                  mail_status: "Material issued",
-                  quantitys: (currentRow.quantitys || []).map((serial) => ({
-                    ...serial,
-                    status: "MI",
-                    ac_ua_date:
-                      serial.ac_ua_date || new Date().toISOString().slice(0, 10),
-                  })),
-                  actions: actionSet("MI"),
+                  actions: actionSet(currentRow.status, {
+                    forceEnableSerialNumber:
+                      rowOverrides[String(currentRow.lineId)]?.forceEnableSerialNumber,
+                    hasWorkOrder: Boolean(
+                      (rowOverrides[String(currentRow.lineId)]?.wo_no ?? currentRow.wo_no) || ""
+                    ),
+                    hasSerialNumbers: Boolean(currentRow.quantitys?.length),
+                    materialIssued: true,
+                  }),
                 }
               : currentRow
           )
         );
-        showToast("Temporary static mode: material issue updated locally", "success");
+
+        successMessage = response?.message || "Material issue processed successfully";
       }
 
       if (actionKey === "printLabel") {
@@ -779,28 +1144,26 @@ function Index({ orderDetails, onOrderUpdated }: LineItemsProps) {
           return;
         }
 
-        setRows((current) =>
-          current.map((currentRow) =>
-            currentRow.id === row.id
-              ? {
-                  ...currentRow,
-                  status: "PK",
-                  mail_status: "Ready for label print",
-                  quantitys: (currentRow.quantitys || []).map((serial) => ({
-                    ...serial,
-                    status: "PK",
-                    ac_pk_date:
-                      serial.ac_pk_date || new Date().toISOString().slice(0, 10),
-                  })),
-                  actions: actionSet("PK"),
-                }
-              : currentRow
-          )
-        );
-        showToast("Temporary static mode: label print completed locally", "success");
+        const response = await printLabel({
+          WONO: row.wo_no,
+          Line_Id: row.lineId,
+          ORGANIZATION_ID: row.orgId ?? barcodeDefaults.organizationId,
+          ORDER_LINE_NO:
+            Number.isFinite(Number(row.line_no)) ? Number(row.line_no) : row.line_no,
+        }).unwrap();
+
+        if (response?.blob) {
+          await printPdfBlob(response.blob, {
+            fileName: response.fileName || `label-${row.wo_no}.pdf`,
+          });
+          successMessage = "Label PDF opened in print dialog";
+        } else {
+          successMessage = response?.message || "Print label request submitted successfully";
+        }
       }
 
       await onOrderUpdated?.();
+      showToast(successMessage, "success");
     } catch (error: any) {
       const message =
         error?.data?.message || error?.error || "Unable to process line action";
@@ -837,7 +1200,7 @@ function Index({ orderDetails, onOrderUpdated }: LineItemsProps) {
       <Box
         sx={{
           display: "grid",
-          gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", xl: "repeat(4, 1fr)" },
+          gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)", lg: "repeat(4, 1fr)" },
           gap: 2,
         }}
       >

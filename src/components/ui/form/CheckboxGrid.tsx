@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, type ChangeEvent } from "react";
 import { Box, SxProps, Theme } from "@mui/material";
 import { UseFormRegister } from "react-hook-form";
 import MuiCheckbox from "../../mui/input/MuiCheckbox";
@@ -11,7 +11,9 @@ export type CheckboxField = {
 export type CheckboxGridProps = {
   fields: CheckboxField[];
   /** react-hook-form register function */
-  register: UseFormRegister<any>;
+  register?: UseFormRegister<any>;
+  checkedValues?: Record<string, boolean | undefined>;
+  onCheckedChange?: (name: string, checked: boolean) => void;
   /** Dot-notation prefix, e.g. "accessories" → registers "accessories.fieldName" */
   prefix?: string;
   /** Grid columns per breakpoint — defaults: xs=2, sm=3, md=4 */
@@ -22,12 +24,22 @@ export type CheckboxGridProps = {
 const CheckboxGrid: React.FC<CheckboxGridProps> = ({
   fields,
   register,
+  checkedValues,
+  onCheckedChange,
   prefix,
   columns = { xs: 2, sm: 3, md: 4 },
   sx,
 }) => {
   const getFieldPath = (name: string) =>
     prefix ? (`${prefix}.${name}` as any) : name;
+
+  const getRegisterProps = (name: string) =>
+    register ? register(getFieldPath(name)) : {};
+
+  const handleCheckboxChange =
+    (name: string) => (event: ChangeEvent<HTMLInputElement>) => {
+      onCheckedChange?.(name, event.target.checked);
+    };
 
   return (
     <Box
@@ -60,7 +72,9 @@ const CheckboxGrid: React.FC<CheckboxGridProps> = ({
         >
           <MuiCheckbox
             label={field.label}
-            {...register(getFieldPath(field.name))}
+            {...getRegisterProps(field.name)}
+            checked={Boolean(checkedValues?.[field.name])}
+            onChange={handleCheckboxChange(field.name)}
             size="small"
             sx={{
               "& .MuiFormControlLabel-label": {

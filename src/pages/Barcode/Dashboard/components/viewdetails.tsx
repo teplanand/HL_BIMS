@@ -9,7 +9,6 @@ import {
   BarcodeSalesOrderDetailsViewModel,
   mapSalesOrderDetails,
 } from "../barcodeAdapters";
-import { getMockSalesOrderDetails } from "../mockBarcodeService";
 import {
   getBarcodeDefaultContext,
   useLazyGetSalesOrderDetailsQuery,
@@ -69,11 +68,9 @@ function Index({
           return;
         }
       } catch {
-        // Fallbacks below keep the modal usable even if API fetch fails.
-      }
-
-      if (isMounted) {
-        setResolvedOrderDetails((current) => current || getMockSalesOrderDetails(orderNumber));
+        if (isMounted) {
+          setResolvedOrderDetails((current) => current || null);
+        }
       }
     };
 
@@ -89,12 +86,8 @@ function Index({
       return resolvedOrderDetails;
     }
 
-    if (orderNumber) {
-      return getMockSalesOrderDetails(orderNumber);
-    }
-
     return defaultValues;
-  }, [defaultValues, orderNumber, resolvedOrderDetails]);
+  }, [defaultValues, resolvedOrderDetails]);
 
   const handleRefreshOrder = async () => {
     if (!orderNumber) {
@@ -135,9 +128,7 @@ function Index({
           <Alert severity="info">Loading sales-order details...</Alert>
         ) : null}
         {isError ? (
-          <Alert severity="warning">
-            API details could not be loaded, so fallback data is being shown where available.
-          </Alert>
+          <Alert severity="warning">API details could not be loaded.</Alert>
         ) : null}
         {!mappedOrderDetails ? (
           <Alert severity="warning">No sales-order data available to display.</Alert>

@@ -8,6 +8,13 @@ import type {
   EvidenceViewerProfile,
 } from "./types";
 
+
+// {
+//     "username":"TPLSR0140",
+//     "password":"elecon"
+// }
+
+
 const ARRAY_SEARCH_DEPTH = 4;
 
 const MEDIA_URL_KEYS = [
@@ -38,7 +45,7 @@ const TITLE_KEYS = [
 ];
 
 const DATE_KEYS = [
-  "CreatedAt",
+  "createdAt",
   "CreatedDate",
   "UploadedAt",
   "UploadDate",
@@ -46,10 +53,28 @@ const DATE_KEYS = [
   "CreatedOn",
 ];
 
-const REMARK_KEYS = ["Remarks", "Remark", "remarks", "Comments", "Description"];
+const REMARK_KEYS = ["remark", "Remark", "remarks", "Comments", "Description"];
 
 const CATEGORY_ID_KEYS = ["CategoryId","categoryId", "CatId", "Id", "id"];
 const CATEGORY_NAME_KEYS = ["CategoryName","categoryName", "Name", "Label", "Category"];
+const CHILD_CATEGORY_COLLECTION_KEYS = [
+  "childDatas",
+  "ChildDatas",
+  "childCategories",
+  "ChildCategories",
+  "children",
+  "Children",
+];
+const CHILD_CATEGORY_NAME_KEYS = [
+  "childName",
+  "ChildName",
+  "ChildCategoryName",
+  "childCategoryName",
+  "SubChildCategoryName",
+  "subChildCategoryName",
+  "SubCategoryName",
+  "subCategoryName",
+];
 const REFERENCE_KEYS = ["RefNo", "ReferenceNo", "ReferenceNumber", "RefNumber", "Name","referenceNumbersList"];
 
 const isRecord = (value: unknown): value is EvidenceApiRecord =>
@@ -210,6 +235,26 @@ const pickNumber = (record: EvidenceApiRecord | null, keys: string[]) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const pickNestedArrayRecord = (record: EvidenceApiRecord | null, keys: string[]) => {
+  if (!record) {
+    return null;
+  }
+
+  for (const key of keys) {
+    const value = record[key];
+    if (!Array.isArray(value)) {
+      continue;
+    }
+
+    const nestedRecord = value.find(isRecord);
+    if (nestedRecord) {
+      return nestedRecord;
+    }
+  }
+
+  return null;
+};
+
 const normalizePrimitiveOption = (
   value: unknown,
   prefix: string,
@@ -237,6 +282,10 @@ export const normalizeCategories = (value: unknown): EvidenceCategoryOption[] =>
         id: rawId,
         numericId: pickNumber(record, CATEGORY_ID_KEYS),
         label,
+        childLabel: pickString(
+          pickNestedArrayRecord(record, CHILD_CATEGORY_COLLECTION_KEYS),
+          CHILD_CATEGORY_NAME_KEYS,
+        ),
         subtitle:
           pickString(record, ["DivisionName", "Division", "CompanyName", "Company"]) ||
           "Evidence category",
@@ -262,18 +311,13 @@ export const normalizeReferences = (value: unknown): EvidenceReferenceOption[] =
   return input
     .map((record, index) => {
       const refNo = pickString(record, REFERENCE_KEYS) || `REF-${index + 1}`;
-      const title =
-        pickString(record, ["Title", "DisplayName", "Label"]) || `Reference ${refNo}`;
-      const subtitleParts = [
-        pickString(record, ["Remarks", "Remark"]),
-        pickString(record, ["CreatedDate", "UploadDate"]),
-      ].filter(Boolean);
+      const title = pickString(record, ["Title", "DisplayName", "Label"]) || refNo;
 
       return {
         id: `${refNo}-${index}`,
         refNo,
         label: title,
-        subtitle: subtitleParts.join(" | ") || "Tap to load evidence",
+        subtitle: "",
         raw: record,
       };
     })
