@@ -5,16 +5,26 @@ import {
   Card,
   Chip,
   Pagination,
+  Radio,
+  Select,
+  MenuItem,
   Stack,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
+  TextField,
   TableRow,
   Tooltip,
   Typography,
 } from "@mui/material";
+import {
+  GridColDef,
+  GridFilterModel,
+  GridPaginationModel,
+  GridSortModel,
+} from "@mui/x-data-grid";
 import { alpha } from "@mui/material/styles";
 import PrecisionManufacturingOutlinedIcon from "@mui/icons-material/PrecisionManufacturingOutlined";
 import QrCode2OutlinedIcon from "@mui/icons-material/QrCode2Outlined";
@@ -23,16 +33,12 @@ import LocalPrintshopOutlinedIcon from "@mui/icons-material/LocalPrintshopOutlin
 import RouteOutlinedIcon from "@mui/icons-material/RouteOutlined";
 import WarehouseOutlinedIcon from "@mui/icons-material/WarehouseOutlined";
 import CurrencyRupeeOutlinedIcon from "@mui/icons-material/CurrencyRupeeOutlined";
-import FilterListOutlinedIcon from "@mui/icons-material/FilterListOutlined";
 import ViewListOutlinedIcon from "@mui/icons-material/ViewListOutlined";
 import CalendarMonthOutlinedIcon from "@mui/icons-material/CalendarMonthOutlined";
 
-import { DateRange } from "../../../../components/common/DateRangePicker";
-import {
-  MuiDateRangePicker,
-  MuiSelect,
-  MuiTextField,
-} from "../../../../components/mui/input";
+import ApiActionButton from "../../../../components/common/ApiActionButton";
+import ReusableDataGrid from "../../../../components/common/ReusableDataGrid";
+import { MuiSelect, MuiTextField } from "../../../../components/mui/input";
 import { PageHeader } from "../../../../components/ui/form/stack";
 import FormSection from "../../../../components/ui/form/FormSection";
 import { useModal } from "../../../../hooks/useModal";
@@ -45,6 +51,8 @@ import {
   mapSerialItem,
 } from "../barcodeAdapters";
 import { FinalInspection } from "./finalinspection";
+import { EditListItem, type EditListItemRef } from "./editlistitem";
+import { OrderComplition } from "./ordercomplition";
 import {
   barcodeDefaults,
   BarcodeCompletionStage,
@@ -56,8 +64,10 @@ import {
   useLazyGetQualityCheckDetailsQuery,
   useLazyGetUnderAssemblyDetailsQuery,
   useIssueMaterialMutation,
+  useOrderLineItemEditMutation,
   usePrintLabelMutation,
   useUpdateOrderCompletionStageMutation,
+  useWipMaterialIssueMutation,
 } from "../../../../redux/api/barcode";
 import { printPdfBlob } from "../../../../utils/printPdfBlob";
 
@@ -85,6 +95,7 @@ type SerialItem = {
   ac_ua_date: string | null;
   ac_qc_date?: string | null;
   ac_comp_date: string | null;
+  ac_pi_date: string | null;
   ac_pk_date: string | null;
   tent_rel_date: string | null;
   rpm: string | null;
@@ -94,7 +105,7 @@ type SerialItem = {
   ac_ca_date?: string | null;
 };
 
-type SerialWorkflowActionKey = "acUa" | "acQc" | "acComp" | "acPk" | "acDs";
+type SerialWorkflowActionKey = "acUa" | "acQc" | "acComp" | "acPi" | "acPk" | "acDs";
 
 type CompletionLookupMetadata = {
   oracle_order_no?: number | string | null;
@@ -124,6 +135,7 @@ type LineItemRow = {
   lineId: number;
   headerId?: number | null;
   orgId?: number | null;
+  shipFromOrgId?: number | null;
   line_no: string;
   item_code: string;
   description?: string;
@@ -162,6 +174,7 @@ const meta: Record<
   SH: { label: "Shop Floor Ready", bg: "#DCFCE7", color: "#166534", accent: "#15803D" },
   MI: { label: "Material Issued", bg: "#DBEAFE", color: "#1D4ED8", accent: "#2563EB" },
   PK: { label: "Label Ready", bg: "#F3E8FF", color: "#7E22CE", accent: "#9333EA" },
+  PI: { label: "Painting", bg: "#FCE7F3", color: "#BE185D", accent: "#EC4899" },
   BOOKED: { label: "Booked", bg: "#FFF4D6", color: "#9A5B00", accent: "#D68A00" },
 };
 
@@ -197,12 +210,10 @@ const actionSet = (
   },
   issueMaterial: {
     visible:
+      Boolean(options?.hasSerialNumbers) &&
       !options?.materialIssued &&
       !["MI", "PK"].includes(status),
-    enabled:
-      !options?.materialIssued &&
-      status !== "PL" &&
-      status !== "BOOKED",
+    enabled: Boolean(options?.hasSerialNumbers) && !options?.materialIssued,
     label: "Issue Material",
   },
   printLabel: {
@@ -210,28 +221,35 @@ const actionSet = (
     enabled: options?.materialIssued || status === "MI" || status === "PK",
     label: "Print Label",
   },
-  edit: { visible: false, enabled: false, label: "Edit" },
+  edit: { visible: true, enabled: true, label: "Edit" },
 });
 
 const sampleRows = (
   orderDetails?: BarcodeSalesOrderDetailsViewModel | null,
   overrides: Record<string, LineItemOverride> = {}
 ): LineItemRow[] =>
-  (orderDetails?.line_items || []).map((line: BarcodeLineItemViewModel) => ({
-    ...line,
-    ...(overrides[String(line.lineId)] || {}),
-    lineId: line.lineId,
-    description: line.description || "Description not available",
-    actions: actionSet(line.status, {
-      forceEnableSerialNumber: overrides[String(line.lineId)]?.forceEnableSerialNumber,
-      hasWorkOrder: Boolean((overrides[String(line.lineId)]?.wo_no ?? line.wo_no) || ""),
-      hasSerialNumbers: Boolean(
-        ((overrides[String(line.lineId)]?.quantitys ?? line.quantitys) || []).length
-      ),
-      materialIssued: Boolean(overrides[String(line.lineId)]?.materialIssued),
-    }),
-    quantitys: line.quantitys || [],
-  }));
+  (orderDetails?.line_items || []).map((line: BarcodeLineItemViewModel) => {
+    const override = overrides[String(line.lineId)] || {};
+    const resolvedQuantitys = override.quantitys ?? line.quantitys ?? [];
+    const resolvedStatus = (override.status ?? line.status) as StatusCode;
+    const resolvedWoNo = String(override.wo_no ?? line.wo_no ?? "");
+
+    return {
+      ...line,
+      ...override,
+      lineId: line.lineId,
+      description: line.description || "Description not available",
+      status: resolvedStatus,
+      wo_no: resolvedWoNo,
+      quantitys: resolvedQuantitys,
+      actions: actionSet(resolvedStatus, {
+        forceEnableSerialNumber: override.forceEnableSerialNumber,
+        hasWorkOrder: Boolean(resolvedWoNo),
+        hasSerialNumbers: resolvedQuantitys.length > 0,
+        materialIssued: Boolean(override.materialIssued),
+      }),
+    };
+  });
 
 const cardSx = { border: "1px solid rgba(15,23,42,0.08)" };
 
@@ -263,6 +281,611 @@ const toNumeric = (value: unknown) => {
   return Number.isFinite(parsedValue) ? parsedValue : 0;
 };
 
+const toDisplayValue = (value: unknown) => {
+  if (value === null || value === undefined || value === "") {
+    return "--";
+  }
+
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+
+  return String(value);
+};
+
+const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const MATERIAL_ISSUE_COLUMN_CONFIG: Array<{
+  field: string;
+  headerName: string;
+  minWidth: number;
+  aliases: string[];
+}> = [
+  { field: "srNo", headerName: "Sr No", minWidth: 90, aliases: ["srNo", "sr_no", "srno", "sr", "id"] },
+  { field: "item", headerName: "Item", minWidth: 220, aliases: ["item", "item_code", "inventory_item", "segment1", "ordered_item"] },
+  {
+    field: "subInventory",
+    headerName: "SUB INVENTORY",
+    minWidth: 160,
+    aliases: ["subInventory", "sub_inventory", "subinventory", "subinv", "from_subinventory_code"],
+  },
+  {
+    field: "locator",
+    headerName: "LOCATOR",
+    minWidth: 140,
+    aliases: ["locator", "locator_code", "segment2", "concatenated_segments", "from_locator"],
+  },
+  { field: "uom", headerName: "UOM", minWidth: 90, aliases: ["uom", "uom_code", "primary_uom_code"] },
+  {
+    field: "reqQty",
+    headerName: "Req Qty",
+    minWidth: 110,
+    aliases: ["reqQty", "req_qty", "required_qty", "required_quantity", "request_quantity"],
+  },
+  {
+    field: "qtyOpen",
+    headerName: "Qty Open",
+    minWidth: 110,
+    aliases: ["qtyOpen", "qty_open", "open_qty", "open_quantity", "transaction_quantity"],
+  },
+  {
+    field: "qtyOnHand",
+    headerName: "Qty On Hand",
+    minWidth: 130,
+    aliases: ["qtyOnHand", "qty_on_hand", "onhand_qty", "on_hand_quantity", "quantity_on_hand"],
+  },
+  {
+    field: "lotSerial",
+    headerName: "Lot/Serial",
+    minWidth: 140,
+    aliases: ["lotSerial", "lot_serial", "lot_number", "serial_number", "lot_or_serial"],
+  },
+  {
+    field: "selectLocator",
+    headerName: "Select Locator",
+    minWidth: 140,
+    aliases: ["selectLocator", "select_locator", "locator_selected", "selected_locator", "locator_flag"],
+  },
+];
+
+const getMaterialIssueValue = (row: Record<string, unknown>, aliases: string[]) => {
+  for (const alias of aliases) {
+    if (row[alias] !== undefined && row[alias] !== null && row[alias] !== "") {
+      return row[alias];
+    }
+
+    const normalizedAlias = alias.toLowerCase();
+    const matchedKey = Object.keys(row).find((key) => key.toLowerCase() === normalizedAlias);
+    if (matchedKey && row[matchedKey] !== undefined && row[matchedKey] !== null && row[matchedKey] !== "") {
+      return row[matchedKey];
+    }
+  }
+
+  return null;
+};
+
+type MaterialIssueGridRow = {
+  id: number;
+  srNo: unknown;
+  item: unknown;
+  itemDescription: unknown;
+  subInventory: unknown;
+  locator: unknown;
+  uom: unknown;
+  reqQty: unknown;
+  qtyOpen: unknown;
+  qtyOnHand: unknown;
+  lotSerial: unknown;
+  selectLocator: unknown;
+  inventoryItemId: string;
+  lotControlCode: number;
+  lotOptions: string[];
+};
+
+const normalizeMaterialIssueRows = (response: unknown) => {
+  const source = isPlainRecord(response) && "data" in response ? response.data : response;
+
+  if (Array.isArray(source)) {
+    return source.map((entry, index) => {
+      if (!isPlainRecord(entry)) {
+        return {
+          id: index + 1,
+          srNo: index + 1,
+          item: toDisplayValue(entry),
+          itemDescription: "--",
+          subInventory: "--",
+          locator: "--",
+          uom: "--",
+          reqQty: "--",
+          qtyOpen: "--",
+          qtyOnHand: "--",
+          lotSerial: "--",
+          selectLocator: "--",
+          inventoryItemId: "",
+          lotControlCode: 0,
+          lotOptions: ["ABC"],
+        };
+      }
+
+      const lotSerialValue = getMaterialIssueValue(
+        entry,
+        MATERIAL_ISSUE_COLUMN_CONFIG[8].aliases
+      );
+      const lotOptions = Array.isArray(lotSerialValue)
+        ? lotSerialValue.map((value) => toDisplayValue(value))
+        : String(lotSerialValue || "")
+            .split(",")
+            .map((value) => value.trim())
+            .filter(Boolean);
+
+      return {
+        id: index + 1,
+        srNo: getMaterialIssueValue(entry, ["srNo", "sr_no", "srno", "sr"]) ?? index + 1,
+        item: getMaterialIssueValue(entry, MATERIAL_ISSUE_COLUMN_CONFIG[1].aliases),
+        itemDescription: getMaterialIssueValue(entry, [
+          "description",
+          "item_description",
+          "inventory_item_description",
+        ]),
+        subInventory: getMaterialIssueValue(entry, MATERIAL_ISSUE_COLUMN_CONFIG[2].aliases),
+        locator: getMaterialIssueValue(entry, MATERIAL_ISSUE_COLUMN_CONFIG[3].aliases),
+        uom: getMaterialIssueValue(entry, MATERIAL_ISSUE_COLUMN_CONFIG[4].aliases),
+        reqQty: getMaterialIssueValue(entry, MATERIAL_ISSUE_COLUMN_CONFIG[5].aliases),
+        qtyOpen: getMaterialIssueValue(entry, MATERIAL_ISSUE_COLUMN_CONFIG[6].aliases),
+        qtyOnHand: getMaterialIssueValue(entry, MATERIAL_ISSUE_COLUMN_CONFIG[7].aliases),
+        lotSerial: getMaterialIssueValue(entry, MATERIAL_ISSUE_COLUMN_CONFIG[8].aliases),
+        selectLocator: getMaterialIssueValue(entry, MATERIAL_ISSUE_COLUMN_CONFIG[9].aliases),
+        inventoryItemId: toDisplayValue(
+          getMaterialIssueValue(entry, [
+            "inventory_item_id",
+            "inventoryitemid",
+            "inventoryItemId",
+          ])
+        ),
+        lotControlCode: toNumeric(
+          getMaterialIssueValue(entry, [
+            "lot_control_code",
+            "lotcontrolcode",
+            "lotControlCode",
+          ])
+        ),
+        lotOptions: lotOptions.length ? lotOptions : ["ABC"],
+      };
+    });
+  }
+
+  if (isPlainRecord(source)) {
+    const lotSerialValue = getMaterialIssueValue(
+      source,
+      MATERIAL_ISSUE_COLUMN_CONFIG[8].aliases
+    );
+    const lotOptions = Array.isArray(lotSerialValue)
+      ? lotSerialValue.map((value) => toDisplayValue(value))
+      : String(lotSerialValue || "")
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean);
+
+    return [
+      {
+        id: 1,
+        srNo: getMaterialIssueValue(source, ["srNo", "sr_no", "srno", "sr"]) ?? 1,
+        item: getMaterialIssueValue(source, MATERIAL_ISSUE_COLUMN_CONFIG[1].aliases),
+        itemDescription: getMaterialIssueValue(source, [
+          "description",
+          "item_description",
+          "inventory_item_description",
+        ]),
+        subInventory: getMaterialIssueValue(source, MATERIAL_ISSUE_COLUMN_CONFIG[2].aliases),
+        locator: getMaterialIssueValue(source, MATERIAL_ISSUE_COLUMN_CONFIG[3].aliases),
+        uom: getMaterialIssueValue(source, MATERIAL_ISSUE_COLUMN_CONFIG[4].aliases),
+        reqQty: getMaterialIssueValue(source, MATERIAL_ISSUE_COLUMN_CONFIG[5].aliases),
+        qtyOpen: getMaterialIssueValue(source, MATERIAL_ISSUE_COLUMN_CONFIG[6].aliases),
+        qtyOnHand: getMaterialIssueValue(source, MATERIAL_ISSUE_COLUMN_CONFIG[7].aliases),
+        lotSerial: getMaterialIssueValue(source, MATERIAL_ISSUE_COLUMN_CONFIG[8].aliases),
+        selectLocator: getMaterialIssueValue(source, MATERIAL_ISSUE_COLUMN_CONFIG[9].aliases),
+        inventoryItemId: toDisplayValue(
+          getMaterialIssueValue(source, [
+            "inventory_item_id",
+            "inventoryitemid",
+            "inventoryItemId",
+          ])
+        ),
+        lotControlCode: toNumeric(
+          getMaterialIssueValue(source, [
+            "lot_control_code",
+            "lotcontrolcode",
+            "lotControlCode",
+          ])
+        ),
+        lotOptions: lotOptions.length ? lotOptions : ["ABC"],
+      },
+    ];
+  }
+
+  return [
+    {
+      id: 1,
+      srNo: 1,
+      item: toDisplayValue(source),
+      itemDescription: "--",
+      subInventory: "--",
+      locator: "--",
+      uom: "--",
+      reqQty: "--",
+      qtyOpen: "--",
+      qtyOnHand: "--",
+      lotSerial: "--",
+      selectLocator: "--",
+      inventoryItemId: "",
+      lotControlCode: 0,
+      lotOptions: ["ABC"],
+    },
+  ];
+};
+
+function LotSerialDrawer({
+  row,
+  setDisplayTitle,
+  setHideFooter,
+  setWidth,
+}: {
+  row: MaterialIssueGridRow;
+  setDisplayTitle?: (title: string) => void;
+  setHideFooter?: (hidden: boolean) => void;
+  setWidth?: (width: number | string) => void;
+}) {
+  const { showToast } = useToast();
+  const [selectedLot, setSelectedLot] = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [entries, setEntries] = useState<Array<{ id: number; lot: string; quantity: string }>>([]);
+
+  useEffect(() => {
+    setDisplayTitle?.(`Lot/Serial - ${toDisplayValue(row.item)}`);
+    setHideFooter?.(true);
+    setWidth?.(980);
+  }, [row.item, setDisplayTitle, setHideFooter, setWidth]);
+
+  const handleAdd = () => {
+    setEntries((current) => [
+      ...current,
+      {
+        id: current.length + 1,
+        lot: selectedLot || "--",
+        quantity: quantity || "--",
+      },
+    ]);
+  };
+
+  const handleReset = () => {
+    setSelectedLot("");
+    setQuantity("");
+    setEntries([]);
+  };
+
+  return (
+    <Stack spacing={2} sx={{ px: 0.5, py: 1 }}>
+      <Card sx={{ ...cardSx }}>
+        <Box sx={{ p: 2.5 }}>
+          <Typography variant="caption" color="text.secondary">
+            Lot / Serial Selection
+          </Typography>
+          <Typography variant="h6" fontWeight={800} sx={{ mb: 2.5 }}>
+            Material Allocation
+          </Typography>
+
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", md: "180px 220px 1fr" },
+              gap: 1.5,
+              alignItems: "center",
+              mb: 3,
+            }}
+          >
+            <Typography color="text.secondary">Item</Typography>
+            <Typography fontWeight={700}>{toDisplayValue(row.item)}</Typography>
+            <Typography>{toDisplayValue(row.itemDescription)}</Typography>
+
+            <Typography color="text.secondary">Required Quantity</Typography>
+            <Typography fontWeight={700}>{toDisplayValue(row.reqQty)}</Typography>
+            <Box />
+          </Box>
+
+          <TableContainer
+            sx={{
+              borderRadius: 1.5,
+              border: "1px solid",
+              borderColor: "divider",
+              backgroundColor: "background.paper",
+              maxWidth: 760,
+            }}
+          >
+            <Table size="small">
+              <TableHead>
+                <TableRow
+                  sx={{
+                    "& th": {
+                      bgcolor: "#F8FAFC",
+                      color: "#475569",
+                      fontSize: "0.78rem",
+                      fontWeight: 800,
+                      borderColor: "divider",
+                    },
+                  }}
+                >
+                  <TableCell>LOT</TableCell>
+                  <TableCell>Quantity</TableCell>
+                  <TableCell>On Hand Qty</TableCell>
+                  <TableCell align="center">Action</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                <TableRow>
+                  <TableCell sx={{ width: 220 }}>
+                    <Select
+                      size="small"
+                      fullWidth
+                      displayEmpty
+                      value={selectedLot}
+                      onChange={(event) => setSelectedLot(String(event.target.value))}
+                    >
+                      <MenuItem value="">-Select-</MenuItem>
+                      {row.lotOptions.map((option) => (
+                        <MenuItem key={option} value={option}>
+                          {option}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </TableCell>
+                  <TableCell sx={{ width: 180 }}>
+                    <TextField
+                      size="small"
+                      value={quantity}
+                      onChange={(event) => setQuantity(event.target.value)}
+                    />
+                  </TableCell>
+                  <TableCell sx={{ width: 180 }}>{toDisplayValue(row.qtyOnHand)}</TableCell>
+                  <TableCell align="center" sx={{ width: 120 }}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={handleAdd}
+                      sx={{ minWidth: 80, textTransform: "none" }}
+                    >
+                      ADD
+                    </Button>
+                  </TableCell>
+                </TableRow>
+                {entries.map((entry) => (
+                  <TableRow key={entry.id}>
+                    <TableCell>{entry.lot}</TableCell>
+                    <TableCell>{entry.quantity}</TableCell>
+                    <TableCell>{toDisplayValue(row.qtyOnHand)}</TableCell>
+                    <TableCell align="center">--</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+
+          <Stack direction="row" spacing={1.5} sx={{ mt: 3 }}>
+            <Button
+              variant="contained"
+              onClick={() => showToast("Save action will be added later.", "info")}
+              sx={{ minWidth: 96, textTransform: "none" }}
+            >
+              Save
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={handleReset}
+              sx={{ minWidth: 96, textTransform: "none" }}
+            >
+              Reset
+            </Button>
+          </Stack>
+        </Box>
+      </Card>
+    </Stack>
+  );
+}
+
+const buildMaterialIssueColumns = ({
+  duplicateInventoryCounts,
+  selectedLocatorByInventory,
+  onSelectLocator,
+  onLotSerialClick,
+}: {
+  duplicateInventoryCounts: Record<string, number>;
+  selectedLocatorByInventory: Record<string, number>;
+  onSelectLocator: (inventoryItemId: string, rowId: number) => void;
+  onLotSerialClick: (row: MaterialIssueGridRow) => void;
+}): GridColDef[] => {
+  return MATERIAL_ISSUE_COLUMN_CONFIG.map((column) => ({
+    field: column.field,
+    headerName: column.headerName,
+    flex: 1,
+    minWidth: column.minWidth,
+    renderCell: (params) => {
+      const row = params.row as MaterialIssueGridRow;
+
+      if (column.field === "selectLocator") {
+        const inventoryItemId = String(row.inventoryItemId || "");
+        const canChooseLocator =
+          Boolean(inventoryItemId) && (duplicateInventoryCounts[inventoryItemId] || 0) > 1;
+
+        if (!canChooseLocator) {
+          return "--";
+        }
+
+        return (
+          <Radio
+            size="small"
+            checked={selectedLocatorByInventory[inventoryItemId] === Number(row.id)}
+            onChange={() => onSelectLocator(inventoryItemId, Number(row.id))}
+          />
+        );
+      }
+
+      if (column.field === "lotSerial") {
+        if (Number(row.lotControlCode) !== 2) {
+          return "--";
+        }
+
+        return (
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => onLotSerialClick(row)}
+            sx={{
+              minWidth: 96,
+              textTransform: "none",
+              borderRadius: 2,
+              whiteSpace: "nowrap",
+            }}
+          >
+            Lot/Serial
+          </Button>
+        );
+      }
+
+      return toDisplayValue(params.value);
+    },
+  }));
+};
+
+function MaterialIssueResponseDrawer({
+  response,
+  lineNo,
+  setDisplayTitle,
+  setHideFooter,
+  setWidth,
+}: {
+  response: unknown;
+  lineNo: string;
+  setDisplayTitle?: (title: string) => void;
+  setHideFooter?: (hidden: boolean) => void;
+  setWidth?: (width: number | string) => void;
+}) {
+  const { showToast } = useToast();
+  const { openModal } = useModal();
+  const rows = useMemo(() => normalizeMaterialIssueRows(response), [response]);
+  const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
+    page: 0,
+    pageSize: 10,
+  });
+  const [sortModel, setSortModel] = useState<GridSortModel>([]);
+  const [filterModel, setFilterModel] = useState<GridFilterModel>({
+    items: [],
+    quickFilterValues: [],
+  });
+  const [selectedLocatorByInventory, setSelectedLocatorByInventory] = useState<
+    Record<string, number>
+  >({});
+
+  const duplicateInventoryCounts = useMemo(() => {
+    return rows.reduce<Record<string, number>>((acc, row) => {
+      const inventoryItemId = String((row as MaterialIssueGridRow).inventoryItemId || "");
+      if (!inventoryItemId) {
+        return acc;
+      }
+
+      acc[inventoryItemId] = (acc[inventoryItemId] || 0) + 1;
+      return acc;
+    }, {});
+  }, [rows]);
+
+  useEffect(() => {
+    setSelectedLocatorByInventory(() => {
+      const nextSelection: Record<string, number> = {};
+
+      rows.forEach((row) => {
+        const materialRow = row as MaterialIssueGridRow;
+        const inventoryItemId = String(materialRow.inventoryItemId || "");
+        if (!inventoryItemId || (duplicateInventoryCounts[inventoryItemId] || 0) <= 1) {
+          return;
+        }
+
+        if (nextSelection[inventoryItemId] === undefined) {
+          nextSelection[inventoryItemId] = Number(materialRow.id);
+        }
+      });
+
+      return nextSelection;
+    });
+  }, [duplicateInventoryCounts, rows]);
+
+  const handleSelectLocator = (inventoryItemId: string, rowId: number) => {
+    setSelectedLocatorByInventory((current) => ({
+      ...current,
+      [inventoryItemId]: rowId,
+    }));
+  };
+
+  const handleLotSerialClick = (row: MaterialIssueGridRow) => {
+    openModal({
+      title: `Lot/Serial - ${toDisplayValue(row.item)}`,
+      width: 980,
+      showCloseButton: true,
+      askDataChangeConfirm: false,
+      component: (modalProps: any) => <LotSerialDrawer {...modalProps} row={row} />,
+    });
+  };
+
+  const columns = useMemo(
+    () =>
+      buildMaterialIssueColumns({
+        duplicateInventoryCounts,
+        selectedLocatorByInventory,
+        onSelectLocator: handleSelectLocator,
+        onLotSerialClick: handleLotSerialClick,
+      }),
+    [duplicateInventoryCounts, selectedLocatorByInventory]
+  );
+
+  useEffect(() => {
+    setDisplayTitle?.(`Material Issue Response - Line ${lineNo}`);
+    setHideFooter?.(true);
+    setWidth?.("calc(100% - 160px)");
+  }, [lineNo, setDisplayTitle, setHideFooter, setWidth]);
+
+  return (
+    <Stack spacing={2} sx={{ px: 0.5, py: 1 }}>
+      <ReusableDataGrid
+        rows={rows}
+        columns={columns}
+        totalCount={rows.length}
+        loading={false}
+        paginationModel={paginationModel}
+        setPaginationModel={setPaginationModel}
+        sortModel={sortModel}
+        setSortModel={setSortModel}
+        filterModel={filterModel}
+        setFilterModel={setFilterModel}
+        title="Material Issue Response"
+        refetch={() => undefined}
+        enableViewToggle={false}
+        permissions={{
+          create: false,
+          edit: false,
+          delete: false,
+          view: false,
+          download: true,
+        }}
+        uniqueIdField="id"
+        height="calc(100vh - 150px)"
+        noRowsMessage="No material issue response data found"
+      />
+    </Stack>
+  );
+}
+
 const resolveCompletionStage = (status: string): BarcodeCompletionStage => {
   if (status === "PI") {
     return "painting";
@@ -287,8 +910,50 @@ const serialActionButtonMeta: Record<
     stage: "completion",
     dateField: "ac_comp_date",
   },
+  acPi: { label: "Painting", status: "PI", stage: "painting", dateField: "ac_pi_date" },
   acPk: { label: "Packing", status: "PK", stage: "packing", dateField: "ac_pk_date" },
   acDs: { label: "Dispatch", status: "DS", dateField: "ac_ds_date" },
+};
+
+const serialActionPrerequisites: Record<
+  SerialWorkflowActionKey,
+  { field: keyof SerialItem; label: string }
+> = {
+  acUa: { field: "ass_rel_date", label: "Release" },
+  acQc: { field: "ac_ua_date", label: "Assembly" },
+  acComp: { field: "ac_qc_date", label: "Quality Check" },
+  acPi: { field: "ac_comp_date", label: "Completion" },
+  acPk: { field: "ac_pi_date", label: "Painting" },
+  acDs: { field: "ac_pk_date", label: "Packing" },
+};
+
+const hasWorkflowValue = (value: string | null | undefined) => Boolean(String(value || "").trim());
+
+const normalizeWorkflowStatus = (value: string | null | undefined) =>
+  String(value || "").trim().toUpperCase();
+
+const getSerialWorkflowActionState = (
+  serial: SerialItem,
+  actionKey: SerialWorkflowActionKey,
+) => {
+  const prerequisite = serialActionPrerequisites[actionKey];
+  const prerequisiteValue = serial[prerequisite.field] as string | null | undefined;
+  const hasPrerequisite = hasWorkflowValue(prerequisiteValue);
+  const normalizedStatus = normalizeWorkflowStatus(serial.status);
+
+  if (actionKey === "acUa" && normalizedStatus !== "MI") {
+    return {
+      enabled: false,
+      helperText: "Under Assembly will enable only when serial status is MI.",
+    };
+  }
+
+  const enabled = hasPrerequisite;
+
+  return {
+    enabled,
+    helperText: enabled ? "" : `${serialActionButtonMeta[actionKey].label} will enable after ${prerequisite.label}.`,
+  };
 };
 
 const dateHeaderLabel = (label: string) => (
@@ -380,6 +1045,42 @@ function SerialNumberDrawer({
       return;
     }
 
+    if (actionKey === "acComp") {
+      openModal({
+        title: serial.serial_no,
+        width: 980,
+        showCloseButton: true,
+        askDataChangeConfirm: false,
+        component: (modalProps: any) => (
+          <OrderComplition
+            {...modalProps}
+            serialNumber={serial.serial_no}
+            serialId={serial.id}
+            defaultStatus="CP"
+            statusOptions={["CP"]}
+            onSaved={({ savedAt }) => {
+              const serialUpdates: Partial<SerialItem> = {
+                ac_comp_date: savedAt,
+              };
+
+              setSerialRows((current) =>
+                current.map((entry) =>
+                  entry.serial_no === serial.serial_no
+                    ? {
+                        ...entry,
+                        ...serialUpdates,
+                      }
+                    : entry,
+                ),
+              );
+              onSerialUpdated?.(row.lineId, serial.serial_no, serialUpdates);
+            }}
+          />
+        ),
+      });
+      return;
+    }
+
     if (actionKey === "acDs") {
       showToast("Dispatch API is not available in barcode docs yet.", "warning");
       return;
@@ -415,62 +1116,24 @@ function SerialNumberDrawer({
           "Under assembly updated successfully";
       }
 
-      if (actionKey === "acComp" || actionKey === "acPk") {
-        let response = await triggerCompletionLookup({
-          BarcodeSerialNo: serial.serial_no,
-        }).unwrap();
-
-        if (!response?.data) {
-          response = await triggerQualityCheck({
-            serial_no: serial.serial_no,
-          }).unwrap();
+      if (actionKey === "acPi" || actionKey === "acPk") {
+        if (!serial.id) {
+          showToast(`Serial id is required for ${metaConfig.label} action.`, "warning");
+          return;
         }
 
-        const lookup = (response?.data || {}) as CompletionLookupMetadata;
-        const status = metaConfig.status;
-        const stage = metaConfig.stage || resolveCompletionStage(status);
-        const oracleUserId = toNumeric(authUserId) || toNumeric(lookup?.OracleUserId) || 1;
-
+        const stage = metaConfig.stage || resolveCompletionStage(metaConfig.status);
         const updateResponse = await updateOrderCompletionStage({
           stage,
-          DivisionId: String(barcodeDefaults.divisionId),
-          dtPrint: {
-            oracle_order_no:
-              toNumeric(lookup?.oracle_order_no) ||
-              toNumeric(currentOrder?.order_number) ||
-              0,
-            model_type: String(lookup?.model_type || row.model_type || "GM"),
-            model: String(lookup?.Model || lookup?.model || row.model || row.item_code || ""),
-            ratio: toNumeric(lookup?.actual_ratio) || toNumeric(row.ratio) || 0,
-            qty: Math.max(1, toNumeric(lookup?.qty) || toNumeric(row.quantity) || 1),
-            wo_no: String(lookup?.wo_no || row.wo_no || ""),
-            order_header_id:
-              toNumeric(lookup?.order_header_id) ||
-              toNumeric(orderDetails?.header_id) ||
-              toNumeric(row.headerId) ||
-              0,
-            order_line_id: toNumeric(lookup?.order_line_id) || toNumeric(row.lineId),
-            status,
-            kw: toNumeric(lookup?.kw) || toNumeric(row.kw),
+          body: {
             serial_no: String(serial.serial_no || ""),
-            rpm: toNumeric(serial.rpm) || toNumeric(lookup?.rpm),
-            motor_serial_no: String(serial.motor_serial_no || lookup?.motor_serial_no || ""),
-            input_RPM:
-              toNumeric(lookup?.input_RPM) || toNumeric(serial.rpm) || toNumeric(lookup?.rpm),
-            actual_ratio: toNumeric(lookup?.actual_ratio) || toNumeric(row.ratio),
-            pole: toNumeric(lookup?.pole),
-            noiseLevel: toNumeric(lookup?.noiseLevel),
-            paintColor: String(lookup?.paintColor || "GOOD"),
-            MotorMake: String(lookup?.MotorMake || ""),
-            OracleUserId: oracleUserId,
-            P_AMB_TEMP: String(lookup?.P_AMB_TEMP || ""),
-            P_GREASE_TEMP: String(lookup?.P_GREASE_TEMP || ""),
+            id: Number(serial.id),
           },
         }).unwrap();
 
         serialUpdates =
-          actionKey === "acComp"
-            ? { ac_comp_date: new Date().toISOString() }
+          actionKey === "acPi"
+            ? { ac_pi_date: new Date().toISOString() }
             : { ac_pk_date: new Date().toISOString() };
         successMessage = updateResponse?.message || `${metaConfig.label} updated successfully`;
       }
@@ -506,6 +1169,7 @@ function SerialNumberDrawer({
     const actionMeta = serialActionButtonMeta[actionKey];
     const value = serial[actionMeta.dateField] as string | null | undefined;
     const isPending = pendingActionKey === `${serial.serial_no}-${actionKey}`;
+    const actionState = getSerialWorkflowActionState(serial, actionKey);
 
     if (value) {
       return <TableCell>{formatDate(value)}</TableCell>;
@@ -513,23 +1177,28 @@ function SerialNumberDrawer({
 
     return (
       <TableCell>
-        <Button
-          size="small"
-          variant="contained"
-          disabled={isPending}
-          onClick={() => void handleSerialWorkflowAction(serial, actionKey)}
-          sx={{
-            minWidth: 88,
-            textTransform: "none",
-            borderRadius: 2,
-            boxShadow: "none",
-            fontSize: "0.72rem",
-            px: 1,
-            py: 0.4,
-          }}
-        >
-          {isPending ? "Working..." : actionMeta.label}
-        </Button>
+        <Tooltip title={actionState.helperText} disableHoverListener={actionState.enabled}>
+          <Box component="span">
+            <Button
+              size="small"
+              variant="contained"
+              disabled={!actionState.enabled || isPending}
+              onClick={() => void handleSerialWorkflowAction(serial, actionKey)}
+              sx={{
+                minWidth: 88,
+                textTransform: "none",
+                whiteSpace: "nowrap",
+                borderRadius: 2,
+                boxShadow: "none",
+                fontSize: "0.72rem",
+                px: 1,
+                py: 0.4,
+              }}
+            >
+              {isPending ? "Working..." : actionMeta.label}
+            </Button>
+          </Box>
+        </Tooltip>
       </TableCell>
     );
   };
@@ -619,6 +1288,7 @@ function SerialNumberDrawer({
               <TableCell>{dateHeaderLabel("Ac Ua")}</TableCell>
               <TableCell>{dateHeaderLabel("Qc")}</TableCell>
               <TableCell>{dateHeaderLabel("Ac Comp")}</TableCell>
+              <TableCell>{dateHeaderLabel("Ac PI")}</TableCell>
               <TableCell>{dateHeaderLabel("Ac Pk")}</TableCell>
               <TableCell>{dateHeaderLabel("Ac Ds")}</TableCell>
               <TableCell>{dateHeaderLabel("Tent Rel")}</TableCell>
@@ -642,6 +1312,7 @@ function SerialNumberDrawer({
                   {renderSerialWorkflowCell(serial, "acUa")}
                   {renderSerialWorkflowCell(serial, "acQc")}
                   {renderSerialWorkflowCell(serial, "acComp")}
+                  {renderSerialWorkflowCell(serial, "acPi")}
                   {renderSerialWorkflowCell(serial, "acPk")}
                   {renderSerialWorkflowCell(serial, "acDs")}
                   <TableCell>{formatDate(serial.tent_rel_date)}</TableCell>
@@ -666,7 +1337,7 @@ function SerialNumberDrawer({
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={15} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={16} align="center" sx={{ py: 4 }}>
                   <Typography fontWeight={700}>Serials not generated yet.</Typography>
                   <Typography variant="body2" color="text.secondary">
                     Start with work order approval, then enable serial number generation.
@@ -839,13 +1510,10 @@ function Index({ orderDetails, onOrderUpdated }: LineItemsProps) {
   const [createWorkOrder] = useCreateWorkOrderMutation();
   const [generateSerialNumbers] = useGenerateSerialNumbersMutation();
   const [issueMaterial] = useIssueMaterialMutation();
+  const [orderLineItemEdit] = useOrderLineItemEditMutation();
   const [printLabel] = usePrintLabelMutation();
-  const [dateRange, setDateRange] = useState<DateRange>({
-    startDate: null,
-    endDate: null,
-  });
+  const [wipMaterialIssue] = useWipMaterialIssueMutation();
   const [status, setStatus] = useState("");
-  const [location, setLocation] = useState("");
   const [searchText, setSearchText] = useState("");
   const [page, setPage] = useState(1);
   const [rowOverrides, setRowOverrides] = useState<Record<string, LineItemOverride>>({});
@@ -867,34 +1535,14 @@ function Index({ orderDetails, onOrderUpdated }: LineItemsProps) {
     [rows]
   );
 
-  const locationOptions = useMemo(
-    () => [
-      { value: "", label: "All Locations" },
-      ...Array.from(new Set(rows.map((row) => row.ship_to_location))).map((value) => ({
-        value,
-        label: value,
-      })),
-    ],
-    [rows]
-  );
-
   const filteredRows = useMemo(() => {
     const q = searchText.trim().toLowerCase();
-
-    const inRange = (value: string | null) => {
-      if (!dateRange.startDate || !dateRange.endDate) return true;
-      const date = parseDate(value);
-      if (!date) return false;
-      const start = new Date(dateRange.startDate);
-      const end = new Date(dateRange.endDate);
-      start.setHours(0, 0, 0, 0);
-      end.setHours(23, 59, 59, 999);
-      return date >= start && date <= end;
-    };
 
     return rows.filter((row) => {
       const haystack = [
         row.line_no,
+        row.lineId,
+        row.id,
         row.item_code,
         row.description,
         row.wo_no,
@@ -908,12 +1556,10 @@ function Index({ orderDetails, onOrderUpdated }: LineItemsProps) {
 
       return (
         (!q || haystack.includes(q)) &&
-        (!status || row.status === status) &&
-        (!location || row.ship_to_location === location) &&
-        inRange(row.client_delivery_date)
+        (!status || row.status === status)
       );
     });
-  }, [dateRange, location, rows, searchText, status]);
+  }, [rows, searchText, status]);
 
   const pagedRows = useMemo(
     () => filteredRows.slice((page - 1) * rowsPerPage, page * rowsPerPage),
@@ -1011,7 +1657,96 @@ function Index({ orderDetails, onOrderUpdated }: LineItemsProps) {
 
   const handleRowAction = async (row: LineItemRow, actionKey: ActionKey) => {
     if (actionKey === "edit") {
-      showToast("Line item edit API is not available yet", "warning");
+      const editRef = React.createRef<EditListItemRef>();
+
+      openModal({
+        title: `Edit Line ${row.line_no}`,
+        width: 520,
+        showCloseButton: true,
+        askDataChangeConfirm: false,
+        component: (modalProps: any) => (
+          <EditListItem
+            ref={editRef}
+            {...modalProps}
+            defaultValues={{
+              roadPermit: Boolean(row.road_permit),
+              deliveryMonth: row.delivery_month || "",
+              status: row.status || "",
+            }}
+            statusOptions={Object.entries(meta).map(([value, details]) => ({
+              value,
+              label: details.label,
+            }))}
+            onSubmitSection={async (payload) => {
+              const oracleOrderNo = currentOrder?.order_number;
+
+              if (!oracleOrderNo) {
+                throw new Error("Oracle order number is missing for this sales order.");
+              }
+
+              const nextRoadPermit = payload.roadPermit;
+              const nextDeliveryMonth = payload.deliveryMonth;
+              const nextStatus = payload.status || row.status;
+              const lineKey = String(row.lineId);
+
+              const response = await orderLineItemEdit({
+                status: nextStatus,
+                del_month: nextDeliveryMonth,
+                road_permit: nextRoadPermit,
+                oracle_order_no: oracleOrderNo,
+              }).unwrap();
+
+              if (!(response?.status === true || response?.status === 1)) {
+                throw new Error(response?.message || "Unable to update line item");
+              }
+
+              setRowOverrides((current) => ({
+                ...current,
+                [lineKey]: {
+                  ...current[lineKey],
+                  road_permit: nextRoadPermit,
+                  delivery_month: nextDeliveryMonth,
+                  status: nextStatus,
+                },
+              }));
+
+              setRows((current) =>
+                current.map((currentRow) =>
+                  currentRow.id === row.id
+                    ? {
+                        ...currentRow,
+                        road_permit: nextRoadPermit,
+                        delivery_month: nextDeliveryMonth,
+                        status: nextStatus,
+                        actions: actionSet(nextStatus, {
+                          forceEnableSerialNumber:
+                            rowOverrides[String(currentRow.lineId)]?.forceEnableSerialNumber,
+                          hasWorkOrder: Boolean(
+                            (rowOverrides[String(currentRow.lineId)]?.wo_no ?? currentRow.wo_no) || ""
+                          ),
+                          hasSerialNumbers: Boolean(currentRow.quantitys?.length),
+                          materialIssued: Boolean(
+                            rowOverrides[String(currentRow.lineId)]?.materialIssued
+                          ),
+                        }),
+                      }
+                    : currentRow
+                )
+              );
+
+              await onOrderUpdated?.();
+            }}
+          />
+        ),
+        action: (
+          <ApiActionButton
+            onApiCall={() => editRef.current?.submit?.() ?? Promise.resolve()}
+            loadingText="Saving..."
+          >
+            Save Changes
+          </ApiActionButton>
+        ),
+      });
       return;
     }
 
@@ -1076,6 +1811,14 @@ function Index({ orderDetails, onOrderUpdated }: LineItemsProps) {
           : [];
 
         if (generatedSerials.length) {
+          setRowOverrides((current) => ({
+            ...current,
+            [String(row.lineId)]: {
+              ...current[String(row.lineId)],
+              quantitys: generatedSerials,
+            },
+          }));
+
           setRows((current) =>
             current.map((currentRow) =>
               currentRow.id === row.id
@@ -1103,10 +1846,16 @@ function Index({ orderDetails, onOrderUpdated }: LineItemsProps) {
       }
 
       if (actionKey === "issueMaterial") {
-        const response = await issueMaterial({
-          ...getBarcodeDefaultContext(),
-          LINE_ID: row.lineId,
+        const response = await wipMaterialIssue({
+          WONO: "10213160",
+          SHIP_FROM_ORG_ID: 374,
+          LINE_ID: 11995869,
+          HEADER_ID: 10560752,
         }).unwrap();
+
+        if (!(response?.status === true || response?.status === 1)) {
+          throw new Error(response?.message || "Material issue request failed");
+        }
 
         setRowOverrides((current) => ({
           ...current,
@@ -1134,6 +1883,20 @@ function Index({ orderDetails, onOrderUpdated }: LineItemsProps) {
               : currentRow
           )
         );
+
+        openModal({
+          title: `Material Issue Response - Line ${row.line_no}`,
+          width: "calc(100% - 160px)",
+          showCloseButton: true,
+          askDataChangeConfirm: false,
+          component: (modalProps: any) => (
+            <MaterialIssueResponseDrawer
+              {...modalProps}
+              response={response}
+              lineNo={row.line_no}
+            />
+          ),
+        });
 
         successMessage = response?.message || "Material issue processed successfully";
       }
@@ -1239,59 +2002,42 @@ function Index({ orderDetails, onOrderUpdated }: LineItemsProps) {
       </Box>
 
       <FormSection
-        title="Filters"
-        description="Narrow down line items by date, status, or keyword"
-        icon={<FilterListOutlinedIcon fontSize="small" />}
-        accentColor="#0891B2"
-      >
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: { xs: "1fr", md: "1.2fr 0.8fr 0.8fr 1fr" },
-            gap: 2,
-          }}
-        >
-          <MuiDateRangePicker
-            value={dateRange}
-            onChange={(range) => {
-              setDateRange(range);
-              setPage(1);
-            }}
-          />
-          <MuiTextField
-            label="Search line / WO / serial"
-            value={searchText}
-            onChange={(event) => {
-              setSearchText(event.target.value);
-              setPage(1);
-            }}
-          />
-          <MuiSelect
-            label="Status"
-            options={statusOptions}
-            value={status}
-            onChange={(event) => {
-              setStatus(String(event.target.value));
-              setPage(1);
-            }}
-          />
-          <MuiSelect
-            label="Ship To Location"
-            options={locationOptions}
-            value={location}
-            onChange={(event) => {
-              setLocation(String(event.target.value));
-              setPage(1);
-            }}
-          />
-        </Box>
-      </FormSection>
-
-      <FormSection
         title="Sales Order Line Items"
         description="Click any line item to open its serial-number child records in a child drawer"
         icon={<ViewListOutlinedIcon fontSize="small" />}
         accentColor="#1D4ED8"
+        headerActions={
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: {
+                xs: "1fr",
+                md: "minmax(260px, 360px) minmax(180px, 220px)",
+              },
+              gap: 1.25,
+              width: { xs: "100%", md: "auto" },
+              alignItems: "start",
+            }}
+          >
+            <MuiTextField
+              label="Search line item / WO"
+              value={searchText}
+              onChange={(event) => {
+                setSearchText(event.target.value);
+                setPage(1);
+              }}
+            />
+            <MuiSelect
+              label="Status"
+              options={statusOptions}
+              value={status}
+              onChange={(event) => {
+                setStatus(String(event.target.value));
+                setPage(1);
+              }}
+            />
+          </Box>
+        }
       >
         <Box>
           <TableContainer>
@@ -1334,7 +2080,7 @@ function Index({ orderDetails, onOrderUpdated }: LineItemsProps) {
                         No line items matched the current filters.
                       </Typography>
                       <Typography color="text.secondary">
-                        Try clearing date or status filters to see the full execution board.
+                        Try clearing search or status filters to see the full execution board.
                       </Typography>
                     </TableCell>
                   </TableRow>

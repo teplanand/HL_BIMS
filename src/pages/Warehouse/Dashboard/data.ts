@@ -47,8 +47,10 @@ const buildItem = (item: any, index: number): Pallet => ({
   has_expiry_date: toBoolean(item.has_expiry ?? item.has_expiry_date),
   expiry_date: item.expiry_date ? String(item.expiry_date) : null,
   item_image_document_id: toNumber(item.item_image_document_id ?? item.document_id) || null,
-  item_image_name: firstString(item.item_image_name, item.file_name),
-  item_image_path: firstString(item.item_image_path, item.image_path, item.path) || null,
+  item_image_name: firstString(item.item_image_name, item.file_name, item.image_name),
+  item_image_path:
+    firstString(item.file_url, item.item_image_path, item.image_path, item.path, item.image_url) ||
+    null,
   qr_code: firstString(item.qr_code, item.barcode),
 });
 

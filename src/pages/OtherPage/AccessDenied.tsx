@@ -66,13 +66,13 @@ export default function AccessDenied() {
         </Button>
       </Box>
 
-      <Typography
+      {/* <Typography
         variant="caption"
         color="text.disabled"
         className="absolute bottom-6 left-1/2 -translate-x-1/2"
       >
-        &copy; {new Date().getFullYear()} - hi-lab
-      </Typography>
+        &copy; {new Date().getFullYear()} - Elecon
+      </Typography> */}
     </Box>
   );
 }

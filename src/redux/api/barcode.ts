@@ -17,6 +17,11 @@ export interface BarcodeSalesOrdersRequest {
   DIVISION_ID: number;
 }
 
+export interface BarcodeSalesOrdersByStatusRequest {
+  DIVISION_ID: number;
+  STATUS: string;
+}
+
 export interface BarcodeSalesOrderDetailsRequest extends BarcodeContextPayload {
   order_number: number | string;
 }
@@ -42,6 +47,20 @@ export interface BarcodeGenerateSerialRequest {
 
 export interface BarcodeIssueMaterialRequest extends BarcodeContextPayload {
   LINE_ID: number | string;
+}
+
+export interface BarcodeWipMaterialIssueRequest {
+  WONO: string;
+  SHIP_FROM_ORG_ID: number | string;
+  LINE_ID: number | string;
+  HEADER_ID: number | string;
+}
+
+export interface BarcodeOrderLineItemEditRequest {
+  status: string;
+  del_month: string;
+  road_permit: boolean;
+  oracle_order_no: number | string;
 }
 
 export interface BarcodePrintLabelRequest {
@@ -75,34 +94,14 @@ export interface BarcodeCompletionLookupRequest {
 export type BarcodeCompletionStage = "completion" | "painting" | "packing";
 
 export interface BarcodeCompletionRecordPayload {
-  oracle_order_no: number;
-  model_type: string;
-  model: string;
-  ratio: number;
-  qty: number;
-  wo_no: string;
-  order_header_id: number;
-  order_line_id: number;
-  status: string;
-  kw: number;
   serial_no: string;
-  rpm: number;
-  motor_serial_no: string;
-  input_RPM: number;
-  actual_ratio: number;
-  pole: number;
-  noiseLevel: number;
-  paintColor: string;
-  MotorMake: string;
-  OracleUserId: number;
-  P_AMB_TEMP: string;
-  P_GREASE_TEMP: string;
+  id: number;
+  status?: string;
 }
 
 export interface BarcodeCompletionUpdateRequest {
   stage: BarcodeCompletionStage;
-  DivisionId: string;
-  dtPrint: BarcodeCompletionRecordPayload;
+  body: BarcodeCompletionRecordPayload;
 }
 
 export interface BarcodeQualityCheckSaveRequest {
@@ -146,10 +145,15 @@ export interface BarcodeImportResponseData {
   customer_number?: string | null;
 }
 
-export type BarcodeSalesOrderInitData = Record<
-  string,
-  number | string | boolean | null | undefined
->;
+export interface BarcodeSalesOrderInitCounter {
+  label?: string | null;
+  key?: string | null;
+  value?: number | string | boolean | null;
+}
+
+export type BarcodeSalesOrderInitData =
+  | BarcodeSalesOrderInitCounter[]
+  | Record<string, number | string | boolean | null | undefined>;
 
 export interface BarcodeSalesOrderLineSerialRaw {
   id?: number | null;
@@ -165,6 +169,8 @@ export interface BarcodeSalesOrderLineSerialRaw {
   AC_QC_DATE?: string | null;
   ac_comp_date?: string | null;
   AC_COMP_DATE?: string | null;
+  ac_pi_date?: string | null;
+  AC_PI_DATE?: string | null;
   ac_pk_date?: string | null;
   AC_PK_DATE?: string | null;
   ac_ds_date?: string | null;
@@ -378,6 +384,16 @@ export const barcodeApi = createApi({
       }),
       providesTags: ["BarcodeSalesOrder"],
     }),
+    getSalesOrdersByStatus: builder.query<
+      BarcodeApiResponse,
+      BarcodeSalesOrdersByStatusRequest
+    >({
+      query: (body) => ({
+        url: "/barcode/sales-orders/bystatus",
+        method: "POST",
+        body,
+      }),
+    }),
     getSalesOrdersInit: builder.query<
       BarcodeApiResponse<BarcodeSalesOrderInitData>,
       Partial<BarcodeContextPayload> | void
@@ -438,6 +454,20 @@ export const barcodeApi = createApi({
     issueMaterial: builder.mutation<BarcodeApiResponse, BarcodeIssueMaterialRequest>({
       query: (body) => ({
         url: "/barcode/sales-orders/IssueMaterial",
+        method: "POST",
+        body,
+      }),
+    }),
+    wipMaterialIssue: builder.mutation<BarcodeApiResponse, BarcodeWipMaterialIssueRequest>({
+      query: (body) => ({
+        url: "/barcode/sales-orders/WIPMaterialIssue",
+        method: "POST",
+        body,
+      }),
+    }),
+    orderLineItemEdit: builder.mutation<BarcodeApiResponse, BarcodeOrderLineItemEditRequest>({
+      query: (body) => ({
+        url: "/barcode/sales-orders/orderLineItemEdit",
         method: "POST",
         body,
       }),
@@ -508,7 +538,7 @@ export const barcodeApi = createApi({
       BarcodeCompletionLookupRequest
     >({
       query: (body) => ({
-        url: "/completionGearboxSerialNumber",
+        url: "/barcode/order-completion/completionGearboxSerialNumber",
         method: "POST",
         body,
       }),
@@ -517,7 +547,7 @@ export const barcodeApi = createApi({
       BarcodeApiResponse,
       BarcodeCompletionUpdateRequest
     >({
-      query: ({ stage, ...body }) => ({
+      query: ({ stage, body }) => ({
         url: `/barcode/order-completion/${stage}`,
         method: "POST",
         body,
@@ -539,6 +569,7 @@ export const barcodeApi = createApi({
 export const {
   useLazyGetSalesOrdersQuery,
   useGetSalesOrdersQuery,
+  useLazyGetSalesOrdersByStatusQuery,
   useGetSalesOrdersInitQuery,
   useImportSalesOrdersMutation,
   useGetSalesOrderDetailsQuery,
@@ -546,7 +577,9 @@ export const {
   useCreateWorkOrderMutation,
   useGenerateSerialNumbersMutation,
   useIssueMaterialMutation,
+  useOrderLineItemEditMutation,
   usePrintLabelMutation,
+  useWipMaterialIssueMutation,
   useLazyGetUnderAssemblyDetailsQuery,
   useLazyGetQualityCheckDetailsQuery,
   useLazyGetCompletionGearboxDetailsQuery,

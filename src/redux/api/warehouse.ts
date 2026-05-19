@@ -142,7 +142,6 @@ export interface UpdateWarehouseItemRequest {
 }
 
 export interface CreateTransactionPayload {
-  item_id?: number;
   oracle_code: string;
   rack_id: number | string;
   sub_loc_id: number | string;
@@ -151,7 +150,6 @@ export interface CreateTransactionPayload {
   qty: number | string;
   supplier_id?: number | string | null;
   created_by?: string;
-  transaction_date?: string;
 }
 
 const cleanParams = (params?: ListParams | void) => {

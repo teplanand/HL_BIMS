@@ -897,14 +897,8 @@ function RackDetailsPanelComponent({
             rackId={currentRack?.recordId || currentRack?.id || item.rack_id || ""}
             defaultOperation={defaultOperation}
           onSubmitTransaction={async (payload: ItemTransactionPayload) => {
-            const resolvedItemId = Number(payload.item_id);
-
             try {
               await createTransaction({
-                  item_id:
-                    Number.isFinite(resolvedItemId) && resolvedItemId > 0
-                      ? resolvedItemId
-                      : undefined,
                   oracle_code: payload.oracle_code,
                   sub_loc_id: payload.sub_loc_id,
                   pallet_id: payload.pallet_id,
@@ -913,7 +907,6 @@ function RackDetailsPanelComponent({
                   operation: payload.operation,
                   qty: payload.qty,
                   created_by: payload.created_by,
-                  transaction_date: payload.transaction_date,
                 }).unwrap();
               } catch (error: any) {
                 throw new Error(

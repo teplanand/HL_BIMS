@@ -68,6 +68,7 @@ import {
 } from "../../../redux/api/evidancecollection";
 import {
   extractAuthToken,
+  getToken,
   getDecodedToken,
   setToken as setAuthToken,
 } from "../../../utils/auth";
@@ -99,11 +100,19 @@ const workspaceTabs: { value: EvidenceWorkspaceMode; label: string }[] = [
   { value: "admin", label: "Admin Viewer" },
 ];
 
-const mediaTabs: { value: EvidenceMediaKind; label: string; icon: ReactElement }[] = [
+type MediaTabKind = Extract<EvidenceMediaKind, "image" | "video" | "audio">;
+
+const mediaTabs: { value: MediaTabKind; label: string; icon: ReactElement }[] = [
   { value: "image", label: "Images", icon: <ImageRoundedIcon fontSize="small" /> },
   { value: "video", label: "Videos", icon: <MovieRoundedIcon fontSize="small" /> },
   { value: "audio", label: "Audio", icon: <AudiotrackRoundedIcon fontSize="small" /> },
 ];
+
+const emptyMediaCounts: Record<MediaTabKind, number> = {
+  image: 0,
+  video: 0,
+  audio: 0,
+};
 
 const mediaIconMap: Record<EvidenceMediaKind, ReactElement> = {
   image: <ImageRoundedIcon />,
@@ -197,9 +206,46 @@ const triggerBrowserDownload = (href: string, fileName: string) => {
   const anchor = document.createElement("a");
   anchor.href = href;
   anchor.download = fileName;
+  anchor.target = "_self";
+  anchor.rel = "noopener";
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
+};
+
+const fetchDownloadBlob = async (url: string, token: string | null) => {
+  const attempts: RequestInit[] = [
+    {
+      mode: "cors",
+      credentials: "include",
+      headers: token
+        ? {
+            Authorization: `Bearer ${token}`,
+          }
+        : undefined,
+    },
+    {
+      mode: "cors",
+    },
+  ];
+
+  let lastError: unknown = null;
+
+  for (const options of attempts) {
+    try {
+      const response = await fetch(url, options);
+
+      if (!response.ok) {
+        throw new Error(`Download failed with status ${response.status}`);
+      }
+
+      return await response.blob();
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Download failed");
 };
 
 const downloadMediaItem = async (item: EvidenceMediaItem) => {
@@ -215,13 +261,8 @@ const downloadMediaItem = async (item: EvidenceMediaItem) => {
   }
 
   try {
-    const response = await fetch(item.url, { credentials: "include" });
-
-    if (!response.ok) {
-      throw new Error(`Download failed with status ${response.status}`);
-    }
-
-    const blob = await response.blob();
+    const token = getToken();
+    const blob = await fetchDownloadBlob(item.url, token);
     const blobUrl = URL.createObjectURL(blob);
 
     try {
@@ -230,8 +271,8 @@ const downloadMediaItem = async (item: EvidenceMediaItem) => {
       window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
     }
   } catch (error) {
-    console.warn("Falling back to direct download link", error);
-    triggerBrowserDownload(item.url, fileName);
+    console.error("Unable to download media as a file", error);
+    throw new Error("The file could not be downloaded directly.");
   }
 };
 
@@ -596,7 +637,8 @@ const EvidenceDashboard = () => {
   const [selectedReferenceNo, setSelectedReferenceNo] = useState("");
   const [remarkOptions, setRemarkOptions] = useState(normalizeRemarks([]));
   const [selectedRemark, setSelectedRemark] = useState("");
-  const [activeMediaTab, setActiveMediaTab] = useState<EvidenceMediaKind>("image");
+  const [activeMediaTab, setActiveMediaTab] = useState<MediaTabKind>("image");
+  const [mediaCounts, setMediaCounts] = useState<Record<MediaTabKind, number>>(emptyMediaCounts);
   const [mediaItems, setMediaItems] = useState<EvidenceMediaItem[]>([]);
   const [mediaLoading, setMediaLoading] = useState(false);
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
@@ -879,6 +921,7 @@ const EvidenceDashboard = () => {
     setChildPhaseLoadingFor("");
     setRemarkOptions(normalizeRemarks([]));
     setSelectedRemark("");
+    setMediaCounts(emptyMediaCounts);
     setMediaItems([]);
     setTransactionStatus({ checked: false, valid: false, message: "" });
 
@@ -1091,6 +1134,70 @@ const EvidenceDashboard = () => {
       isMounted = false;
     };
   }, [checkTransaction, selectedReferenceNo, sessionReady, triggerRemarks, viewCategory]);
+
+  useEffect(() => {
+    if (!sessionReady || !selectedReferenceNo || !viewCategory) {
+      setMediaCounts(emptyMediaCounts);
+      return;
+    }
+
+    const numericCategoryId = getNumericCategoryId(viewCategory);
+    if (!numericCategoryId) {
+      setMediaCounts(emptyMediaCounts);
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadMediaCounts = async () => {
+      try {
+        const payload = {
+          RefNo: selectedReferenceNo,
+          CatId: numericCategoryId,
+          ...(selectedChildReferenceNo ? { ChildRefNo: selectedChildReferenceNo } : {}),
+          ...(selectedPhaseId ? { PhaseId: selectedPhaseId } : {}),
+          ...(selectedRemark ? { Remarks: selectedRemark } : {}),
+        };
+
+        const [imagesResponse, videosResponse, audioResponse] = await Promise.all([
+          getImages(payload).unwrap(),
+          getVideos(payload).unwrap(),
+          getAudio(payload).unwrap(),
+        ]);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setMediaCounts({
+          image: normalizeMediaItems(imagesResponse, "image").length,
+          video: normalizeMediaItems(videosResponse, "video").length,
+          audio: normalizeMediaItems(audioResponse, "audio").length,
+        });
+      } catch (error) {
+        console.error("Failed to fetch evidence media counts", error);
+        if (isMounted) {
+          setMediaCounts(emptyMediaCounts);
+        }
+      }
+    };
+
+    void loadMediaCounts();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    getAudio,
+    getImages,
+    getVideos,
+    selectedChildReferenceNo,
+    selectedPhaseId,
+    selectedReferenceNo,
+    selectedRemark,
+    sessionReady,
+    viewCategory,
+  ]);
 
   useEffect(() => {
     if (!sessionReady || !selectedReferenceNo || !viewCategory) {
@@ -2293,7 +2400,32 @@ const EvidenceDashboard = () => {
                                           }),
                                     }}
                                   >
-                                    {tab.label}
+                                    <Stack direction="row" spacing={0.75} alignItems="center">
+                                      <Box component="span">{tab.label}</Box>
+                                      <Box
+                                        component="span"
+                                        sx={{
+                                          minWidth: 24,
+                                          px: 0.9,
+                                          py: 0.15,
+                                          borderRadius: 999,
+                                          fontSize: "0.72rem",
+                                          fontWeight: 700,
+                                          lineHeight: 1.6,
+                                          textAlign: "center",
+                                          bgcolor:
+                                            activeMediaTab === tab.value
+                                              ? "rgba(255,255,255,0.18)"
+                                              : "rgba(255,138,61,0.12)",
+                                          color:
+                                            activeMediaTab === tab.value
+                                              ? "#FFFFFF"
+                                              : warehouseSlate,
+                                        }}
+                                      >
+                                        {mediaCounts[tab.value]}
+                                      </Box>
+                                    </Stack>
                                   </Button>
                                 ))}
                               </Stack>
@@ -2355,15 +2487,39 @@ const EvidenceDashboard = () => {
                                     }}
                                   >
                                     <Box
+                                      role={item.kind === "image" ? "button" : undefined}
+                                      tabIndex={item.kind === "image" ? 0 : undefined}
+                                      onClick={
+                                        item.kind === "image"
+                                          ? () => setSelectedMediaItem(item)
+                                          : undefined
+                                      }
+                                      onKeyDown={
+                                        item.kind === "image"
+                                          ? (event) => {
+                                              if (event.key === "Enter" || event.key === " ") {
+                                                event.preventDefault();
+                                                setSelectedMediaItem(item);
+                                              }
+                                            }
+                                          : undefined
+                                      }
                                       sx={{
                                         height: 220,
                                         display: "grid",
                                         placeItems: "center",
                                         color: "#FFFFFF",
+                                        cursor: item.kind === "image" ? "pointer" : "default",
                                         background:
                                           item.kind === "image" && item.previewUrl
                                             ? `center / cover no-repeat url(${item.previewUrl})`
                                             : ui.mediaFallback,
+                                        "&:focus-visible": item.kind === "image"
+                                          ? {
+                                              outline: `3px solid ${alpha(warehouseAccent, 0.42)}`,
+                                              outlineOffset: -3,
+                                            }
+                                          : undefined,
                                       }}
                                     >
                                       {item.kind !== "image" ? mediaIconMap[item.kind] : null}

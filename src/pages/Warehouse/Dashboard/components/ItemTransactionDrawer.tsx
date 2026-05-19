@@ -9,7 +9,6 @@ import { getDecodedToken } from "../../../../utils/auth";
 import type { Pallet, Shelf } from "../types";
 
 export type ItemTransactionPayload = {
-  item_id?: number | string;
   oracle_code: string;
   sub_loc_id: string;
   pallet_id: string;
@@ -18,7 +17,6 @@ export type ItemTransactionPayload = {
   operation: "1" | "2";
   qty: string;
   created_by: string;
-  transaction_date?: string;
   has_expiry?: boolean;
   expiry_date?: string | null;
 };
@@ -147,7 +145,6 @@ function ItemTransactionDrawerComponent(
     }
 
     const payload: ItemTransactionPayload = {
-      item_id: item.recordId,
       oracle_code: String(item.oracle_code || item.product || ""),
       sub_loc_id: String(item.sub_loc_id || ""),
       pallet_id: String(shelf.recordId || item.pallet_id || ""),
@@ -156,7 +153,6 @@ function ItemTransactionDrawerComponent(
       operation: values.operation,
       qty: String(quantity),
       created_by: createdBy,
-      transaction_date: dayjs().format("YYYY-MM-DD HH:mm:ss"),
       has_expiry: Boolean(values.has_expiry),
       expiry_date: values.has_expiry && values.expiry_date ? values.expiry_date.format("YYYY-MM-DD") : null,
     };

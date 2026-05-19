@@ -53,12 +53,15 @@ interface SalesOrdersProps {
   salesOrders?: RecentSalesOrder[];
   title?: string;
   loading?: boolean;
+  headerControls?: React.ReactNode;
+  headerControlsPlacement?: "below" | "inline";
   summaryBadges?: Array<{
     key: string;
     title: string;
     count: string | number;
     color?: string;
   }>;
+  noRowsMessage?: string;
   setDisplayTitle?: (title: string) => void;
   setHideFooter?: (hidden: boolean) => void;
   setWidth?: (width: number | string) => void;
@@ -68,7 +71,10 @@ const SalesOrders = ({
   salesOrders,
   title,
   loading = false,
+  headerControls,
+  headerControlsPlacement = "below",
   summaryBadges = [],
+  noRowsMessage,
 }: SalesOrdersProps) => {
   const { openModal } = useModal();
   const [triggerOrderDetails] = useLazyGetSalesOrderDetailsQuery();
@@ -80,7 +86,7 @@ const SalesOrders = ({
   );
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
     page: 0,
-    pageSize: 5,
+    pageSize: 10,
   });
   const [sortModel, setSortModel] = useState<GridSortModel>([]);
   const [filterModel, setFilterModel] = useState<GridFilterModel>({
@@ -137,8 +143,8 @@ const SalesOrders = ({
         minWidth: 140,
       },
       {
-        field: "headerId",
-        headerName: "Header ID",
+        field: "orderId",
+        headerName: "Order ID",
         flex: 1,
         minWidth: 140,
       },
@@ -173,39 +179,12 @@ const SalesOrders = ({
           );
         },
       },
-      {
-        field: "importStatus",
-        headerName: "Imported",
-        flex: 0.8,
-        minWidth: 120,
-        renderCell: (params: GridRenderCellParams<RecentSalesOrder>) => (
-          <Chip
-            label={params.value === true ? "Yes" : params.value === false ? "No" : "--"}
-            size="small"
-            color={params.value === true ? "success" : "default"}
-            variant={params.value === true ? "filled" : "outlined"}
-          />
-        ),
-      },
-      {
-        field: "generateStatus",
-        headerName: "Generated",
-        flex: 0.8,
-        minWidth: 120,
-        renderCell: (params: GridRenderCellParams<RecentSalesOrder>) => (
-          <Chip
-            label={params.value === true ? "Yes" : params.value === false ? "No" : "--"}
-            size="small"
-            color={params.value === true ? "info" : "default"}
-            variant={params.value === true ? "filled" : "outlined"}
-          />
-        ),
-      },
+       
     ],
     []
   );
 
-  const headerControls = useMemo(
+  const summaryHeaderControls = useMemo(
     () => (
       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
         {summaryBadges.map((badge) => (
@@ -225,8 +204,25 @@ const SalesOrders = ({
     [summaryBadges],
   );
 
+  const effectiveHeaderControls = useMemo(() => {
+    if (!summaryBadges.length && !headerControls) {
+      return undefined;
+    }
+
+    return (
+      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}>
+        {summaryBadges.length ? summaryHeaderControls : null}
+        {headerControls}
+      </Box>
+    );
+  }, [headerControls, summaryBadges.length, summaryHeaderControls]);
+
   return (
-    <Box>
+    <Box  sx={{
+            "& .MuiDataGrid-row:hover": {
+              cursor: "default",
+            },
+          }}>
       <ReusableDataGrid
         rows={salesOrderRows}
         columns={columns}
@@ -240,9 +236,10 @@ const SalesOrders = ({
         setFilterModel={setFilterModel}
         title={title || "Sales Orders"}
         refetch={() => undefined}
-        headerControls={summaryBadges.length ? headerControls : undefined}
+        headerControls={effectiveHeaderControls}
+        headerControlsPlacement={headerControlsPlacement}
         enableViewToggle={false}
-      
+        height={'calc(100vh - 250px)'}
         permissions={{
           create: false,
           edit: false,
@@ -250,6 +247,7 @@ const SalesOrders = ({
           view: true,
           download: true,
         }}
+        noRowsMessage={noRowsMessage}
         uniqueIdField="id"
         onRowClick={openQuickView}
       />

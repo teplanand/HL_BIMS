@@ -9,6 +9,7 @@ import { getToken, removeToken } from "./auth";
 
 const PUBLIC_AUTH_PATHS = [
   "/users/login",
+  "/auth/login",
   "/auth/send-otp",
   "/auth/verify-otp",
   "/auth/forgot-password",

@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { Box, Button, Stack, Typography } from "@mui/material";
 import { useForm } from "react-hook-form";
 import {
@@ -12,10 +12,9 @@ import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import SpeedOutlinedIcon from "@mui/icons-material/SpeedOutlined";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import { useToast } from "../../../../hooks/useToast";
-import { useAppSelector } from "../../../../redux/hooks";
+import { useModal } from "../../../../hooks/useModal";
 import {
   BarcodeCompletionStage,
-  barcodeDefaults,
   useLazyGetCompletionGearboxDetailsQuery,
   useLazyGetQualityCheckDetailsQuery,
   useUpdateOrderCompletionStageMutation,
@@ -115,9 +114,25 @@ const electricMotorMakeOptions = ["PBL", "BBL", "Megha", "Simens", "Crompton"].m
   (value) => ({ value, label: value })
 );
 
-const statusOptions = ["PK", "PI"].map((value) => ({ value, label: value }));
+const defaultStatusOptions = ["CP", "PK", "PI"];
 
-const defaultValues = {
+type OrderCompletionFormValues = {
+  gearedMotorSerialNumber: string;
+  mountType: string;
+  model: string;
+  workOrderNumber: string;
+  rpm: string;
+  motorSerialNumber: string;
+  noiseLevelDb: string;
+  paint: string;
+  pole: string;
+  electricMotorMake: string;
+  inputRpm: string;
+  actualRatio: string;
+  status: string;
+};
+
+const defaultValues: OrderCompletionFormValues = {
   gearedMotorSerialNumber: "",
   mountType: "Foot Mount",
   model: "",
@@ -141,6 +156,7 @@ const toNumeric = (value: unknown) => {
 type CompletionLookupMetadata = {
   oracle_order_no?: number | string | null;
   model_type?: string | null;
+  serial_no?: string | null;
   qty?: number | string | null;
   order_header_id?: number | string | null;
   order_line_id?: number | string | null;
@@ -173,10 +189,32 @@ const resolveStage = (status: string): BarcodeCompletionStage => {
   return "completion";
 };
 
-function Index() {
+type OrderComplitionProps = {
+  serialNumber?: string;
+  serialId?: number | string | null;
+  defaultStatus?: string;
+  statusOptions?: string[];
+  onSaved?: (payload: { serialNo: string; savedAt: string; status: string }) => void;
+  setDisplayTitle?: (title: string) => void;
+  setHideFooter?: (hidden: boolean) => void;
+  setWidth?: (width: number | string) => void;
+};
+
+const recentAutoFetchMap = new Map<string, number>();
+
+function Index({
+  serialNumber,
+  serialId,
+  defaultStatus,
+  statusOptions,
+  onSaved,
+  setDisplayTitle,
+  setHideFooter,
+  setWidth,
+}: OrderComplitionProps) {
   const { showToast } = useToast();
-  const authUserId = useAppSelector((state) => state.auth.id);
-  const { register, handleSubmit, getValues, setValue } = useForm({
+  const { closeModal } = useModal();
+  const { register, handleSubmit, getValues, setValue, watch } = useForm<OrderCompletionFormValues>({
     defaultValues,
   });
   const [lookupMetadata, setLookupMetadata] = useState<CompletionLookupMetadata | null>(
@@ -186,44 +224,69 @@ function Index() {
   const [triggerQualityCheckLookup] = useLazyGetQualityCheckDetailsQuery();
   const [updateOrderCompletionStage, { isLoading: isSubmitting }] =
     useUpdateOrderCompletionStageMutation();
+  const watchedValues = watch();
+  const resolvedStatusOptions = useMemo(
+    () =>
+      (statusOptions?.length ? statusOptions : defaultStatusOptions).map((value) => ({
+        value,
+        label: value,
+      })),
+    [statusOptions]
+  );
 
-  const onSubmit = async (data: any) => {
+  useEffect(() => {
+    setDisplayTitle?.("Order Completion");
+    setHideFooter?.(true);
+    setWidth?.(980);
+  }, [setDisplayTitle, setHideFooter, setWidth]);
+
+  useEffect(() => {
+    if (!defaultStatus) {
+      return;
+    }
+
+    setValue("status", defaultStatus, { shouldDirty: false });
+  }, [defaultStatus, setValue]);
+
+  const onSubmit = async (data: OrderCompletionFormValues) => {
     const stage = resolveStage(String(data.status || ""));
-    const oracleUserId = toNumeric(authUserId) || toNumeric(lookupMetadata?.OracleUserId) || 1;
+    const resolvedSerialId = Number(serialId);
+    const resolvedSerialNo = String(
+      lookupMetadata?.serial_no || data.gearedMotorSerialNumber || serialNumber || ""
+    ).trim();
+
+    if (!Number.isFinite(resolvedSerialId) || resolvedSerialId <= 0) {
+      showToast("Serial id is required for completion update", "warning");
+      return;
+    }
+
+    if (!resolvedSerialNo) {
+      showToast("Serial number is required for completion update", "warning");
+      return;
+    }
 
     try {
       const response = await updateOrderCompletionStage({
         stage,
-        DivisionId: String(barcodeDefaults.divisionId),
-        dtPrint: {
-          oracle_order_no: toNumeric(lookupMetadata?.oracle_order_no),
-          model_type: String(lookupMetadata?.model_type || "GM"),
-          model: String(data.model || ""),
-          ratio: toNumeric(data.actualRatio),
-          qty: Math.max(1, toNumeric(lookupMetadata?.qty) || 1),
-          wo_no: String(data.workOrderNumber || ""),
-          order_header_id: toNumeric(lookupMetadata?.order_header_id),
-          order_line_id: toNumeric(lookupMetadata?.order_line_id),
-          status: String(data.status || ""),
-          kw: toNumeric(lookupMetadata?.kw),
-          serial_no: String(data.gearedMotorSerialNumber || ""),
-          rpm: toNumeric(data.rpm),
-          motor_serial_no: String(data.motorSerialNumber || ""),
-          input_RPM: toNumeric(data.inputRpm || lookupMetadata?.input_RPM),
-          actual_ratio: toNumeric(data.actualRatio || lookupMetadata?.actual_ratio),
-          pole: toNumeric(data.pole || lookupMetadata?.pole),
-          noiseLevel: toNumeric(data.noiseLevelDb || lookupMetadata?.noiseLevel),
-          paintColor: String(data.paint || lookupMetadata?.paintColor || ""),
-          MotorMake: String(
-            data.electricMotorMake || lookupMetadata?.MotorMake || ""
-          ),
-          OracleUserId: oracleUserId,
-          P_AMB_TEMP: String(lookupMetadata?.P_AMB_TEMP || ""),
-          P_GREASE_TEMP: String(lookupMetadata?.P_GREASE_TEMP || ""),
-        },
+        body:
+          stage === "packing"
+            ? {
+                serial_no: resolvedSerialNo,
+                id: resolvedSerialId,
+              }
+            : {
+                serial_no: resolvedSerialNo,
+                status: String(data.status || ""),
+                id: resolvedSerialId,
+              },
       }).unwrap();
 
+      const savedAt = new Date().toISOString();
+      onSaved?.({ serialNo: resolvedSerialNo, savedAt, status: String(data.status || "") });
       showToast(response?.message || "Order completion updated", "success");
+      if (onSaved) {
+        closeModal();
+      }
     } catch (error: any) {
       const message =
         error?.data?.message || error?.error || "Unable to update order completion";
@@ -231,22 +294,23 @@ function Index() {
     }
   };
 
-  const handleGetDetails = async () => {
-    const serialNumber = String(getValues("gearedMotorSerialNumber") || "").trim();
+  const handleGetDetails = async (prefilledSerialNumber?: string) => {
+    const serialValue = prefilledSerialNumber ?? getValues("gearedMotorSerialNumber");
+    const normalizedSerialNumber = String(serialValue || "").trim();
 
-    if (!serialNumber) {
+    if (!normalizedSerialNumber) {
       showToast("Enter geared motor serial number first", "warning");
       return;
     }
 
     try {
       let response = await triggerCompletionLookup({
-        BarcodeSerialNo: serialNumber,
+        BarcodeSerialNo: normalizedSerialNumber,
       }).unwrap();
 
       if (!response?.data) {
         response = await triggerQualityCheckLookup({
-          serial_no: serialNumber,
+          serial_no: normalizedSerialNumber,
         }).unwrap();
       }
 
@@ -257,7 +321,11 @@ function Index() {
       }
 
       setLookupMetadata(lookup);
-      setValue("gearedMotorSerialNumber", serialNumber, { shouldDirty: true });
+      setValue(
+        "gearedMotorSerialNumber",
+        String(lookup.serial_no ?? normalizedSerialNumber),
+        { shouldDirty: true }
+      );
       setValue("model", String(lookup.Model ?? lookup.model ?? ""), { shouldDirty: true });
       setValue("workOrderNumber", String(lookup.wo_no ?? ""), { shouldDirty: true });
       setValue("rpm", String(lookup.rpm ?? ""), { shouldDirty: true });
@@ -274,7 +342,9 @@ function Index() {
         shouldDirty: true,
       });
       setValue("paint", String(lookup.paintColor ?? defaultValues.paint), { shouldDirty: true });
-      setValue("status", String(defaultValues.status), { shouldDirty: true });
+      setValue("status", String(defaultStatus || getValues("status") || defaultValues.status), {
+        shouldDirty: true,
+      });
 
       showToast("Order completion details loaded", "success");
     } catch (error: any) {
@@ -284,9 +354,28 @@ function Index() {
     }
   };
 
+  useEffect(() => {
+    if (!serialNumber?.trim()) {
+      return;
+    }
+
+    const normalizedSerialNumber = serialNumber.trim();
+    const lastFetchedAt = recentAutoFetchMap.get(normalizedSerialNumber) || 0;
+    const now = Date.now();
+
+    if (now - lastFetchedAt < 1500) {
+      setValue("gearedMotorSerialNumber", normalizedSerialNumber, { shouldDirty: false });
+      return;
+    }
+
+    recentAutoFetchMap.set(normalizedSerialNumber, now);
+    setValue("gearedMotorSerialNumber", normalizedSerialNumber, { shouldDirty: false });
+    void handleGetDetails(normalizedSerialNumber);
+  }, [serialNumber, setValue]);
+
   return (
     <Box component="form" onSubmit={handleSubmit(onSubmit)}>
-      <PageHeader title="Order Completion" />
+      {!setDisplayTitle ? <PageHeader title="Order Completion" /> : null}
 
       <Stack spacing={1}>
         <FormSection
@@ -319,9 +408,14 @@ function Index() {
                 <MuiTextField
                   label="Geared Motor Serial Number"
                   {...register("gearedMotorSerialNumber")}
+                  value={watchedValues.gearedMotorSerialNumber || ""}
                   fullWidth
                 />
-                <Button variant="outlined" onClick={handleGetDetails} sx={{ minWidth: 72, height: 35 }}>
+                <Button
+                  variant="outlined"
+                  onClick={() => void handleGetDetails()}
+                  sx={{ minWidth: 72, height: 35, whiteSpace: "nowrap" }}
+                >
                   Get
                 </Button>
               </Box>
@@ -330,19 +424,29 @@ function Index() {
               label="Mount Type"
               placeholder="Select mount type"
               displayEmpty
-              defaultValue={defaultValues.mountType}
+              value={watchedValues.mountType || ""}
               options={mountTypeOptions}
               {...register("mountType")}
               fullWidth
             />
-            <MuiTextField label="Model" {...register("model")} fullWidth />
-            <MuiTextField label="Work Order Number" {...register("workOrderNumber")} fullWidth />
-            <MuiTextField label="Motor Serial Number" {...register("motorSerialNumber")} fullWidth />
+            <MuiTextField label="Model" {...register("model")} value={watchedValues.model || ""} fullWidth />
+            <MuiTextField
+              label="Work Order Number"
+              {...register("workOrderNumber")}
+              value={watchedValues.workOrderNumber || ""}
+              fullWidth
+            />
+            <MuiTextField
+              label="Motor Serial Number"
+              {...register("motorSerialNumber")}
+              value={watchedValues.motorSerialNumber || ""}
+              fullWidth
+            />
             <MuiSelect
               label="Electric Motor Make"
               placeholder="Select electric motor make"
               displayEmpty
-              defaultValue={defaultValues.electricMotorMake}
+              value={watchedValues.electricMotorMake || ""}
               options={electricMotorMakeOptions}
               {...register("electricMotorMake")}
               fullWidth
@@ -357,14 +461,24 @@ function Index() {
           accentColor="#1D4ED8"
         >
           <FormStackGrid>
-            <MuiTextField label="RPM" {...register("rpm")} fullWidth />
-            <MuiTextField label="Input RPM" {...register("inputRpm")} fullWidth />
-            <MuiTextField label="Actual Ratio" {...register("actualRatio")} fullWidth />
+            <MuiTextField label="RPM" {...register("rpm")} value={watchedValues.rpm || ""} fullWidth />
+            <MuiTextField
+              label="Input RPM"
+              {...register("inputRpm")}
+              value={watchedValues.inputRpm || ""}
+              fullWidth
+            />
+            <MuiTextField
+              label="Actual Ratio"
+              {...register("actualRatio")}
+              value={watchedValues.actualRatio || ""}
+              fullWidth
+            />
             <MuiSelect
               label="Pole"
               placeholder="Select pole"
               displayEmpty
-              defaultValue={defaultValues.pole}
+              value={watchedValues.pole || ""}
               options={poleOptions}
               {...register("pole")}
               fullWidth
@@ -373,7 +487,7 @@ function Index() {
               label="Noise Level (dB)"
               placeholder="Select noise level"
               displayEmpty
-              defaultValue={defaultValues.noiseLevelDb}
+              value={watchedValues.noiseLevelDb || ""}
               options={noiseLevelOptions}
               {...register("noiseLevelDb")}
               fullWidth
@@ -382,7 +496,7 @@ function Index() {
               label="Paint"
               placeholder="Select paint"
               displayEmpty
-              defaultValue={defaultValues.paint}
+              value={watchedValues.paint || ""}
               options={paintOptions}
               {...register("paint")}
               fullWidth
@@ -397,7 +511,18 @@ function Index() {
           accentColor="#059669"
         >
           <FormStackGrid columns={1}>
-            <MuiRadioGroup label="Status" row options={statusOptions} {...register("status")} />
+            <MuiRadioGroup
+              label="Status"
+              row
+              options={resolvedStatusOptions}
+              value={watchedValues.status || ""}
+              onChange={(event) => {
+                setValue("status", event.target.value, {
+                  shouldDirty: true,
+                  shouldTouch: true,
+                });
+              }}
+            />
           </FormStackGrid>
         </FormSection>
 

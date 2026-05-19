@@ -136,21 +136,21 @@ const orderTrackingStageValueOptions = [
 ] as const;
 
 const orderTrackingCurrentStageOptions = [
+  "Not Started",
   "Design",
   "Mfg",
   "Assembly",
   "Testing",
   "Dispatch",
-  "Finished",
 ] as const;
 
 const currentStatusBadgeColorMap = {
+  "Not Started": ORDER_TRACKING_COLORS.statusMuted,
   Design: STAGE_ACCENT_COLORS.Design,
   Mfg: STAGE_ACCENT_COLORS.Manufacturing,
   Assembly: STAGE_ACCENT_COLORS.Assembly,
   Testing: STAGE_ACCENT_COLORS.Testing,
   Dispatch: STAGE_ACCENT_COLORS.Dispatch,
-  Finished: ORDER_TRACKING_COLORS.statusSuccess,
 } as const;
 
 const HEADER_SEARCHABLE_FIELDS = new Set([
@@ -725,29 +725,34 @@ const getManufacturingCoreStatus = (row: any) => {
 const getAssemblyStageStatus = (row: any) =>
   getStageStatus(row.assembly_plan, row.assembly_actual);
 
-const getCurrentWorkflowStage = (row: any) => {
-  const designStatus = getDesignStatus(row);
-  const manufacturingStatus = getManufacturingStatus(row);
-  const testingStatus = getQCStatus(row);
+const getStatusColumnStage = (row: any) => {
   const dispatchStatus = getDispatchStatus(row);
+  const testingStatus = getQCStatus(row);
+  const assemblyStatus = getAssemblyStageStatus(row);
+  const manufacturingStatus = getManufacturingStatus(row);
+  const designStatus = getDesignStatus(row);
 
-  if (designStatus !== "Completed") {
-    return "Design";
+  if (dispatchStatus === "Completed") {
+    return "Dispatch";
   }
 
-  if (manufacturingStatus !== "Completed") {
-    return "Mfg";
-  }
-
-  if (testingStatus !== "Completed") {
+  if (testingStatus === "Completed") {
     return "Testing";
   }
 
-  if (dispatchStatus === "Completed") {
-    return "Finished";
+  if (assemblyStatus === "Completed") {
+    return "Assembly";
   }
 
-  return "Dispatch";
+  if (manufacturingStatus === "Completed") {
+    return "Mfg";
+  }
+
+  if (designStatus === "Completed") {
+    return "Design";
+  }
+
+  return "Not Started";
 };
 
  
@@ -814,7 +819,7 @@ const OrderTrackingDashboard = () => {
     return {
       ...item,
       id: item.id ?? index,
-      current_status: getCurrentWorkflowStage(item),
+      current_status: getStatusColumnStage(item),
 
       design: status.design,
       manufacturing: status.manufacturing,

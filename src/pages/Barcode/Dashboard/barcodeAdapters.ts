@@ -11,7 +11,7 @@ export type BarcodeSalesOrderStatus =
   | "Planning"
   | "Dispatched";
 
-export type BarcodeLineStatusCode = "PL" | "SH" | "MI" | "PK" | "BOOKED";
+export type BarcodeLineStatusCode = "PL" | "SH" | "MI" | "PI" | "PK" | "BOOKED";
 
 export type BarcodeRecentOrderRow = {
   id: string;
@@ -36,6 +36,7 @@ export type BarcodeSerialItemViewModel = {
   ac_ua_date: string | null;
   ac_qc_date: string | null;
   ac_comp_date: string | null;
+  ac_pi_date: string | null;
   ac_pk_date: string | null;
   ac_ds_date: string | null;
   tent_rel_date: string | null;
@@ -53,6 +54,7 @@ export type BarcodeLineItemViewModel = {
   lineId: number;
   headerId: number | null;
   orgId: number | null;
+  shipFromOrgId: number | null;
   line_no: string;
   item_code: string;
   description: string;
@@ -258,12 +260,19 @@ const getMailStatus = (status: BarcodeLineStatusCode) => {
 export const mapSerialItem = (
   serialItem: BarcodeSalesOrderLineSerialRaw
 ): BarcodeSerialItemViewModel => ({
-  id: typeof serialItem.id === "number" ? serialItem.id : null,
+  id: (() => {
+    const resolvedId = toNumberValue(
+      serialItem.id ?? (serialItem as Record<string, unknown>).ID,
+      0
+    );
+    return resolvedId > 0 ? resolvedId : null;
+  })(),
   serial_no: toStringValue(serialItem.serial_no ?? serialItem.SERIAL_NO),
   ass_rel_date: toStringValue(serialItem.ass_rel_date ?? serialItem.ASS_REL_DATE) || null,
   ac_ua_date: toStringValue(serialItem.ac_ua_date ?? serialItem.AC_UA_DATE) || null,
   ac_qc_date: toStringValue(serialItem.ac_qc_date ?? serialItem.AC_QC_DATE) || null,
   ac_comp_date: toStringValue(serialItem.ac_comp_date ?? serialItem.AC_COMP_DATE) || null,
+  ac_pi_date: toStringValue(serialItem.ac_pi_date ?? serialItem.AC_PI_DATE) || null,
   ac_pk_date: toStringValue(serialItem.ac_pk_date ?? serialItem.AC_PK_DATE) || null,
   ac_ds_date: toStringValue(serialItem.ac_ds_date ?? serialItem.AC_DS_DATE) || null,
   tent_rel_date: toStringValue(serialItem.tent_rel_date ?? serialItem.TENT_REL_DATE) || null,
@@ -296,6 +305,7 @@ const mapLineItem = (
     lineId,
     headerId: toNumberValue(lineItem.headerId ?? lineItem.HEADER_ID, 0) || null,
     orgId: toNumberValue(lineItem.orgId ?? lineItem.ORG_ID, 0) || null,
+    shipFromOrgId: toNumberValue(lineItem.SHIP_FROM_ORG_ID, 0) || null,
     line_no: toStringValue(lineItem.line_no, `${index + 1}`),
     item_code: toStringValue(lineItem.item_code ?? lineItem.ORDERED_ITEM),
     description: toStringValue(

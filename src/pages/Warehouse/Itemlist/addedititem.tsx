@@ -40,6 +40,7 @@ type ItemFormValues = {
   sub_inventory: string;
   sub_loc_id: number | string;
   pallet_id: string;
+  qty: number | string;
   rack_id: number | string;
 };
 
@@ -191,6 +192,7 @@ function Index({
       sub_inventory: defaultValues?.sub_inventory || defaultValues?.subInventory || "",
       sub_loc_id: defaultValues?.sub_loc_id || "",
       pallet_id: String(defaultValues?.pallet_id || ""),
+      qty: defaultValues?.qty ?? "",
       rack_id: defaultValues?.rack_id || "",
     },
     mode: "onBlur",
@@ -200,6 +202,7 @@ function Index({
   const watchedItemCategory = watch("item_category");
   const watchedLocator = watch("locator");
   const watchedSubInventory = watch("sub_inventory");
+  const watchedQty = watch("qty");
    
   const watchedPalletId = watch("pallet_id");
   const watchedRackId = watch("rack_id");
@@ -263,6 +266,7 @@ function Index({
         ["Item Category", watchedItemCategory?.trim()],
         ["Locator", watchedLocator?.trim()],
         ["Sub Inventory", watchedSubInventory?.trim()],
+        ["Quantity", watchedQty],
         ["Pallet Code", selectedPalletMeta.palletCode],
         ["Rack Code", selectedPalletMeta.rackCode],
         ["Pallet Capacity", selectedPalletMeta.palletCapacity]
@@ -275,6 +279,7 @@ function Index({
       watchedItemCategory,
       watchedItemDesc,
       watchedLocator,
+      watchedQty,
       selectedPalletMeta,
       watchedSubInventory,
     ]
@@ -503,10 +508,16 @@ function Index({
   const onSubmit = useCallback(async (data: ItemFormValues) => {
     const subLocId = Number(data.sub_loc_id);
     const palletId = Number(data.pallet_id);
+    const qty = Number(data.qty);
     const rackId = Number(data.rack_id || resolvedRackId || 0);
 
     if (!palletId) {
       showToast("Pallet is required", "warning");
+      return;
+    }
+
+    if (!Number.isFinite(qty) || qty <= 0) {
+      showToast("Quantity must be greater than 0", "warning");
       return;
     }
 
@@ -549,6 +560,7 @@ function Index({
       rack_id: rackId,
       sub_loc_id: subLocId,
       oracle_code: normalizeOracleCode(data.oracle_code),
+      qty,
       item_desc: data.item_desc.trim(),
       item_category: data.item_category.trim(),
       locator: data.locator.trim(),
@@ -674,6 +686,20 @@ function Index({
               {...register("pallet_id", { required: "Pallet is required" })}
               error={!!errors.pallet_id}
               helperText={errors.pallet_id?.message}
+            />
+            <MuiTextField
+              id="qty"
+              label="Qty"
+              type="number"
+              placeholder="Enter quantity"
+              inputProps={{ min: 1 }}
+              {...register("qty", {
+                required: "Quantity is required",
+                validate: (value) =>
+                  Number(value) > 0 || "Quantity must be greater than 0",
+              })}
+              error={!!errors.qty}
+              helperText={errors.qty?.message}
             />
           </FormStackGrid>
           <FormStackGrid columns={2}>

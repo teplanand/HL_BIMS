@@ -6,6 +6,7 @@ export type FormSectionProps = {
   description?: string;
   icon?: React.ReactNode;
   accentColor?: string;
+  headerActions?: React.ReactNode;
   children: React.ReactNode;
   sx?: SxProps<Theme>;
 };
@@ -15,6 +16,7 @@ const FormSection: React.FC<FormSectionProps> = ({
   description,
   icon,
   accentColor = "#f37440",
+  headerActions,
   children,
   sx,
 }) => {
@@ -44,38 +46,50 @@ const FormSection: React.FC<FormSectionProps> = ({
 
       <Box sx={{ px: 3, py: 2.5, pl: 4 }}>
         {/* Section Header */}
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
-          {icon && (
-            <Box
-              sx={{
-                color: accentColor,
-                display: "flex",
-                alignItems: "center",
-              }}
-            >
-              {icon}
-            </Box>
-          )}
-          <Box>
-            <Typography
-              variant="subtitle1"
-              sx={{
-                fontWeight: 600,
-                color: "text.primary",
-                lineHeight: 1.3,
-              }}
-            >
-              {title}
-            </Typography>
-            {description && (
-              <Typography
-                variant="caption"
-                sx={{ color: "text.secondary", mt: 0.25, display: "block" }}
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: { xs: "flex-start", md: "center" },
+            gap: 2,
+            mb: 2,
+            flexWrap: "wrap",
+          }}
+        >
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            {icon && (
+              <Box
+                sx={{
+                  color: accentColor,
+                  display: "flex",
+                  alignItems: "center",
+                }}
               >
-                {description}
-              </Typography>
+                {icon}
+              </Box>
             )}
+            <Box>
+              <Typography
+                variant="subtitle1"
+                sx={{
+                  fontWeight: 600,
+                  color: "text.primary",
+                  lineHeight: 1.3,
+                }}
+              >
+                {title}
+              </Typography>
+              {description && (
+                <Typography
+                  variant="caption"
+                  sx={{ color: "text.secondary", mt: 0.25, display: "block" }}
+                >
+                  {description}
+                </Typography>
+              )}
+            </Box>
           </Box>
+          {headerActions}
         </Box>
 
         {/* Section Content */}

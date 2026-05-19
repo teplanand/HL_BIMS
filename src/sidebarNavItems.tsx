@@ -19,6 +19,7 @@ import {
   Assignment as AssignmentIcon,
   SyncAlt as SyncAltIcon,
   PersonAddAlt as PersonAddAltIcon,
+  Security as SecurityIcon,
 } from "@mui/icons-material";
 import type { Navigation } from "@toolpad/core/AppProvider";
 
@@ -46,6 +47,8 @@ import { Reports } from "./pages/Barcode/Dashboard/components/reports";
 import { FinalInspection } from "./pages/Barcode/Dashboard/components/finalinspection";
 import SalesOrders from "./pages/Barcode/Dashboard/components/salesorders";
 import GearMonitoringDashboard from "./pages/GearMonitoring";
+import AuthenticatorPage from "./pages/Authenticator";
+import AddAuthenticatorRolePage from "./pages/Authenticator/AddRole";
 
 //test
 
@@ -370,6 +373,25 @@ export const moduleRoutes: ModuleRouteConfig[] = [
         roles: ["admin"],
         path: "/dashboard",
         element: <GearMonitoringDashboard />,
+      },
+    ],
+  },
+  {
+    module: "authenticator",
+    children: [
+      {
+        name: "Dashboard",
+        icon: <SecurityIcon />,
+        roles: ["admin"],
+        path: "/dashboard",
+        element: <AuthenticatorPage />,
+      },
+      {
+        name: "Roles",
+        icon: <PostAddIcon />,
+        roles: ["admin"],
+        path: "/add-roles",
+        element: <AddAuthenticatorRolePage />,
       },
     ],
   },

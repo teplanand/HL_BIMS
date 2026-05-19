@@ -26,7 +26,7 @@ import { useDispatch } from "react-redux";
 import { setToken } from "../../redux/authSlice";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
-import logo from "../../assets/logo1.png";
+import logo from "../../assets/elecon-group-of-company.png";
 import signinLeftImage from "../../assets/singin-login.png";
 
 // --- ANIMATIONS ---
@@ -230,7 +230,7 @@ export default function SignIn() {
 
           {/* Heading */}
           <Box sx={{ mb: 5 }}>
-            <Typography
+            {/* <Typography
               variant="h4"
               fontWeight={800}
                
@@ -239,8 +239,8 @@ export default function SignIn() {
               Welcome Back
             </Typography>
             <Typography variant="body1" color="text.secondary">
-              Sign in to continue to Hi-Lab
-            </Typography>
+              Sign in to continue to Elecon
+            </Typography> */}
           </Box>
 
           {/* Form Content */}
@@ -389,15 +389,15 @@ export default function SignIn() {
               </Box>
             </Fade>
 
-            <Box mt={5} textAlign="center">
+            {/* <Box mt={5} textAlign="center">
               <Typography
                 variant="caption"
                 color="text.secondary"
                 sx={{ opacity: 0.7 }}
               >
-                © {new Date().getFullYear()} Hi-Lab. All rights reserved.
+                © {new Date().getFullYear()} Elecon. All rights reserved.
               </Typography>
-            </Box>
+            </Box> */}
           </Box>
         </Container>
       </Box>

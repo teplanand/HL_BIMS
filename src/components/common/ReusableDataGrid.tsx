@@ -104,6 +104,7 @@ export interface ReusableDataGridProps {
 
   // Custom Controls
   headerControls?: React.ReactNode;
+  headerControlsPlacement?: "below" | "inline";
 
   // View Mode (Table / Grid)
   enableViewToggle?: boolean;
@@ -123,6 +124,7 @@ export interface ReusableDataGridProps {
   };
   headerTextAlign?: "left" | "center";
   headerVerticalAlign?: "top" | "center";
+  noRowsMessage?: string;
 }
 
 type ColumnWithFilterValueGetter = GridColDef & {
@@ -220,6 +222,7 @@ type DataGridHeaderSummaryProps = {
   onRemoveFilter: (field: string) => void;
   onClearFilters: () => void;
   headerControls?: React.ReactNode;
+  headerControlsPlacement?: "below" | "inline";
 };
 
 const DataGridHeaderSummary = React.memo(({
@@ -228,6 +231,7 @@ const DataGridHeaderSummary = React.memo(({
   onRemoveFilter,
   onClearFilters,
   headerControls,
+  headerControlsPlacement = "below",
 }: DataGridHeaderSummaryProps) => (
   <Box
     sx={{
@@ -240,14 +244,37 @@ const DataGridHeaderSummary = React.memo(({
       overflow: "hidden",
     }}
   >
-    <Typography
-      variant="h6"
-      component="h1"
-      fontWeight="700"
-      sx={{ letterSpacing: "-0.02em", color: "text.primary", flexShrink: 0 }}
+    <Box
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 1,
+        minWidth: 0,
+        flexWrap: "wrap",
+        flex: headerControlsPlacement === "inline" ? "1 1 auto" : "0 0 auto",
+      }}
     >
-      {title}
-    </Typography>
+      <Typography
+        variant="h6"
+        component="h1"
+        fontWeight="700"
+        sx={{ letterSpacing: "-0.02em", color: "text.primary", flexShrink: 0 }}
+      >
+        {title}
+      </Typography>
+
+      {headerControls && headerControlsPlacement === "inline" && (
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            minWidth: 0,
+          }}
+        >
+          {headerControls}
+        </Box>
+      )}
+    </Box>
 
     {activeFilters.length > 0 && (
       <Box
@@ -293,7 +320,7 @@ const DataGridHeaderSummary = React.memo(({
       </Box>
     )}
 
-    {headerControls && (
+    {headerControls && headerControlsPlacement === "below" && (
       <Box
         sx={{
           display: "flex",
@@ -344,6 +371,7 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
     download: true,
   },
   headerControls,
+  headerControlsPlacement = "below",
   enableViewToggle,
   defaultViewMode = "table",
   onViewModeChange,
@@ -351,6 +379,7 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
   cardViewGridProps,
   headerTextAlign = "center",
   headerVerticalAlign = "center",
+  noRowsMessage = "No records found",
   showFilterButton = true,
   enableHeaderFilters = false,
   disableColumnMenu = false,
@@ -1305,6 +1334,7 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
             onRemoveFilter={removeFilter}
             onClearFilters={clearAllFilters}
             headerControls={effectiveHeaderControls}
+            headerControlsPlacement={headerControlsPlacement}
           />
         </Box>
         <Box
@@ -1386,6 +1416,9 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
               },
             },
           }}
+          localeText={{
+            noRowsLabel: noRowsMessage,
+          }}
           sx={{
             ...sharedGridSx,
             flex: 1,
@@ -1446,7 +1479,7 @@ const ReusableDataGrid: React.FC<ReusableDataGridProps> = ({
           <Box sx={{ flex: 1, overflow: "auto", p: 1.25 }}>
             {pagedRows.length === 0 ? (
               <Typography color="text.secondary" align="center" sx={{ mt: 4 }}>
-                No records found
+                {noRowsMessage}
               </Typography>
             ) : (
               <Grid container spacing={1.25}>

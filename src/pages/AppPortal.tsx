@@ -28,6 +28,7 @@ import TimelineIcon from "@mui/icons-material/Timeline";
 import QrCode2Icon from "@mui/icons-material/QrCode2";
 import FactCheckIcon from "@mui/icons-material/FactCheck";
 import PrecisionManufacturingIcon from "@mui/icons-material/PrecisionManufacturing";
+import SecurityRoundedIcon from "@mui/icons-material/SecurityRounded";
 
 // Components
 import UserDropdown from "../components/header/UserDropdown";
@@ -137,6 +138,15 @@ const INITIAL_APPS = [
     hasAccess: true,
     color: "#B45309",
   },
+  {
+    id: 12,
+    name: "Authenticator",
+    icon: SecurityRoundedIcon,
+    path: "/authenticator/dashboard",
+    notifications: 0,
+    hasAccess: true,
+    color: "#C2410C",
+  },
 ];
 
 const AppPortal = () => {
@@ -168,6 +178,11 @@ const AppPortal = () => {
       return 0; // Maintain original order otherwise
     });
   }, [favorites]);
+
+  const accessibleAppsCount = useMemo(
+    () => INITIAL_APPS.filter((app) => app.hasAccess).length,
+    [],
+  );
 
   const handleAppClick = (app: (typeof INITIAL_APPS)[0]) => {
     if (!app.hasAccess) return;
@@ -223,7 +238,7 @@ const AppPortal = () => {
           <Typography variant="body1" color="text.secondary">
             Select an application to launch. You have access to{" "}
             <Box component="span" fontWeight="bold" color="primary.main">
-              5
+              {accessibleAppsCount}
             </Box>{" "}
             applications.
           </Typography>

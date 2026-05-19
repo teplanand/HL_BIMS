@@ -13,6 +13,7 @@ import { evidanceCollectionApi } from "./api/evidancecollection";
 import { orderTrackingApi } from "./api/ordertracking";
 import { warehouseApi } from "./api/warehouse";
 import { barcodeApi } from "./api/barcode";
+import { authenticatorApi } from "./api/authenticator";
 import { components } from "./components";
 
 export const store = configureStore({
@@ -30,6 +31,7 @@ export const store = configureStore({
     [orderTrackingApi.reducerPath]: orderTrackingApi.reducer,
     [warehouseApi.reducerPath]: warehouseApi.reducer,
     [barcodeApi.reducerPath]: barcodeApi.reducer,
+    [authenticatorApi.reducerPath]: authenticatorApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware()
@@ -42,6 +44,7 @@ export const store = configureStore({
       .concat(orderTrackingApi.middleware)
       .concat(warehouseApi.middleware)
       .concat(barcodeApi.middleware)
+      .concat(authenticatorApi.middleware)
     });
 
 export type RootState = ReturnType<typeof store.getState>;
